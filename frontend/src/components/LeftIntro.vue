@@ -6,10 +6,12 @@ const typedText = ref('')
 const cursorShow = ref(true)
 const typingTextIndex = ref(0)
 const introductions = [
-  '脑卒中深度检索多智能体助手——以循证医学为引擎的智能临床辅助平台。',
-  '融合现代医学最新指南与权威文献，提供基于证据的深度思考与分析。',
-  '专注脑卒中医疗，从风险预警、急性识别到辅助治疗。',
-  '以可靠信息降低认知负荷，为诊疗决策提供清晰、更新的知识支持。'
+  'MedLearn 个性化学习系统——基于多智能体协同的医学生智能学习平台。',
+  '对话式画像构建，精准刻画你的知识基础、认知风格与学习目标。',
+  '多智能体协同生成课程文档、思维导图、练习题等个性化学习资源。',
+  '智能路径规划，根据画像动态推荐最优学习路径与进度追踪。',
+  '多模态辅导答疑，结合临床案例与循证医学，深度理解核心知识。',
+  '学习效果评估，多维度分析掌握程度，持续优化学习策略。'
 ]
 
 const currentIndex = ref(0)
@@ -167,9 +169,9 @@ function typing(text, delay = TYPE_DELAY) {
 
 <template>
   <div class="intro-shell">
-    <div class="title">Synapse MD
+    <div class="title">MedLearn
       <div class="sub-title">
-        脑卒中健康辅助诊疗系统，提供健康辅助诊疗
+        个性化医学生学习系统，多智能体协同赋能
       </div>
     </div>
     <div class="card-area">

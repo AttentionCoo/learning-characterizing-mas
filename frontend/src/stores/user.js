@@ -6,6 +6,9 @@ export const useUserStore = defineStore(
     const name = ref('')
     const token = ref('')
     const image = ref('')
+    const major = ref('')
+    const grade = ref('')
+    const specialty = ref('')
 
     const hasToken = computed(() => token.value && token.value.trim() !== '')
 
@@ -13,12 +16,18 @@ export const useUserStore = defineStore(
       name.value = ''
       token.value = ''
       image.value = ''
+      major.value = ''
+      grade.value = ''
+      specialty.value = ''
     }
 
     return {
       name,
       token,
       image,
+      major,
+      grade,
+      specialty,
       hasToken,
       reset,
     }

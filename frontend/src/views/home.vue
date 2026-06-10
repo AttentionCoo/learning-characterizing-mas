@@ -1,0 +1,467 @@
+<script setup>
+import { computed, ref } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { useUserStore } from '@/stores/user'
+import { useThemeStore } from '@/stores/theme'
+import { logoutAPI } from '@/api/user'
+
+const router = useRouter()
+const route = useRoute()
+const userStore = useUserStore()
+const themeStore = useThemeStore()
+
+const sidebarCollapsed = ref(false)
+
+const navItems = [
+  {
+    path: '/profile',
+    label: '学习画像',
+    icon: 'profile',
+    desc: '对话式画像构建',
+  },
+  {
+    path: '/resources',
+    label: '资源生成',
+    icon: 'resources',
+    desc: '多智能体协同生成',
+  },
+  {
+    path: '/learning-path',
+    label: '学习路径',
+    icon: 'path',
+    desc: '个性化路径规划',
+  },
+  {
+    path: '/tutor',
+    label: '智能辅导',
+    icon: 'tutor',
+    desc: '多模态答疑解惑',
+  },
+  {
+    path: '/assessment',
+    label: '学习评估',
+    icon: 'assessment',
+    desc: '效果评估与优化',
+  },
+]
+
+const activeNav = computed(() => {
+  return navItems.find((item) => route.path.startsWith(item.path))?.path || '/profile'
+})
+
+async function handleLogout() {
+  try {
+    await logoutAPI()
+  } catch {
+    // ignore
+  }
+  userStore.reset()
+  router.push('/login')
+}
+
+function toggleSidebar() {
+  sidebarCollapsed.value = !sidebarCollapsed.value
+}
+</script>
+
+<template>
+  <div class="app-layout" :class="{ collapsed: sidebarCollapsed }">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo" @click="toggleSidebar">
+          <div class="logo-icon">
+            <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
+              <rect width="32" height="32" rx="8" fill="url(#logo-grad)" />
+              <path d="M8 16L14 22L24 10" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+              <defs>
+                <linearGradient id="logo-grad" x1="0" y1="0" x2="32" y2="32">
+                  <stop stop-color="#11967f"/>
+                  <stop offset="1" stop-color="#0f7666"/>
+                </linearGradient>
+              </defs>
+            </svg>
+          </div>
+          <transition name="fade-text">
+            <span v-if="!sidebarCollapsed" class="logo-text">MedLearn</span>
+          </transition>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <router-link
+          v-for="item in navItems"
+          :key="item.path"
+          :to="item.path"
+          class="nav-item"
+          :class="{ active: activeNav === item.path }"
+        >
+          <div class="nav-icon">
+            <svg v-if="item.icon === 'profile'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+            <svg v-else-if="item.icon === 'resources'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+            <svg v-else-if="item.icon === 'path'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+            <svg v-else-if="item.icon === 'tutor'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            <svg v-else-if="item.icon === 'assessment'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="20" x2="18" y2="10"/>
+              <line x1="12" y1="20" x2="12" y2="4"/>
+              <line x1="6" y1="20" x2="6" y2="14"/>
+            </svg>
+          </div>
+          <transition name="fade-text">
+            <div v-if="!sidebarCollapsed" class="nav-text">
+              <span class="nav-label">{{ item.label }}</span>
+              <span class="nav-desc">{{ item.desc }}</span>
+            </div>
+          </transition>
+          <div v-if="activeNav === item.path && !sidebarCollapsed" class="nav-active-bar"></div>
+        </router-link>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button class="theme-toggle" @click="themeStore.toggle()" :title="themeStore.dark ? '浅色模式' : '深色模式'">
+          <svg v-if="themeStore.dark" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="5"/>
+            <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+            <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+          </svg>
+          <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+          <transition name="fade-text">
+            <span v-if="!sidebarCollapsed">{{ themeStore.dark ? '浅色模式' : '深色模式' }}</span>
+          </transition>
+        </button>
+
+        <div class="user-section" @click="handleLogout">
+          <div class="user-avatar">
+            <img v-if="userStore.image" :src="userStore.image" alt="avatar" />
+            <span v-else>{{ userStore.name?.charAt(0) || 'U' }}</span>
+          </div>
+          <transition name="fade-text">
+            <div v-if="!sidebarCollapsed" class="user-info">
+              <span class="user-name">{{ userStore.name || '用户' }}</span>
+              <span class="user-logout">退出登录</span>
+            </div>
+          </transition>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <router-view v-slot="{ Component }">
+        <transition name="page" mode="out-in">
+          <component :is="Component" />
+        </transition>
+      </router-view>
+    </main>
+  </div>
+</template>
+
+<style scoped lang="scss">
+.app-layout {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--color-bg-base);
+}
+
+.sidebar {
+  width: 260px;
+  min-width: 260px;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg-light);
+  border-right: 1px solid var(--color-border);
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), min-width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+  position: relative;
+  z-index: 20;
+
+  .collapsed & {
+    width: 72px;
+    min-width: 72px;
+  }
+}
+
+.sidebar-header {
+  padding: 20px 16px 16px;
+  border-bottom: 1px solid var(--color-border-light);
+  flex-shrink: 0;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  user-select: none;
+  padding: 4px;
+  border-radius: var(--radius-md);
+  transition: background var(--transition-fast);
+
+  &:hover {
+    background: var(--color-ghost-hover);
+  }
+}
+
+.logo-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.logo-text {
+  font-size: 1.35rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, #11967f 0%, #0f7666 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+.sidebar-nav {
+  flex: 1;
+  padding: 12px 8px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  color: var(--color-text-medium);
+  transition: all var(--transition-fast);
+  position: relative;
+  overflow: hidden;
+
+  &:hover {
+    background: var(--color-hover-bg);
+    color: var(--color-text-strong);
+  }
+
+  &.active {
+    background: var(--color-active-bg);
+    color: var(--color-primary-dark);
+
+    .nav-icon {
+      color: var(--color-primary);
+    }
+
+    .nav-label {
+      font-weight: 700;
+      color: var(--color-primary-dark);
+    }
+  }
+}
+
+.nav-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+
+  .active & {
+    background: rgba(17, 150, 127, 0.1);
+  }
+}
+
+.nav-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.nav-label {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  transition: color var(--transition-fast);
+}
+
+.nav-desc {
+  font-size: 11px;
+  color: var(--color-text-weak);
+  line-height: 1.3;
+  margin-top: 1px;
+}
+
+.nav-active-bar {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 20px;
+  border-radius: 3px 0 0 3px;
+  background: var(--color-primary);
+}
+
+.sidebar-footer {
+  padding: 12px 8px;
+  border-top: 1px solid var(--color-border-light);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-medium);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+
+  &:hover {
+    background: var(--color-ghost-hover);
+    color: var(--color-text-strong);
+  }
+}
+
+.user-section {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+
+  &:hover {
+    background: var(--color-ghost-hover);
+  }
+}
+
+.user-avatar {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--color-primary-gradient);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 2px solid var(--color-avatar-border);
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  span {
+    color: #fff;
+    font-weight: 700;
+    font-size: 14px;
+  }
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.user-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-strong);
+}
+
+.user-logout {
+  font-size: 11px;
+  color: var(--color-text-weak);
+  transition: color var(--transition-fast);
+
+  .user-section:hover & {
+    color: var(--color-red);
+  }
+}
+
+.main-content {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.fade-text-enter-active,
+.fade-text-leave-active {
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.fade-text-enter-from,
+.fade-text-leave-to {
+  opacity: 0;
+  transform: translateX(-8px);
+}
+
+.page-enter-active,
+.page-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.page-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.page-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    width: 72px;
+    min-width: 72px;
+  }
+
+  .nav-text,
+  .logo-text,
+  .user-info,
+  .theme-toggle span {
+    display: none !important;
+  }
+}
+</style>

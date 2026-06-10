@@ -1,7 +1,11 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import login from '@/views/login.vue'
-import talk from '@/views/talk.vue'
-import test from '@/views/test.vue'
+import home from '@/views/home.vue'
+import profile from '@/views/profile.vue'
+import resources from '@/views/resources.vue'
+import learningPath from '@/views/learning-path.vue'
+import tutor from '@/views/tutor.vue'
+import assessment from '@/views/assessment.vue'
 
 import { useUserStore } from '@/stores/user'
 
@@ -9,18 +13,27 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/login', component: login },
-    { path: '/', component: talk },
-    { path: '/test', component: test },
+    {
+      path: '/',
+      component: home,
+      children: [
+        { path: '', redirect: '/profile' },
+        { path: 'profile', component: profile },
+        { path: 'resources', component: resources },
+        { path: 'learning-path', component: learningPath },
+        { path: 'tutor', component: tutor },
+        { path: 'assessment', component: assessment },
+      ],
+    },
   ],
 })
-// 全局前置守卫
+
 router.beforeEach((to, from, next) => {
   const userStore = useUserStore()
-  if (to.path === '/' && !userStore.hasToken) {
+  if (to.path !== '/login' && !userStore.hasToken) {
     next('/login')
-    // next()
   } else if (to.path === '/login' && userStore.hasToken) {
-    next()
+    next('/profile')
   } else {
     next()
   }
