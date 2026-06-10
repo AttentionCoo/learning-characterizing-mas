@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
@@ -435,7 +435,7 @@ onMounted(() => {
     &:focus {
       outline: none;
       border-color: var(--color-primary);
-      box-shadow: 0 0 0 3px rgba(17, 150, 127, 0.12);
+    box-shadow: 0 0 0 3px rgba(17, 150, 127, 0.15), var(--glow-primary);
     }
 
     &::placeholder { color: var(--color-text-weak); }
@@ -465,7 +465,7 @@ onMounted(() => {
   &:hover { border-color: var(--color-primary); }
 
   &.active {
-    background: var(--color-primary-gradient);
+  background: var(--gradient-aurora);
     color: #fff;
     border-color: transparent;
   }
@@ -479,7 +479,7 @@ onMounted(() => {
   padding: 14px 24px;
   border: none;
   border-radius: var(--radius-lg);
-  background: var(--color-primary-gradient);
+  background: var(--gradient-aurora);
   color: #fff;
   font: inherit;
   font-size: 15px;
@@ -695,4 +695,10 @@ onMounted(() => {
   .resource-list-panel { width: 100%; min-width: 100%; max-height: 30vh; border-left: none; border-top: 1px solid var(--color-border-light); }
   .form-row { grid-template-columns: 1fr; }
 }
+
+.resource-card { animation: fade-in-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.resource-card:hover { transform: translateY(-3px); }
+.message { animation: fade-in-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.conv-item { transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
+.conv-item:hover { transform: translateX(4px); }
 </style>

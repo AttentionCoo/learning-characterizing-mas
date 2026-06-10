@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 import { ref, onMounted, nextTick, computed } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
@@ -374,7 +374,7 @@ const quickQuestions = [
 .avatar-ai {
   width: 36px; height: 36px;
   display: flex; align-items: center; justify-content: center;
-  background: linear-gradient(135deg, #11967f 0%, #0f7666 100%);
+  background: var(--gradient-aurora);
   border-radius: 50%;
 }
 
@@ -482,7 +482,7 @@ const quickQuestions = [
 
   &:focus-within {
     border-color: var(--color-primary);
-    box-shadow: 0 0 0 3px rgba(17, 150, 127, 0.12);
+    box-shadow: 0 0 0 3px rgba(17, 150, 127, 0.15), var(--glow-primary);
   }
 
   textarea {
@@ -506,7 +506,7 @@ const quickQuestions = [
   width: 36px; height: 36px;
   border: none;
   border-radius: 12px;
-  background: var(--color-primary-gradient);
+  background: var(--gradient-aurora);
   color: #fff;
   cursor: pointer;
   display: flex;
@@ -645,4 +645,8 @@ const quickQuestions = [
   .tutor-body { flex-direction: column; }
   .conversation-sidebar { width: 100%; min-width: 100%; max-height: 30vh; border-left: none; border-top: 1px solid var(--color-border-light); }
 }
+
+.message { animation: fade-in-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.conv-item { transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
+.conv-item:hover { transform: translateX(4px); }
 </style>

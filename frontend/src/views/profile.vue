@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 import { ref, onMounted, nextTick, computed } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
@@ -392,7 +392,7 @@ function handleKeydown(e) {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #11967f 0%, #0f7666 100%);
+  background: var(--gradient-aurora);
   border-radius: 50%;
 }
 
@@ -479,7 +479,7 @@ function handleKeydown(e) {
 
   &:focus-within {
     border-color: var(--color-primary);
-    box-shadow: 0 0 0 3px rgba(17, 150, 127, 0.12);
+    box-shadow: 0 0 0 3px rgba(17, 150, 127, 0.15), var(--glow-primary);
   }
 
   textarea {
@@ -507,7 +507,7 @@ function handleKeydown(e) {
   height: 36px;
   border: none;
   border-radius: 12px;
-  background: var(--color-primary-gradient);
+  background: var(--gradient-aurora);
   color: #fff;
   cursor: pointer;
   display: flex;
@@ -531,9 +531,9 @@ function handleKeydown(e) {
   min-width: 380px;
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
-  background: var(--color-bg-light);
-}
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
 
 .panel-title {
   display: flex;
@@ -601,11 +601,11 @@ function handleKeydown(e) {
   padding: 14px 16px;
   background: var(--color-bg-base);
   border: 1px solid var(--color-border-light);
+  border: 1px solid var(--color-border-light);
   border-radius: var(--radius-lg);
-  transition: all var(--transition-fast);
-
-  &:hover {
-    border-color: var(--color-border);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: hidden;
     box-shadow: 0 2px 12px rgba(17, 150, 127, 0.06);
   }
 }
@@ -708,5 +708,9 @@ function handleKeydown(e) {
     max-height: 40vh;
     border-top: 1px solid var(--color-border-light);
   }
+}
+
+.dimension-card {
+  animation: fade-in-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 </style>

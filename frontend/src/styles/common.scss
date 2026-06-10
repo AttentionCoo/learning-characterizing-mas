@@ -1,4 +1,4 @@
-// ─────────────────── 通用按钮 ───────────────────
+﻿// ─────────────────── 通用按钮 ───────────────────
 .primary-action {
   display: inline-block;
   padding: 9px 14px;
@@ -6,7 +6,7 @@
   border-radius: var(--radius-md);
   font-weight: 700;
   font-size: 13px;
-  background: var(--color-primary-gradient);
+  background: var(--gradient-aurora);
   color: #fff;
   text-align: center;
   cursor: pointer;
@@ -178,7 +178,7 @@ input.auth-input:-webkit-autofill:hover,
 input.auth-input:-webkit-autofill:focus {
   -webkit-text-fill-color: var(--color-text-strong);
   -webkit-box-shadow: 0 0 0 1000px var(--color-auth-input-bg) inset;
-  transition: background-color 9999s ease-out 0s;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   caret-color: var(--color-text-strong);
 }
 

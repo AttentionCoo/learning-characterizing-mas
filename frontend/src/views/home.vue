@@ -185,8 +185,10 @@ function toggleSidebar() {
   min-width: 260px;
   display: flex;
   flex-direction: column;
-  background: var(--color-bg-light);
-  border-right: 1px solid var(--color-border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border-right: 1px solid var(--glass-border);
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), min-width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
   position: relative;
@@ -229,7 +231,7 @@ function toggleSidebar() {
 .logo-text {
   font-size: 1.35rem;
   font-weight: 800;
-  background: linear-gradient(135deg, #11967f 0%, #0f7666 100%);
+  background: var(--gradient-aurora);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -254,18 +256,20 @@ function toggleSidebar() {
   border-radius: var(--radius-md);
   text-decoration: none;
   color: var(--color-text-medium);
-  transition: all var(--transition-fast);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   position: relative;
   overflow: hidden;
 
   &:hover {
     background: var(--color-hover-bg);
     color: var(--color-text-strong);
+    transform: translateX(4px);
   }
 
   &.active {
     background: var(--color-active-bg);
     color: var(--color-primary-dark);
+    box-shadow: var(--glow-primary);
 
     .nav-icon {
       color: var(--color-primary);
@@ -322,7 +326,8 @@ function toggleSidebar() {
   width: 3px;
   height: 20px;
   border-radius: 3px 0 0 3px;
-  background: var(--color-primary);
+  background: var(--gradient-aurora);
+  box-shadow: 0 0 8px rgba(17, 150, 127, 0.5);
 }
 
 .sidebar-footer {
@@ -374,7 +379,7 @@ function toggleSidebar() {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: var(--color-primary-gradient);
+  background: var(--gradient-aurora);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -443,7 +448,7 @@ function toggleSidebar() {
 
 .page-enter-from {
   opacity: 0;
-  transform: translateY(8px);
+  transform: translateY(12px) scale(0.99);
 }
 
 .page-leave-to {
@@ -464,4 +469,7 @@ function toggleSidebar() {
     display: none !important;
   }
 }
-</style>
+
+.nav-item {
+  animation: fade-in-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}</style>

@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { registerAPI, loginAPI } from '@/api/user'
@@ -117,6 +117,6 @@ async function handleRegister() {
 
     <div v-if="errorMessage" class="auth-error">{{ errorMessage }}</div>
 
-    <button class="primary-action auth-submit-btn" @click="handleRegister">注册</button>
+    <button class="primary-action auth-submit-btn animate-shimmer" @click="handleRegister">注册</button>
   </div>
 </template>

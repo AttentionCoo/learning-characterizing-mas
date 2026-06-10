@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 import { ref } from 'vue'
 import LoginForm from './LoginForm.vue'
 import RegisterForm from './RegisterForm.vue'
@@ -8,13 +8,13 @@ const isLogin = ref(true)
 
 <template>
   <div class="content">
-    <transition name="fade" mode="out-in">
-      <div :key="isLogin ? 'login' : 'register'" class="form-wrapper">
+    <transition name="flip" mode="out-in">
+      <div :key="isLogin ? 'login' : 'register'" class="form-wrapper glass">
         <LoginForm v-if="isLogin" />
         <RegisterForm v-else />
         <div class="switch-text" @click="isLogin = !isLogin">
-          <span v-if="isLogin">新用户？去注册</span>
-          <span v-else>已有帐号？去登录</span>
+          <span v-if="isLogin">新用户？<span class="switch-highlight">去注册</span></span>
+          <span v-else>已有帐号？<span class="switch-highlight">去登录</span></span>
         </div>
       </div>
     </transition>
@@ -22,19 +22,19 @@ const isLogin = ref(true)
 </template>
 
 <style scoped lang="scss">
-.fade-enter-from {
+.flip-enter-from {
   opacity: 0;
-  transform: perspective(600px) rotateY(-90deg);
+  transform: perspective(600px) rotateY(-30deg) scale(0.95);
 }
 
-.fade-leave-to {
+.flip-leave-to {
   opacity: 0;
-  transform: perspective(600px) rotateY(90deg);
+  transform: perspective(600px) rotateY(30deg) scale(0.95);
 }
 
-.fade-enter-active,
-.fade-leave-active {
-  transition: all 0.2s ease-out;
+.flip-enter-active,
+.flip-leave-active {
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .content {
@@ -42,17 +42,43 @@ const isLogin = ref(true)
   padding: 0;
 }
 
+.form-wrapper {
+  padding: 28px 24px;
+  border-radius: var(--radius-xl);
+}
+
 .switch-text {
   margin-top: 1rem;
   text-align: center;
-  color: var(--color-primary);
+  color: var(--color-text-medium);
   cursor: pointer;
   font-size: 14px;
-  transition: color var(--transition-fast);
+  transition: all 0.25s ease;
 
   &:hover {
-    text-decoration: underline;
-    color: var(--color-primary-light);
+    color: var(--color-text-strong);
+  }
+}
+
+.switch-highlight {
+  color: var(--color-primary);
+  font-weight: 700;
+  position: relative;
+
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    width: 0;
+    height: 2px;
+    background: var(--gradient-aurora);
+    border-radius: 1px;
+    transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .switch-text:hover &::after {
+    width: 100%;
   }
 }
 

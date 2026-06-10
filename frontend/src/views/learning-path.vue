@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 import { ref, computed, onMounted } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
@@ -420,7 +420,7 @@ const overallProgress = computed(() => {
   transition: all var(--transition-fast);
 
   .completed & { background: var(--color-primary); border-color: var(--color-primary); }
-  .in_progress & { background: var(--color-primary); border-color: var(--color-primary); animation: pulse 2s infinite; }
+  animation: pulse-glow 2s ease-in-out infinite;
 }
 
 @keyframes pulse {
@@ -486,7 +486,7 @@ const overallProgress = computed(() => {
   cursor: pointer;
   transition: all var(--transition-fast);
 
-  &:hover { border-color: var(--color-border); box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+  &:hover { border-color: rgba(17, 150, 127, 0.3); box-shadow: var(--glow-primary); transform: translateX(4px); }
 
   &.completed {
     opacity: 0.7;
@@ -598,7 +598,7 @@ const overallProgress = computed(() => {
     font-size: 14px;
     transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 
-    &:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(17, 150, 127, 0.12); }
+    box-shadow: 0 0 0 3px rgba(17, 150, 127, 0.15), var(--glow-primary);
     &::placeholder { color: var(--color-text-weak); }
   }
 
@@ -643,4 +643,7 @@ const overallProgress = computed(() => {
   .path-body { flex-direction: column; }
   .path-sidebar { width: 100%; min-width: 100%; border-left: none; border-top: 1px solid var(--color-border-light); max-height: 40vh; }
 }
+
+.task-item { animation: fade-in-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.phase-row { animation: fade-in-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
 </style>

@@ -1,4 +1,4 @@
-// ─────────────────── 通用过渡动画 ───────────────────
+﻿// ─────────────────── 通用过渡动画 ───────────────────
 
 // 淡入淡出
 .fade-enter-active,
@@ -23,11 +23,60 @@
   transform: translateY(-6px);
 }
 
+// 淡入 + 上浮（巧思：卡片从下方浮入）
+.fade-rise-enter-active {
+  transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1), transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.fade-rise-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.fade-rise-enter-from {
+  opacity: 0;
+  transform: translateY(20px) scale(0.97);
+}
+.fade-rise-leave-to {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.99);
+}
+
+// 缩放弹入（巧思：弹窗弹性缩放）
+.scale-bounce-enter-active {
+  transition: opacity 0.3s ease, transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.scale-bounce-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.scale-bounce-enter-from {
+  opacity: 0;
+  transform: scale(0.85);
+}
+.scale-bounce-leave-to {
+  opacity: 0;
+  transform: scale(0.92);
+}
+
+// 列表交错入场（巧思：列表项依次浮入）
+.list-stagger-enter-active {
+  transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.list-stagger-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.list-stagger-enter-from {
+  opacity: 0;
+  transform: translateX(-12px);
+}
+.list-stagger-leave-to {
+  opacity: 0;
+  transform: translateX(12px);
+}
+
+// ─────────────────── 关键帧动画 ───────────────────
+
 // 旋转加载
 @keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+  to { transform: rotate(360deg); }
 }
 
 .spinner {
@@ -37,4 +86,125 @@
   border: 3px solid rgba(17, 150, 127, 0.15);
   border-top-color: var(--color-primary);
   animation: spin 0.9s linear infinite;
+}
+
+// 流光扫过（巧思：按钮/卡片上的光效）
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+// 脉冲光晕（巧思：活跃状态的呼吸灯）
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 8px rgba(17, 150, 127, 0.2); }
+  50% { box-shadow: 0 0 24px rgba(17, 150, 127, 0.45); }
+}
+
+// 浮动动画（巧思：装饰元素轻柔浮动）
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+// 渐变旋转（巧思：边框流光效果）
+@keyframes gradient-rotate {
+  0% { --angle: 0deg; }
+  100% { --angle: 360deg; }
+}
+
+// 波纹扩散（巧思：点击反馈）
+@keyframes ripple {
+  0% { transform: scale(0); opacity: 0.5; }
+  100% { transform: scale(4); opacity: 0; }
+}
+
+// 打字光标闪烁
+@keyframes blink-cursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+// 渐显入场（巧思：页面内容优雅入场）
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+// 弹性缩放（巧思：数字/徽章变化时的弹跳）
+@keyframes bounce-in {
+  0% { transform: scale(0); }
+  50% { transform: scale(1.15); }
+  70% { transform: scale(0.95); }
+  100% { transform: scale(1); }
+}
+
+// ─────────────────── 工具类 ───────────────────
+
+.animate-float { animation: float 3s ease-in-out infinite; }
+.animate-float-slow { animation: float 5s ease-in-out infinite; }
+.animate-pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
+.animate-shimmer { position: relative; overflow: hidden; }
+.animate-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--gradient-shimmer);
+  animation: shimmer 2.5s ease-in-out infinite;
+  pointer-events: none;
+}
+.animate-fade-in-up { animation: fade-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-bounce-in { animation: bounce-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+// 交错延迟工具类
+.stagger-1 { animation-delay: 0.05s; }
+.stagger-2 { animation-delay: 0.1s; }
+.stagger-3 { animation-delay: 0.15s; }
+.stagger-4 { animation-delay: 0.2s; }
+.stagger-5 { animation-delay: 0.25s; }
+.stagger-6 { animation-delay: 0.3s; }
+.stagger-7 { animation-delay: 0.35s; }
+.stagger-8 { animation-delay: 0.4s; }
+
+// 玻璃拟态工具类
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+// 光晕效果
+.glow { box-shadow: var(--glow-primary); }
+.glow-strong { box-shadow: var(--glow-strong); }
+
+// 渐变文字（巧思：标题渐变色）
+.gradient-text {
+  background: var(--gradient-aurora);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+// 流光边框（巧思：卡片边框流光）
+.glow-border {
+  position: relative;
+  border: none !important;
+}
+.glow-border::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--gradient-aurora);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+.glow-border:hover::before {
+  opacity: 1;
 }

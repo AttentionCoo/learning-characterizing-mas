@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import pause from '@/utils/pause'
 
@@ -241,7 +241,21 @@ function typing(text, delay = TYPE_DELAY) {
   background: var(--color-card-intro-bg);
   box-shadow: var(--color-card-intro-shadow);
   will-change: transform, opacity;
-  transition: transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: transform 0.55s cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 0.3s ease;
+  overflow: hidden;
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: conic-gradient(from 0deg, transparent, rgba(17, 150, 127, 0.08), transparent, rgba(14, 165, 233, 0.06), transparent);
+    animation: rotate-glow 6s linear infinite;
+    pointer-events: none;
+  }
 
   &.leaving {
     opacity: 0 !important;
@@ -251,6 +265,11 @@ function typing(text, delay = TYPE_DELAY) {
   }
 }
 
+@keyframes rotate-glow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .typing-text {
   font-size: 1.85rem;
   line-height: 1.6;
@@ -258,6 +277,8 @@ function typing(text, delay = TYPE_DELAY) {
   text-align: center;
   white-space: pre-wrap;
   word-break: break-word;
+  position: relative;
+  z-index: 1;
 }
 
 .cursor {
@@ -268,15 +289,8 @@ function typing(text, delay = TYPE_DELAY) {
 }
 
 @keyframes blink {
-
-  0%,
-  100% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: 0;
-  }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
 }
 
 @media (max-width: 768px) {
