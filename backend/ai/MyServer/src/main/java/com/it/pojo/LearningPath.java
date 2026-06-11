@@ -5,23 +5,31 @@ import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("patient")
-public class Patient {
+@TableName("learning_path")
+public class LearningPath {
 
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    private String name;
+    private Long userId;
 
-    private String history;
+    private String courseName;
 
-    private String notes;
+    private String goalDescription;
 
-    /** 负责医生ID，关联 med_user.id */
-    private Long doctorId;
+    private Integer totalSteps;
+
+    private Integer completedSteps;
+
+    private Integer estimatedDays;
+
+    private LocalDate deadline;
+
+    private String status;
 
     private LocalDateTime createTime;
 

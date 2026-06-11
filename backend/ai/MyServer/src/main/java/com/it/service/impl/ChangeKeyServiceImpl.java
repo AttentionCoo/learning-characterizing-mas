@@ -13,6 +13,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 @Service
@@ -24,26 +26,53 @@ public class ChangeKeyServiceImpl extends ServiceImpl<ChangeKeyMapper, User> imp
 
     @Override
     public Result changeKeyById(Long currentId, ChangeKey changeKey) {
-        String password = stringRedisTemplate.opsForValue().get("user:password:" + currentId);
-        if(password != null)
-        {
-            return Result.success("密码已修改,三十天内不能重复修改");
-        }
         User user = query().eq("id", currentId).one();
-        if(user.getPassword().equals(changeKey.getPrePassword()))
-        {
-            user.setPassword(changeKey.getNewPassword());
-            user.setUpdateTime(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
-            updateById(user);
-            stringRedisTemplate.opsForValue().set("user:password:" + currentId, changeKey.getNewPassword(), 30, TimeUnit.DAYS);
-            return Result.success("密码修改成功");
+
+        if (changeKey.getPrePassword() != null && !changeKey.getPrePassword().isEmpty()) {
+            String password = stringRedisTemplate.opsForValue().get("user:password:" + currentId);
+            if (password != null) {
+                return Result.success("密码已修改,三十天内不能重复修改");
+            }
+            if (user.getPassword().equals(changeKey.getPrePassword())) {
+                user.setPassword(changeKey.getNewPassword());
+            } else {
+                return Result.error("密码错误");
+            }
         }
-        else return Result.error("密码错误");
+
+        if (changeKey.getImage() != null) {
+            user.setImage(changeKey.getImage());
+        }
+        if (changeKey.getMajor() != null) {
+            user.setMajor(changeKey.getMajor());
+        }
+        if (changeKey.getGrade() != null) {
+            user.setGrade(changeKey.getGrade());
+        }
+        if (changeKey.getSpecialty() != null) {
+            user.setSpecialty(changeKey.getSpecialty());
+        }
+
+        user.setUpdateTime(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+        updateById(user);
+
+        if (changeKey.getNewPassword() != null && !changeKey.getNewPassword().isEmpty()) {
+            stringRedisTemplate.opsForValue().set("user:password:" + currentId, changeKey.getNewPassword(), 30, TimeUnit.DAYS);
+        }
+
+        return Result.success();
     }
 
     @Override
     public Result getUserInfo(Long currentId) {
         User user = query().eq("id", currentId).one();
-        return Result.success(user);
+        Map<String, Object> info = new HashMap<>();
+        info.put("id", user.getId());
+        info.put("name", user.getName());
+        info.put("image", user.getImage());
+        info.put("major", user.getMajor());
+        info.put("grade", user.getGrade());
+        info.put("specialty", user.getSpecialty());
+        return Result.success(info);
     }
 }

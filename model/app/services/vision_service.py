@@ -9,8 +9,8 @@ from dashscope import MultiModalConversation
 
 logger = logging.getLogger(__name__)
 
-_KEYWORDS_REPORT = ["报告", "化验", "检验", "检查", "验血", "血常规", "尿常规", "生化", "结果单", "单子"]
-_KEYWORDS_DRUG = ["药", "药品", "药物", "什么药", "药盒", "说明书", "处方", "片", "胶囊", "药名"]
+_KEYWORDS_REPORT = ["课件", "笔记", "教材", "习题", "作业", "考试", "成绩", "报告", "学习资料"]
+_KEYWORDS_DRUG = ["代码", "编程", "程序", "算法", "截图", "界面", "软件"]
 
 _STREAM_DONE = object()
 
@@ -52,8 +52,8 @@ class VisionAnalysisService:
             url = img if img.startswith("data:") else f"data:image/jpeg;base64,{img}"
             user_content.append({"image": url})
 
-        patient_context = f"患者信息：{all_info.strip()}" if all_info and all_info.strip() else ""
-        user_text = "\n\n".join(filter(None, [patient_context, user_prefix, question])).strip()
+        student_context = f"学生信息：{all_info.strip()}" if all_info and all_info.strip() else ""
+        user_text = "\n\n".join(filter(None, [student_context, user_prefix, question])).strip()
         user_content.append({"text": user_text})
 
         messages.append({"role": "user", "content": user_content})
@@ -97,10 +97,10 @@ class VisionAnalysisService:
 
         if image_type == "image_report":
             system_text = self.prompt_manager.get("image_report_system") or _DEFAULT_REPORT_SYSTEM
-            user_prefix = "请分析以下检验报告单图片。"
+            user_prefix = "请分析以下学习资料图片。"
         elif image_type == "image_drug":
             system_text = self.prompt_manager.get("image_drug_system") or _DEFAULT_DRUG_SYSTEM
-            user_prefix = "请识别以下药品包装照片并提供详细信息。"
+            user_prefix = "请分析以下代码或学习资源截图。"
         else:
             system_text = self.prompt_manager.get("image_general_system") or _DEFAULT_GENERAL_SYSTEM
             user_prefix = "请分析以下图片。"
@@ -135,50 +135,52 @@ class VisionAnalysisService:
             yield {"type": "chunk", "content": item}
 
 _DEFAULT_REPORT_SYSTEM = """\
-你是一位三甲医院神经内科主任医师，正在阅读患者的检验报告单照片。
+你是一位高等教育教学资料分析专家，正在查看学生上传的学习资料图片。
 
 ## 任务
-请按以下步骤分析这张检验报告单：
+请按以下步骤分析这张学习资料图片：
 
-### 第一步：OCR 识别
-准确识别报告单上的所有文字和数值，以结构化表格形式列出：
-- 检验项目名称、检测结果（含数值和单位）、参考范围、是否异常（用 ↑ 或 ↓ 标注）
+### 第一步：内容识别
+准确识别图片上的所有文字和结构信息，以结构化形式列出：
+- 资料类型（课件/笔记/教材/习题等）
+- 涉及课程和知识点
+- 关键内容摘要
 
-### 第二步：异常指标解读
-对所有超出参考范围的指标逐一解读：
-- 该指标的临床意义、可能提示的疾病或状态、偏离程度评估（轻度/中度/重度）
+### 第二步：内容解读
+对识别出的内容进行解读：
+- 知识点覆盖范围
+- 难度级别评估
+- 与学生当前学习阶段的匹配度
 
-### 第三步：综合分析
-结合患者已知病情信息（如有），给出整体健康状况评估和进一步检查建议
+### 第三步：学习建议
+结合学生已知学习信息（如有），给出学习建议和推荐补充资料
 
 ## 安全约束
-- 禁止给出确诊结论，使用"提示""可能""建议"等措辞
-- 建议患者携带报告到相关科室就诊
+- 禁止给出绝对性结论，使用"建议""可能""推荐"等措辞
 - 如果图片模糊无法识别，明确告知用户"""
 
 _DEFAULT_DRUG_SYSTEM = """\
-你是一位临床药师，正在查看患者拍摄的药品包装照片。
+你是一位学习资源分析专家，正在查看学生上传的学习资源截图。
 
 ## 任务
-请按以下步骤分析这张药品照片：
+请按以下步骤分析这张资源截图：
 
 ### 第一步：基础识别
-从包装上识别：药品通用名/商品名、规格、生产厂家、批准文号（如可见）
+从截图中识别：资源类型、课程名称、知识点范围、难度级别
 
-### 第二步：药品详细信息
-基于识别出的药品，提供：适应症、用法用量、常见不良反应、禁忌症
+### 第二步：资源评估
+基于识别出的信息，提供：资源质量评估、适用学习阶段、推荐使用方式
 
-### 第三步：用药安全提示
-如果已知患者用药史，分析药物相互作用风险
+### 第三步：补充建议
+推荐与该资源搭配的其他学习材料
 
 ## 安全约束
-- 明确声明：药品使用请遵医嘱
-- 如果无法从照片中准确识别药品，明确告知用户
-- 禁止建议用户自行调整用药方案"""
+- 如果无法从截图中准确识别资源，明确告知用户
+- 禁止建议学生跳过必要的学习步骤"""
 
 _DEFAULT_GENERAL_SYSTEM = """\
-你是一位三甲医院神经内科主任医师，请仔细分析用户上传的图片，结合患者病情信息给出专业回答。
+你是一位高等教育个性化学习顾问，请仔细分析用户上传的图片，结合学生学习信息给出专业回答。
 
 ## 安全约束
-- 禁止给出确诊结论，使用"提示""可能""建议"等措辞
-- 建议患者在专科医生指导下进一步评估"""
+- 禁止给出绝对性结论，使用"建议""可能""推荐"等措辞
+- 建议学生在老师或辅导员指导下进一步评估"""

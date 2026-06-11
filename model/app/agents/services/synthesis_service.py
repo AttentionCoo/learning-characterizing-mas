@@ -3,14 +3,14 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 class EvidenceSynthesisService:
 
-    FALLBACK_PROMPT = """你是循证医学专家。
+    FALLBACK_PROMPT = """你是循证教育专家。
 
-临床问题：{question}
+学习问题：{question}
 
-医学证据：
+教育参考资料：
 {evidence}
 
-请进行循证医学总结。"""
+请进行循证教育总结。"""
 
     def __init__(
         self,
@@ -42,7 +42,7 @@ class EvidenceSynthesisService:
             )
 
         response = self.llm.invoke([
-            SystemMessage(content="你是循证医学专家"),
+            SystemMessage(content="你是循证教育专家"),
             HumanMessage(content=prompt)
         ])
 

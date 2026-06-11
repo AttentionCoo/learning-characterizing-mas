@@ -17,7 +17,7 @@ def _load_yaml(filename: str) -> Dict[str, Any]:
         logger.error(f"❌ 配置文件不存在: {filepath}")
         try:
             files = os.listdir(CONFIG_DIR)
-            logger.info(f"   config/ 目录内容: {files}")
+            logger.info(f"config/ 目录内容: {files}")
         except Exception:
             pass
         return {}
@@ -109,8 +109,8 @@ class ReportTemplateManager:
     def system_role(self) -> str:
         if not self._system_role:
             return (
-                "你是一位拥有20年经验的三甲医院神经内科主任医师。"
-                "禁止确诊语气。禁止具体剂量。"
+                "你是一位拥有20年教学经验的高等教育个性化学习顾问。"
+                "禁止绝对性结论。禁止过度承诺。"
             )
         return self._system_role
 
@@ -175,31 +175,31 @@ class ExpertConfigManager:
         return {
             "experts": [
                 {
-                    "role": "全科医生",
-                    "instruction": "请综合患者各项基础概况与生命体征，给出初步分诊、病情稳定性评估及基础维生建议。",
-                    "system_prompt": "你是专业的全科医生",
+                    "role": "画像对话智能体",
+                    "instruction": "请与学生进行自然对话，引导其表达学习背景、知识水平、学习目标等信息。",
+                    "system_prompt": "你是专业的学习画像构建顾问",
                     "priority": 1
                 },
                 {
-                    "role": "神经专科医生",
-                    "instruction": "请深挖神经系统查体与发病经过，给出具体的定性、定位诊断、以及急诊专科处置（如介入或溶栓）建议。",
-                    "system_prompt": "你是专业的神经专科医生",
+                    "role": "特征抽取智能体",
+                    "instruction": "请从对话内容中抽取结构化特征，包括专业、目标、知识水平、认知风格等维度。",
+                    "system_prompt": "你是专业的学习特征分析专家",
                     "priority": 2
                 },
                 {
-                    "role": "临床药师",
-                    "instruction": "请审查患者用药史并发症情况，专注于用药禁忌症（如溶栓禁忌）、药物相互作用以及推荐的剂量范围。",
-                    "system_prompt": "你是专业的临床药师",
+                    "role": "需求分析智能体",
+                    "instruction": "请结合学生画像分析学习需求，拆解生成任务，确定需要的资源类型和难度级别。",
+                    "system_prompt": "你是专业的学习需求分析师",
                     "priority": 3
                 }
             ],
             "synthesis": {
-                "prompt_template": "作为主治医师，请统筹以下各位专家的意见，并给出最终综合提案(Proposal)和潜在风险批评(Critique)：\n{expert_opinions}\n请将输出分为两部分，用 \"### PROPOSAL ###\" 和 \"### CRITIQUE ###\" 隔开。",
+                "prompt_template": "作为教学总监，请统筹以下各位智能体的意见，并给出最终综合提案(Proposal)和潜在问题批评(Critique)：\n{expert_opinions}\n请将输出分为两部分，用 \"### PROPOSAL ###\" 和 \"### CRITIQUE ###\" 隔开。",
                 "opinion_separator": "【{role}建议】{opinion}\n",
                 "proposal_separator": "### PROPOSAL ###",
                 "critique_separator": "### CRITIQUE ###"
             },
-            "enabled_experts": ["全科医生", "神经专科医生", "临床药师"]
+            "enabled_experts": ["画像对话智能体", "特征抽取智能体", "需求分析智能体"]
         }
 
     def get_experts(self) -> list:
@@ -244,9 +244,9 @@ class ValidationConfigManager:
         """获取默认校验配置"""
         return {
             "contraindication_rules": {
-                "溶栓": ["近期大手术", "活动性出血", "血小板<100", "血压超180/110", "头颅CT高密度"],
-                "抗凝": ["出血倾向", "活动性溃疡"],
-                "双抗": ["既往脑出血史"]
+                "资源生成": ["内容与知识点无关", "难度与学生水平不匹配", "缺少实例或练习"],
+                "画像构建": ["未覆盖核心维度", "描述不具体", "水平评估无依据"],
+                "学习路径": ["阶段划分不合理", "时间估算不可行", "缺少评估节点"]
             },
             "validation_settings": {
                 "max_reflection_count": 3,
@@ -256,7 +256,7 @@ class ValidationConfigManager:
         }
 
     def get_contraindication_rules(self) -> Dict[str, list]:
-        """获取禁忌症规则"""
+        """获取质量校验规则"""
         return self._data.get("contraindication_rules", {})
 
     def get_max_reflection_count(self) -> int:
@@ -302,9 +302,9 @@ class LimitsConfigManager:
                 "max_critique_chars": 3000
             },
             "keywords": {
-                "diagnostic": ["TOAST", "分型", "病因", "定位", "定性", "鉴别", "卒中类型", "发病机制", "卒中原因"],
-                "treatment": ["溶栓", "取栓", "抗凝", "降压", "手术", "时间窗", "剂量", "适应证", "禁忌"],
-                "prognosis": ["预后", "复发", "康复", "二级预防", "随访", "致残", "死亡率"]
+                "diagnostic": ["知识水平", "认知风格", "学习目标", "薄弱点", "画像", "维度", "特征", "评估", "诊断"],
+                "treatment": ["资源生成", "辅导", "学习路径", "推荐", "个性化", "难度", "练习", "课程", "规划"],
+                "prognosis": ["学习效果", "掌握度", "进度", "评估", "优化", "调整", "反馈", "完成率"]
             }
         }
 
@@ -339,15 +339,15 @@ class LimitsConfigManager:
         return keywords.get(category, [])
 
     def get_diagnostic_keywords(self) -> list:
-        """获取诊断相关关键词"""
+        """获取学习诊断相关关键词"""
         return self.get_keywords("diagnostic")
 
     def get_treatment_keywords(self) -> list:
-        """获取治疗相关关键词"""
+        """获取学习辅导相关关键词"""
         return self.get_keywords("treatment")
 
     def get_prognosis_keywords(self) -> list:
-        """获取预后相关关键词"""
+        """获取学习预后相关关键词"""
         return self.get_keywords("prognosis")
 
     def reload(self, config_file: str = "limits_config.yaml"):

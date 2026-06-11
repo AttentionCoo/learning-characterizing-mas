@@ -18,4 +18,7 @@ public class UserDTO extends User implements Serializable {
     private Long id;
     private String name;
     private String image;
+    private String major;
+    private String grade;
+    private String specialty;
 }

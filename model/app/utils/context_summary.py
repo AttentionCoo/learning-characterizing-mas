@@ -58,7 +58,7 @@ class ConversationSummaryService:
         if not answer:
             return 0.0, "empty answer"
 
-        fallback_prompt = """你是对话价值评估器。请判断下面这一轮问答是否值得写入长期病历摘要。
+        fallback_prompt = """你是对话价值评估器。请判断下面这一轮问答是否值得写入长期学习画像摘要。
 
 【历史摘要】
 {previous_all_info}
@@ -70,10 +70,10 @@ class ConversationSummaryService:
 {answer}
 
 评分标准：
-- 1.0：包含关键病情变化、重要检查、治疗决策、风险提示、明确随访建议
-- 0.6：包含有价值的症状、病史、鉴别诊断、下一步检查建议
+- 1.0：包含关键学习需求变化、重要知识点掌握情况、学习目标调整、风险提示、明确学习建议
+- 0.6：包含有价值的学习背景、知识水平、认知风格、下一步学习建议
 - 0.2：主要是泛泛解释、重复信息、礼貌性补充
-- 0.0：无医学价值或与病情无关
+- 0.0：无教育价值或与学习无关
 
 只输出 JSON：
 {{"score": 0.0-1.0, "reason": "一句话原因"}}"""
@@ -88,7 +88,7 @@ class ConversationSummaryService:
 
         if not self.llm:
             heuristic_score = 0.2
-            keywords = ["建议", "风险", "检查", "复查", "病史", "症状", "体征", "处理", "治疗"]
+            keywords = ["建议", "风险", "知识点", "复习", "学习", "掌握", "薄弱", "辅导", "资源", "目标"]
             hit_count = sum(1 for word in keywords if word in answer)
             if hit_count >= 3:
                 heuristic_score = 0.7
@@ -108,11 +108,11 @@ class ConversationSummaryService:
             return 0.5 if len(answer) > 80 else 0.2, "fallback heuristic"
 
     def summarize_context(self, previous_all_info: str, question: str, answer: str) -> str:
-        fallback_prompt = """你是病历摘要整理助手。请把旧摘要与本轮有价值问答合并成新的 all_info。
+        fallback_prompt = """你是学习画像摘要整理助手。请把旧摘要与本轮有价值问答合并成新的 all_info。
 
 要求：
-1. 只保留对后续问诊有帮助的信息
-2. 优先保留：主诉、症状演变、检查结果、重要病史、危险因素、处理建议、随访建议
+1. 只保留对后续学习咨询有帮助的信息
+2. 优先保留：学习需求、知识水平变化、学习目标、认知风格、易错点、学习节奏、资源偏好、辅导建议、学习建议
 3. 删除重复、寒暄、无价值表述
 4. 输出 3-6 条中文要点，每条独立，简洁清晰
 5. 不要输出 markdown 标题

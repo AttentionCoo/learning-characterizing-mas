@@ -31,7 +31,7 @@ class RAGPipeline:
             # 2. 并行检索证据
             evidence = self.retrieval.parallel_retrieve(queries)
             if not evidence:
-                return "未检索到相关医学文献。"
+                return "未检索到相关教育参考资料。"
             
             # 3. 合成证据
             result = self.synthesis.synthesize(question, evidence)

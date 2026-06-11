@@ -8,10 +8,10 @@ logger = logging.getLogger(__name__)
 
 class QueryGenerationService:
 
-    FALLBACK_PROMPT = """你是医学检索专家。
-根据以下临床问题生成2个精准中文检索关键词组合。
+    FALLBACK_PROMPT = """你是教育资料检索专家。
+根据以下学习问题生成2个精准中文检索关键词组合。
 每行一个。
-临床问题：{question}"""
+学习问题：{question}"""
 
     def __init__(
         self,
@@ -37,7 +37,7 @@ class QueryGenerationService:
             )
 
         response = self.llm.invoke([
-            SystemMessage(content="你是医学检索专家"),
+            SystemMessage(content="你是教育资料检索专家"),
             HumanMessage(content=prompt)
         ])
 

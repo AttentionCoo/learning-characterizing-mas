@@ -46,13 +46,13 @@ def get_max_critique_chars():
     return get_limits_config().get_max_critique_chars() or MAX_CRITIQUE_CHARS
 
 def get_diagnostic_keywords():
-    """获取诊断相关关键词（从配置读取）"""
+    """获取学习诊断相关关键词（从配置读取）"""
     return get_limits_config().get_diagnostic_keywords()
 
 def get_treatment_keywords():
-    """获取治疗相关关键词（从配置读取）"""
+    """获取学习辅导相关关键词（从配置读取）"""
     return get_limits_config().get_treatment_keywords()
 
 def get_prognosis_keywords():
-    """获取预后相关关键词（从配置读取）"""
+    """获取学习预后相关关键词（从配置读取）"""
     return get_limits_config().get_prognosis_keywords()

@@ -5,28 +5,23 @@ import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("learning_material")
-public class LearningMaterial {
+@TableName("step_resource")
+public class StepResourceRel {
 
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    private String title;
+    private Long stepId;
 
-    /** 分类，如：心血管疾病 */
-    private String category;
+    private Long resourceId;
 
-    /** 类型：文档 / 视频 / 链接 */
-    private String type;
+    private BigDecimal relevance;
 
-    private String url;
-
-    private String content;
+    private Integer isRecommended;
 
     private LocalDateTime createTime;
-
-    private LocalDateTime updateTime;
 }

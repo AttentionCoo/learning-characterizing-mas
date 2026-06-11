@@ -30,20 +30,19 @@ class NamingModel(object):
         try:
             response = self.llm.invoke([
                 SystemMessage(
-                    content="你是一位专业医学取标题人员，请将输入文本准确生成简短标题，标题长度控制在5-10个汉字内。"),
-                HumanMessage(content=f"请将以下内容生成简洁的医学标题：\n{question}")
+                    content="你是一位专业教育标题生成人员，请将输入文本准确生成简短标题，标题长度控制在5-10个汉字内。"),
+                HumanMessage(content=f"请将以下学习相关内容生成简洁的标题：\n{question}")
             ])
             result = response.content.strip()
             logger.info(f"生成标题结果: {result}")
             return result
         except Exception as e:
             logger.error(f"生成标题时发生错误: {str(e)}")
-            # 返回一个简单的备选标题
-            return "头痛相关问题咨询"
+            return "学习咨询"
 
 
 if __name__ == '__main__':
     nm = NamingModel()
-    question = "我头疼，想知道是否有什么办法可以解决。"
+    question = "我是计算机专业大二学生，想学好数据结构。"
     result = nm.run_naming(question)
     print(result)

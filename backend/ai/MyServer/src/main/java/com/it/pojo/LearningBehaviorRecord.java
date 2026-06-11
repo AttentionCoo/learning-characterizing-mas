@@ -5,19 +5,31 @@ import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("health_data")
-public class HealthData {
+@TableName("learning_behavior")
+public class LearningBehaviorRecord {
 
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    private Long patientId;
+    private Long userId;
 
-    /** 健康数据，JSON格式，如血压、血糖等 */
-    private String dataContent;
+    private Long pathId;
+
+    private Long stepId;
+
+    private Long resourceId;
+
+    private String behaviorType;
+
+    private Integer duration;
+
+    private BigDecimal score;
+
+    private String detail;
 
     private LocalDateTime createTime;
 }
