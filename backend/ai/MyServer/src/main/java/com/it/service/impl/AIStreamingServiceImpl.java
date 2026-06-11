@@ -6,8 +6,6 @@ import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.it.po.uo.Cont;
 import com.it.po.uo.ContDTO;
 import com.it.pojo.Talk;
@@ -57,10 +55,7 @@ public class AIStreamingServiceImpl implements AIStreamingService {
     private final ITalkService talkService;
     private final IContService contService;
     private final ConversationPersistenceService conversationPersistenceService;
-
-    private final ObjectMapper objectMapper = new ObjectMapper()
-            .registerModule(new JavaTimeModule())
-            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+    private final ObjectMapper objectMapper;
 
     private static final long CACHE_TTL = 1;
     private static final String HISTORY_KEY_PREFIX = "chat:history:";

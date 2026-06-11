@@ -43,7 +43,7 @@ public class LoginServiceImpl extends ServiceImpl<LoginMapper, User> implements 
     private static final int WINDOW_SECONDS = 300;       // 5分钟窗口
     private final StringRedisTemplate stringRedisTemplate;
     private final RedissonClient redissonClient;
-    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+    private final BCryptPasswordEncoder passwordEncoder;
 
     private boolean tryAcquire(String key, int rate, int seconds) {
         var limiter = redissonClient.getRateLimiter(key);

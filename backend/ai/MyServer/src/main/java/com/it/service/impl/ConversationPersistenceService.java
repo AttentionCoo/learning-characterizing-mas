@@ -24,7 +24,7 @@ public class ConversationPersistenceService {
 
     private final IContService contService;
     private final ITalkService talkService;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
 
     @Transactional
     public void persistConversation(Long userId, Long talkId, String question, String answer,
