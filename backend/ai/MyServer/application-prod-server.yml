@@ -1,0 +1,40 @@
+# ===================================================
+# 服务器部署配置文件
+# 放置位置: /www/wwwroot/myserver/application-prod.yml
+# Spring Boot 会自动从 Jar 同目录加载此文件
+# ===================================================
+
+aiserver:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    host: 127.0.0.1
+    port: 3306
+    database: learningo-agents
+    username: learningo-agents
+    password: "123456"
+
+  redis:
+    host: 127.0.0.1
+    port: 6379
+    password: ""
+
+  ai-api:
+    url: http://127.0.0.1:8000
+    shared-jwt-secret: /jdhn:836**1
+
+  alioss:
+    endpoint: https://oss-cn-beijing.aliyuncs.com
+    bucketName: darkside
+    region: cn-beijing
+    access-key-id: LTAI5tCsXMzZtiBxnUgqKPNA
+    access-key-secret: Bkp8ixYCRDicOWLeclRqdPvlNoxMiK
+    document-prefix: documents/
+    sign-url-expiration: 1800
+
+logging:
+  level:
+    root: INFO
+    com.it: INFO
+  file:
+    max-size: 100MB
+    max-history: 30
