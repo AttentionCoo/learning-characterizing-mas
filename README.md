@@ -39,9 +39,9 @@
 
 | 架构层级 | 核心技术栈 | 核心设计职责 |
 | --- | --- | --- |
-| 🎨 前端交互层<br>(Frontend) | Vue 3.5 (Composition API) <br>• Vite 7 • Pinia 3 • SCSS <br>• Fetch / ReadableStream <br>• marked • DOMPurify | 以用户体验为核心，持续接收后端流式推送并实时打字机渲染。支持 Markdown 渲染、多模态内容卡片化展示、ThinkingPanel 思考步骤折叠展示、学习路径可视化、PDF 在线预览、图片压缩上传。 |
-| ☕ 后端服务层<br>(Backend) | Java 21 • Spring Boot 3.3 <br>• Spring WebFlux • Redis <br>• Redisson • MySQL 8.0 <br>• MyBatis-Plus • Aliyun OSS | 采用响应式编程模型支持高并发吞吐。通过 JWT 实现身份认证与安全控制，利用 Redisson 分布式限流与并发信号量控制，通过 WebClient 对底层 Python 模型服务进行流式非阻塞调用与转发，SSEEventCache 支持断线续传。 |
-| 🐍 模型推理层<br>(Model) | Python 3.11+ • FastAPI <br>• LangGraph • LangChain <br>• Qwen-Max/Plus/Turbo <br>• ChromaDB • gte-rerank | 统一入口加载大语言模型、混合检索引擎与多智能体推理模块。通过异步生成器持续输出标准事件格式（thinking, token, done），实现高效流式通信。JWT 双向认证保障服务间调用安全。 |
+| 🎨 前端交互层<br>(Frontend) | Vue 3.5 (Composition API) <br>• Vite 7.1 • Pinia 3.0 • SCSS <br>• Fetch / ReadableStream <br>• marked • DOMPurify • morphdom <br>• pdfjs-dist • vue-pdf-embed • NProgress | 以用户体验为核心，持续接收后端流式推送并实时打字机渲染。支持 Markdown 渲染、多模态内容卡片化展示、ThinkingPanel 思考步骤折叠展示、学习路径可视化、PDF 在线预览、图片压缩上传。 |
+| ☕ 后端服务层<br>(Backend) | Java 21 • Spring Boot 3.3.13 <br>• Spring WebFlux • Spring Security <br>• Redis • Redisson 3.27 <br>• MySQL 8.0 • MyBatis-Plus 3.5.5 <br>• Aliyun OSS • Hutool • JWT | 采用响应式编程模型支持高并发吞吐。通过 JWT 实现身份认证与安全控制，利用 Redisson 分布式限流与并发信号量控制，通过 WebClient 对底层 Python 模型服务进行流式非阻塞调用与转发，SSEEventCache 支持断线续传。 |
+| 🐍 模型推理层<br>(Model) | Python 3.11+ • FastAPI 0.128 <br>• LangGraph 0.2.20 • LangChain 0.2.16 <br>• Qwen-Max/Plus/Turbo <br>• ChromaDB 0.5 • gte-rerank <br>• DashScope SDK • PyJWT | 统一入口加载大语言模型、混合检索引擎与多智能体推理模块。通过异步生成器持续输出标准事件格式（thinking, token, done），实现高效流式通信。JWT 双向认证保障服务间调用安全。 |
 
 ### 🔄 全链路流式数据管道 (SSE Pipeline)
 
@@ -170,12 +170,13 @@
 
 ```
 learning-multi-agent-system/
-├── frontend/                        # 前端项目 (Vue 3 + Vite 7)
+├── frontend/                        # 前端项目 (Vue 3.5 + Vite 7.1)
 │   ├── src/
 │   │   ├── api/                     # API 接口层
 │   │   │   ├── ai.js                # AI 通用接口
 │   │   │   ├── profile.js           # 画像接口（SSE 流式）
 │   │   │   ├── resources.js         # 资源生成接口
+│   │   │   ├── learning.js          # 学习相关接口
 │   │   │   ├── learningPath.js      # 学习路径接口
 │   │   │   ├── tutor.js             # 智能辅导接口
 │   │   │   ├── assessment.js        # 学习评估接口
@@ -188,14 +189,19 @@ learning-multi-agent-system/
 │   │   │   ├── workspace/           # 工作区组件
 │   │   │   │   ├── ChatWorkspace.vue      # 通用对话工作区
 │   │   │   │   ├── LearningWorkspace.vue  # 学习工作区
+│   │   │   │   ├── PatientWorkspace.vue   # 患者工作区
+│   │   │   │   ├── PatientFormDialog.vue  # 患者表单弹窗
 │   │   │   │   ├── ThinkingPanel.vue      # AI 思考步骤面板
 │   │   │   │   ├── WorkspaceTabs.vue      # 工作区标签页
 │   │   │   │   └── PapersSidebar.vue      # 文献侧边栏
 │   │   │   ├── form/                # 表单组件（登录/注册/编辑）
 │   │   │   ├── svg/                 # SVG 图标组件
-│   │   │   ├── PdfPreviewModal.vue  # PDF 在线预览弹窗
+│   │   │   ├── AppAvatar.vue        # 用户头像组件
 │   │   │   ├── AvatarUpload.vue     # 头像上传组件
-│   │   │   └── LoadingModel.vue     # 加载动画组件
+│   │   │   ├── LeftIntro.vue        # 左侧介绍组件
+│   │   │   ├── LoadingModel.vue     # 加载动画组件
+│   │   │   ├── PdfPreviewModal.vue  # PDF 在线预览弹窗
+│   │   │   └── UserDialog.vue       # 用户信息弹窗
 │   │   ├── views/                   # 页面视图
 │   │   │   ├── login.vue            # 登录页
 │   │   │   ├── home.vue             # 主页（侧边导航布局）
@@ -219,46 +225,63 @@ learning-multi-agent-system/
 │
 ├── backend/                         # 后端项目 (Spring Boot 3.3)
 │   └── ai/MyServer/
-│       └── src/main/java/com/it/
-│           ├── controller/          # 控制层（15 个控制器）
-│           │   ├── ProfileController.java       # 画像对话（SSE）
-│           │   ├── ResourceController.java      # 资源生成（SSE）
-│           │   ├── LearningPathController.java  # 学习路径
-│           │   ├── TutorController.java         # 智能辅导（SSE）
-│           │   ├── AssessmentController.java    # 学习评估（SSE）
-│           │   ├── CodeController.java          # 代码执行
-│           │   ├── CourseController.java        # 课程管理
-│           │   ├── DocumentController.java      # 文档管理
-│           │   ├── LoginController.java         # 登录注册
-│           │   └── ...
-│           ├── service/             # 业务逻辑层
-│           │   ├── AIStreamingService.java      # AI 流式服务接口
-│           │   ├── impl/
-│           │   │   ├── AIStreamingServiceImpl.java  # 流式核心实现
-│           │   │   └── ConversationPersistenceService.java  # 对话持久化
-│           │   └── OssDocumentService.java      # OSS 文档服务
-│           ├── mapper/              # MyBatis-Plus Mapper（14 个）
-│           ├── po/                  # 持久化对象
-│           │   ├── dto/             # 数据传输对象
-│           │   ├── uo/              # 请求参数对象（15 个）
-│           │   └── vo/              # 响应视图对象（11 个）
-│           ├── pojo/                # 实体类
-│           │   ├── StudentProfile.java           # 学生画像
-│           │   ├── LearningPath.java             # 学习路径
-│           │   ├── LearningPathStepEntity.java   # 学习步骤
-│           │   ├── LearningResource.java         # 学习资源
-│           │   ├── LearningBehaviorRecord.java   # 学习行为记录
-│           │   ├── EvalReport.java               # 评估报告
-│           │   └── ...
-│           ├── config/              # 配置类
-│           │   ├── SecurityConfig.java           # 安全配置
-│           │   ├── WebClientConfig.java          # WebClient 配置
-│           │   ├── RedissonConfig.java           # Redisson 配置
-│           │   └── ...
-│           ├── cache/               # SSEEventCache（SSE 事件缓存与断线续传）
-│           ├── interceptor/         # JWT 拦截器（Token 校验 + 自动续期）
-│           ├── handler/             # 全局异常处理
-│           └── utils/               # 工具类（JWT / OSS / IP 等）
+│       ├── src/main/java/com/it/
+│       │   ├── controller/          # 控制层（14 个控制器）
+│       │   │   ├── ProfileController.java       # 画像对话（SSE）
+│       │   │   ├── ResourceController.java      # 资源生成（SSE）
+│       │   │   ├── LearningPathController.java  # 学习路径
+│       │   │   ├── TutorController.java         # 智能辅导（SSE）
+│       │   │   ├── AssessmentController.java    # 学习评估（SSE）
+│       │   │   ├── CodeController.java          # 代码执行
+│       │   │   ├── CourseController.java        # 课程管理
+│       │   │   ├── DocumentController.java      # 文档管理
+│       │   │   ├── LoginController.java         # 登录注册
+│       │   │   ├── QuesController.java          # 问题管理
+│       │   │   ├── UploadController.java        # 文件上传
+│       │   │   ├── MonitorController.java       # 系统监控
+│       │   │   ├── InitialPageController.java   # 首页数据
+│       │   │   └── ChangeKeyController.java     # 密码修改
+│       │   ├── service/             # 业务逻辑层
+│       │   │   ├── AIStreamingService.java      # AI 流式服务接口
+│       │   │   ├── impl/
+│       │   │   │   ├── AIStreamingServiceImpl.java  # 流式核心实现
+│       │   │   │   └── ConversationPersistenceService.java  # 对话持久化
+│       │   │   └── OssDocumentService.java      # OSS 文档服务
+│       │   ├── mapper/              # MyBatis-Plus Mapper（14 个）
+│       │   ├── po/                  # 持久化对象
+│       │   │   ├── dto/             # 数据传输对象
+│       │   │   ├── uo/              # 请求参数对象（15 个）
+│       │   │   └── vo/              # 响应视图对象（11 个）
+│       │   ├── pojo/                # 实体类
+│       │   │   ├── StudentProfile.java           # 学生画像
+│       │   │   ├── LearningPath.java             # 学习路径
+│       │   │   ├── LearningPathStepEntity.java   # 学习步骤
+│       │   │   ├── LearningResource.java         # 学习资源
+│       │   │   ├── LearningBehaviorRecord.java   # 学习行为记录
+│       │   │   ├── EvalReport.java               # 评估报告
+│       │   │   └── ...
+│       │   ├── config/              # 配置类
+│       │   │   ├── SecurityConfig.java           # 安全配置
+│       │   │   ├── WebClientConfig.java          # WebClient 配置
+│       │   │   ├── RedissonConfig.java           # Redisson 配置
+│       │   │   ├── JacksonConfig.java            # Jackson 序列化配置
+│       │   │   ├── JwtConfig.java                # JWT 配置
+│       │   │   ├── MybatisPlusConfig.java        # MyBatis-Plus 配置
+│       │   │   ├── OssConfig.java                # 阿里云 OSS 配置
+│       │   │   ├── TransactionConfig.java        # 事务配置
+│       │   │   └── WebConfig.java                # Web 跨域配置
+│       │   ├── cache/               # SSEEventCache（SSE 事件缓存与断线续传）
+│       │   ├── interceptor/         # JWT 拦截器（Token 校验 + 自动续期）
+│       │   ├── handler/             # 全局异常处理
+│       │   └── utils/               # 工具类（JWT / OSS / IP / ThreadLocal）
+│       ├── src/main/resources/
+│       │   ├── application.yml           # 主配置（含限流/熔断/OSS/AI 服务配置）
+│       │   ├── application-dev.yml       # 开发环境配置
+│       │   ├── application-prod.yml      # 生产环境配置
+│       │   ├── db/schema_additions.sql   # 数据库增量建表脚本
+│       │   └── logback.xml               # 日志配置
+│       ├── learningo-agents.sql          # 完整数据库初始化脚本
+│       └── pom.xml
 │
 ├── model/                           # 模型推理层 (Python FastAPI)
 │   ├── app/
@@ -268,6 +291,7 @@ learning-multi-agent-system/
 │   │   │   │   ├── clinical_graph.py      # StateGraph 构建与路由
 │   │   │   │   ├── qwen_agent.py          # LearningAgent 主入口
 │   │   │   │   └── nodes/                 # 各功能节点
+│   │   │   │       ├── base.py            # 节点基类
 │   │   │   │       ├── intent_node.py     # 意图分类节点
 │   │   │   │       ├── analysis_node.py   # 需求分析节点
 │   │   │   │       ├── retrieve_node.py   # 证据检索节点
@@ -295,6 +319,8 @@ learning-multi-agent-system/
 │   │   │   │   ├── json_parser.py       # JSON 解析器
 │   │   │   │   ├── retry.py             # 重试装饰器
 │   │   │   │   └── text_utils.py        # 文本处理工具
+│   │   │   ├── bailian/             # 百炼平台集成
+│   │   │   │   └── health_risk_analyzer.py  # 健康风险分析
 │   │   │   ├── assistant.py         # LearningAssistant 学习助手
 │   │   │   └── constants.py         # 常量定义
 │   │   ├── rag/                     # RAG 模块
@@ -302,37 +328,33 @@ learning-multi-agent-system/
 │   │   │   ├── data_loader.py       # PDF 文档加载与分块
 │   │   │   ├── qa_generator.py      # QA 自动衍生引擎
 │   │   │   └── retrieve.py          # 统一检索入口
+│   │   ├── services/                # 扩展服务
+│   │   │   ├── pubmed_service.py    # PubMed 文献检索服务
+│   │   │   └── vision_service.py    # 图片识别分析服务
 │   │   ├── config/                  # YAML 配置文件
+│   │   │   ├── config_loader.py     # 配置加载器（Prompt/报告/专家/校验/限流）
 │   │   │   ├── prompts.yaml         # Prompt 模板库
 │   │   │   ├── expert_config.yaml   # 专家角色配置
 │   │   │   ├── report_templates.yaml # 报告模板
 │   │   │   ├── rules_config.yaml    # 校验规则配置
-│   │   │   ├── limits_config.yaml   # 参数限制配置
-│   │   │   └── config_loader.py     # 配置加载器
-│   │   ├── services/                # 外部服务
-│   │   │   ├── vision_service.py    # 视觉分析服务
-│   │   │   └── pubmed_service.py    # 文献检索服务
+│   │   │   └── limits_config.yaml   # 参数限制配置
 │   │   ├── evaluation/              # 评估模块
 │   │   └── utils/                   # 工具函数
 │   │       ├── context_summary.py   # 对话上下文摘要
 │   │       ├── error_codes.py       # 错误码定义
 │   │       ├── token_aggregator.py  # Token 聚合器
 │   │       ├── naming_model.py      # 模型命名工具
+│   │       ├── task_manager.py      # 异步任务管理器
 │   │       └── download_models.py   # 模型下载脚本
 │   ├── data/
 │   │   └── documents/               # 课程 PDF 文档库
 │   ├── tests/                       # 自动化测试
 │   ├── requirements.txt
-│   ├── main.py                      # 启动入口
 │   ├── start.bat / start.sh         # 一键启动脚本
-│   └── .env.example                 # 环境变量示例
+│   └── .env                         # 环境变量配置
 │
-├── sql表/                           # 数据库建表脚本
-│   └── learningo-agents.sql         # 完整数据库初始化脚本
-├── docs/                            # 项目文档
-│   └── 多智能体个性化学习系统接口文档.md
-└── scripts/                         # 辅助脚本
-    └── fill_test_results.py         # 测试数据填充脚本
+└── docs/                            # 项目文档
+    └── 多智能体个性化学习系统接口文档.md
 ```
 
 ---
@@ -362,7 +384,7 @@ conda activate learn-agent
 pip install -r requirements.txt
 ```
 
-在 `model/` 根目录下创建 `.env` 文件（参考 `.env.example`）：
+在 `model/` 根目录下创建 `.env` 文件：
 
 ```env
 # 必需：阿里云百炼 API 密钥
@@ -371,7 +393,7 @@ DASHSCOPE_API_KEY=sk-您的阿里云百炼平台密钥
 # 必需：JWT 密钥（须与后端 application-dev.yml 中 shared-jwt-secret 一致）
 SECRET_KEY=自定义防越权的JWT随机字符串
 
-# 可选：HuggingFace 镜像加速
+# 可选：HuggingFace 镜像加速（已内置默认值）
 HF_ENDPOINT=https://hf-mirror.com
 ```
 
@@ -399,10 +421,16 @@ aiserver:
 
 #### 数据库初始化
 
-导入 `sql表/learningo-agents.sql` 到 MySQL 数据库（数据库名 `medai`）：
+导入 `backend/ai/MyServer/learningo-agents.sql` 到 MySQL 数据库（数据库名 `medai`）：
 
 ```bash
-mysql -u root -p medai < sql表/learningo-agents.sql
+mysql -u root -p medai < backend/ai/MyServer/learningo-agents.sql
+```
+
+如需增量建表（患者、健康数据、学习资料等），可额外执行：
+
+```bash
+mysql -u root -p medai < backend/ai/MyServer/src/main/resources/db/schema_additions.sql
 ```
 
 ### 3. 初始化启动
@@ -413,13 +441,14 @@ mysql -u root -p medai < sql表/learningo-agents.sql
 
 ```bash
 cd model
-python main.py
-# 或使用一键脚本
+# 使用一键脚本启动
 start.bat    # Windows
 ./start.sh   # Linux/macOS
+# 或手动启动
+python -m app.main
 ```
 
-模型服务默认在 `http://localhost:8000` 启动。
+模型服务默认在 `http://localhost:8000` 启动，首次启动会自动初始化向量索引和 BM25 索引。
 
 #### 第二步：启动后端服务 (Backend)
 
