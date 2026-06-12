@@ -35,7 +35,7 @@ const emit = defineEmits(['close', 'submit'])
         </label>
         <label class="field-label">
           病史
-          <textarea v-model="form.history" rows="5" placeholder="请输入既往病史或慢性病信息"></textarea>
+          <textarea v-model="form.history" rows="5" placeholder="如：高血压10年，房颤3年，糖尿病5年，既往脑梗死史"></textarea>
         </label>
         <label class="field-label">
           医生备注

@@ -5,7 +5,7 @@
         <div class="lm-spinner"></div>
 
         <div class="lm-message">
-          <div class="lm-main">医疗助手正在认真思考中 ⏳</div>
+          <div class="lm-main">学习助手正在认真思考中 ⏳</div>
           <div class="lm-sub">模型回答大约需要 3 分钟，请耐心等待</div>
           <div class="lm-tip">{{ currentTip }}</div>
         </div>
@@ -31,13 +31,13 @@ const show = computed({
   set: (v) => emit('update:modelValue', v),
 })
 
-// 🧠 脑卒中医学常识
+// 脑卒中医学常识
 const tips = [
   '脑卒中（中风）发作后越早送医，恢复可能性越大。',
   '出现口角歪斜、言语不清、肢体无力应立即就医。',
   '高血压是脑卒中的重要危险因素，要定期监测。',
   '突然单侧肢体麻木或无力是危险信号。',
-  '中风抢救有“黄金4.5小时”原则。',
+  '中风抢救有"黄金4.5小时"原则。',
   '长期吸烟和饮酒会增加脑卒中风险。',
   '糖尿病患者更容易发生脑血管意外。',
   '发现异常症状，千万不要等待自行恢复。',

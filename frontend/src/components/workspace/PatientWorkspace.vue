@@ -181,7 +181,7 @@ function formatDateTime(value) {
           </div>
 
           <textarea v-model="analysisText" class="analysis-input" rows="6"
-            placeholder="例如：近三天血压持续偏高，夜间头痛加重，伴手脚麻木..."></textarea>
+            placeholder="例如：突发右侧肢体无力2小时，伴言语不清，血压180/110mmHg..."></textarea>
           <button type="button" class="primary-action" @click="emit('analyze-patient')">执行风险分析</button>
         </section>
       </div>

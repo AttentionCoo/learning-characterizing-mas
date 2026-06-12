@@ -12,11 +12,9 @@ const resourceTypes = [
   { value: 'quiz', label: '练习题目', icon: '✏️', color: '#f59e0b' },
   { value: 'reading', label: '临床指南与文献', icon: '📖', color: '#10b981' },
   { value: 'video_script', label: '教学视频脚本', icon: '🎬', color: '#ef4444' },
-  { value: 'code_practice', label: '医学编程实操', icon: '💻', color: '#06b6d4' },
-  { value: 'case_study', label: '临床实操案例', icon: '🏥', color: '#f97316' },
+  { value: 'case_study', label: '脑卒中临床案例', icon: '🏥', color: '#f97316' },
   { value: 'ppt', label: '课程PPT', icon: '📊', color: '#6366f1' },
   { value: 'plan', label: '资源设计方案', icon: '📋', color: '#14b8a6' },
-  { value: 'project', label: '实践项目材料', icon: '🔬', color: '#ec4899' },
 ]
 
 const selectedTypes = ref([])
@@ -172,7 +170,7 @@ onMounted(() => {
     <div class="page-header">
       <div class="header-content">
         <h1>资源生成</h1>
-        <p>多智能体协同生成个性化多模态学习资源</p>
+        <p>多智能体协同生成脑卒中个性化多模态学习资源</p>
       </div>
       <div class="header-badge">核心功能2 · 必选</div>
     </div>
@@ -218,12 +216,12 @@ onMounted(() => {
 
           <div class="form-field">
             <label>知识点 <span class="hint">用逗号分隔</span></label>
-            <input v-model="knowledgePoints" placeholder="如：缺血性脑卒中, 静脉溶栓, TOAST分型" />
+            <input v-model="knowledgePoints" placeholder="如：缺血性脑卒中, 静脉溶栓, TOAST分型, 脑出血" />
           </div>
 
           <div class="form-field">
             <label>补充说明 <span class="hint">可选</span></label>
-            <textarea v-model="customMessage" placeholder="描述你的具体需求，如：重点讲解溶栓时间窗..." rows="2"></textarea>
+            <textarea v-model="customMessage" placeholder="描述你的具体需求，如：重点讲解溶栓时间窗和rt-PA用法..." rows="2"></textarea>
           </div>
 
           <button class="generate-btn" :disabled="!selectedTypes.length || isGenerating" @click="handleGenerate">

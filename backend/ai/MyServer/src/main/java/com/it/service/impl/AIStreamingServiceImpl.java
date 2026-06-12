@@ -216,6 +216,16 @@ public class AIStreamingServiceImpl implements AIStreamingService {
                                    String question,
                                    String token,
                                    List<String> images) {
+        return streamChat(userId, talkId, question, token, images, DEFAULT_REPORT_MODE);
+    }
+
+    @Override
+    public Flux<String> streamChat(Long userId,
+                                   Long talkId,
+                                   String question,
+                                   String token,
+                                   List<String> images,
+                                   String reportMode) {
 
         if (userId == null) {
             return Flux.just(buildError("未登录"));
@@ -243,7 +253,7 @@ public class AIStreamingServiceImpl implements AIStreamingService {
 
         String historyText = buildHistoryContext(userId, finalTalkId);
         final String requestToken = token.trim();
-        final String reportMode = DEFAULT_REPORT_MODE;
+        final String finalReportMode = (reportMode != null && !reportMode.isBlank()) ? reportMode : DEFAULT_REPORT_MODE;
         final boolean showThinking = DEFAULT_SHOW_THINKING;
 
         // 图片校验：最多 3 张，单张 Base64 解码后不超过 10MB
@@ -269,7 +279,7 @@ public class AIStreamingServiceImpl implements AIStreamingService {
         request.put("round", 2);
         request.put("all_info", historyText);
         request.put("token", requestToken);
-        request.put("report_mode", reportMode);
+        request.put("report_mode", finalReportMode);
         request.put("show_thinking", showThinking);
         // 影像识别：有图片时传入 images 列表，Python 层据此走 vision 分支
         if (images != null && !images.isEmpty()) {

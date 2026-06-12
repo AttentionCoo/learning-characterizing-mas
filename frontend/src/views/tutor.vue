@@ -29,7 +29,7 @@ onMounted(() => {
   fetchConversations()
   chatMessages.value.push({
     role: 'assistant',
-    content: '你好！我是你的智能辅导助手 🎓\n\n我可以为你解答医学问题、讲解知识点、分析临床案例，并提供多模态辅导支持。\n\n请随时向我提问！',
+    content: '你好！我是你的脑卒中智能辅导助手 🎓\n\n我可以为你解答脑卒中相关问题、讲解神经病学知识点、分析脑血管病例，并提供多模态辅导支持。\n\n请随时向我提问！',
   })
 })
 
@@ -159,9 +159,9 @@ function handleKeydown(e) {
 
 const quickQuestions = [
   '讲解缺血性脑卒中的TOAST分型',
-  '房颤的抗凝治疗策略',
-  '肺炎的鉴别诊断思路',
-  '急性肾损伤的分期与处理',
+  '脑卒中静脉溶栓的适应症与禁忌症',
+  '脑出血与脑梗死的鉴别诊断',
+  '脑卒中二级预防的抗血小板策略',
 ]
 </script>
 
@@ -170,7 +170,7 @@ const quickQuestions = [
     <div class="page-header">
       <div class="header-content">
         <h1>智能辅导</h1>
-        <p>多模态智能答疑，个性化辅导支持</p>
+        <p>脑卒中多模态智能答疑，个性化辅导支持</p>
       </div>
       <div class="header-badge">核心功能4 · 必选</div>
     </div>
@@ -190,7 +190,7 @@ const quickQuestions = [
             </div>
             <div class="message-body">
               <div v-if="msg.role === 'assistant'" class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
-              <div v-else class="message-content">{{ msg.content }}</div>
+              <div v-else class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
             </div>
           </div>
           <div v-if="isThinking" class="chat-message assistant">
@@ -218,7 +218,7 @@ const quickQuestions = [
             <textarea
               ref="inputRef"
               v-model="draftMessage"
-              placeholder="输入你的问题..."
+              placeholder="输入你的脑卒中相关问题..."
               rows="1"
               :disabled="isStreaming"
               @keydown="handleKeydown"
@@ -436,7 +436,6 @@ const quickQuestions = [
   font-size: 12px;
   font-weight: 700;
   color: var(--color-text-weak);
-  text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 

@@ -19,9 +19,11 @@ import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
+import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -41,6 +43,7 @@ public class ProfileController {
     private final SSEEventCache eventCache;
     private final StudentProfileMapper studentProfileMapper;
     private final IInitialPageService initialPageService;
+    private final WebClient webClient;
 
     @PostMapping(value = "/conversation", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<String>> conversation(
@@ -197,7 +200,7 @@ public class ProfileController {
         eventCache.registerStream(finalTalkIdStr);
 
         Flux<String> chatFlux = streamingService
-                .streamChat(userId, finalTalkId, quesParam.getQuestion(), upstreamToken, quesParam.getImages())
+                .streamChat(userId, finalTalkId, quesParam.getQuestion(), upstreamToken, quesParam.getImages(), reportMode)
                 .map(this::wrapChunkIfNeeded);
 
         Sinks.One<Void> doneSink = Sinks.one();
@@ -219,6 +222,9 @@ public class ProfileController {
                 .doFinally(signal -> {
                     doneSink.tryEmitEmpty();
                     eventCache.completeStream(finalTalkIdStr);
+                    if ("profile_build".equals(reportMode)) {
+                        triggerProfileUpdate(userId, finalTalkId);
+                    }
                 });
 
         Flux<ServerSentEvent<String>> heartbeatFlux = Flux.interval(Duration.ofSeconds(15))
@@ -311,5 +317,80 @@ public class ProfileController {
         m.put(String.valueOf(k1), v1);
         m.put(String.valueOf(k2), v2);
         return m;
+    }
+
+    private void triggerProfileUpdate(Long userId, Long talkId) {
+        Mono.fromRunnable(() -> {
+            try {
+                List<ContDTO> history = streamingService.getPreContent(userId, talkId);
+                if (history == null || history.isEmpty()) {
+                    log.info("[profile_update] 对话历史为空，跳过画像更新: userId={}, talkId={}", userId, talkId);
+                    return;
+                }
+                StringBuilder conversationText = new StringBuilder();
+                for (ContDTO msg : history) {
+                    conversationText.append(msg.getRole()).append(": ").append(msg.getContent()).append("\n");
+                }
+
+                Map<String, Object> requestBody = new HashMap<>();
+                requestBody.put("conversation", conversationText.toString());
+                requestBody.put("userId", userId);
+
+                String responseJson = webClient.post()
+                        .uri("/model/profile/extract")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .bodyValue(requestBody)
+                        .retrieve()
+                        .bodyToMono(String.class)
+                        .block(Duration.ofSeconds(60));
+
+                if (responseJson == null || responseJson.isEmpty()) {
+                    log.warn("[profile_update] Python 画像解析返回空: userId={}", userId);
+                    return;
+                }
+
+                com.fasterxml.jackson.databind.JsonNode root = objectMapper.readTree(responseJson);
+                com.fasterxml.jackson.databind.JsonNode dimensionsNode = root.path("data").path("dimensions");
+                if (dimensionsNode.isMissingNode() || !dimensionsNode.isObject()) {
+                    log.warn("[profile_update] Python 画像解析返回无维度数据: userId={}", userId);
+                    return;
+                }
+
+                Map<String, Object> dimensions = objectMapper.convertValue(dimensionsNode, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
+                updateDimensionsInternal(userId, dimensions);
+                log.info("[profile_update] 画像自动更新成功: userId={}, 维度数={}", userId, dimensions.size());
+            } catch (Exception e) {
+                log.error("[profile_update] 画像自动更新失败: userId={}, talkId={}, err={}", userId, talkId, e.getMessage(), e);
+            }
+        }).subscribeOn(Schedulers.boundedElastic()).subscribe();
+    }
+
+    private void updateDimensionsInternal(Long userId, Map<String, Object> dimensions) {
+        StudentProfile profile = studentProfileMapper.selectOne(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<StudentProfile>()
+                        .eq(StudentProfile::getUserId, userId)
+        );
+        try {
+            String dimensionsJson = objectMapper.writeValueAsString(dimensions);
+            if (profile == null) {
+                profile = new StudentProfile();
+                profile.setUserId(userId);
+                profile.setDimensions(dimensionsJson);
+                profile.setVersion(1);
+                profile.setCreateTime(LocalDateTime.now());
+                profile.setUpdateTime(LocalDateTime.now());
+                studentProfileMapper.insert(profile);
+            } else {
+                Map<String, Object> existing = objectMapper.readValue(profile.getDimensions(), Map.class);
+                existing.putAll(dimensions);
+                profile.setDimensions(objectMapper.writeValueAsString(existing));
+                profile.setVersion(profile.getVersion() + 1);
+                profile.setUpdateTime(LocalDateTime.now());
+                studentProfileMapper.updateById(profile);
+            }
+        } catch (Exception e) {
+            log.error("[profile_update] 维度持久化失败: userId={}", userId, e);
+        }
     }
 }

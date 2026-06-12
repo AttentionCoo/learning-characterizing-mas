@@ -533,6 +533,99 @@ async def update_profile_dimensions(request: ProfileDimensionUpdateRequest):
     return {"code": 1, "msg": "success", "data": None}
 
 
+class ProfileExtractRequest(BaseModel):
+    conversation: str
+    userId: Optional[int] = None
+
+
+@app.post("/model/profile/extract")
+async def extract_profile_dimensions(request: ProfileExtractRequest):
+    """从对话内容中抽取画像维度"""
+    llm = resources.get("llm_turbo")
+    if not llm:
+        raise HTTPException(status_code=503, detail="Model service not ready")
+
+    extract_prompt = f"""你是一位专业的学习画像分析专家。请从以下师生对话内容中，自动抽取学生的结构化学习画像维度。
+
+对话内容：
+{request.conversation}
+
+请严格按以下 JSON 格式输出，不要输出任何其他内容，不要使用 markdown 代码块：
+
+{{
+  "knowledgeBase": {{
+    "level": "beginner/intermediate/advanced",
+    "description": "用1-2句话概括该学生的知识基础水平，要具体、有信息量",
+    "masteredTopics": ["已掌握知识点1", "已掌握知识点2"],
+    "weakTopics": ["薄弱知识点1", "薄弱知识点2"]
+  }},
+  "cognitiveStyle": {{
+    "type": "visual/auditory/kinesthetic/reading",
+    "description": "用1-2句话描述该学生的认知风格特征",
+    "preferences": ["偏好1", "偏好2"]
+  }},
+  "learningGoal": {{
+    "shortTerm": "短期目标",
+    "longTerm": "长期目标",
+    "currentCourse": "当前课程"
+  }},
+  "errorPattern": {{
+    "description": "用1-2句话描述该学生的易错模式",
+    "frequentErrors": ["高频错误1", "高频错误2"],
+    "errorType": "conceptual/careful/procedural"
+  }},
+  "learningPace": {{
+    "speed": "slow/moderate/fast",
+    "description": "用1-2句话描述该学生的学习节奏",
+    "weeklyHours": 0
+  }},
+  "resourcePreference": {{
+    "preferences": ["video", "document", "quiz"],
+    "description": "用1-2句话描述该学生的资源偏好"
+  }},
+  "clinicalExperience": {{
+    "level": "none/basic/moderate/extensive",
+    "description": "用1-2句话描述该学生的临床经验"
+  }},
+  "emotionState": {{
+    "status": "motivated/anxious/confident/overwhelmed",
+    "description": "用1-2句话描述该学生当前的情绪状态"
+  }}
+}}
+
+注意：
+1. 只输出 JSON，不要任何解释文字
+2. description 必须具体、有信息量，不要写"根据对话推断""暂无信息""信息不足"等无意义的话；如果某维度确实无法判断，description 留空字符串
+3. masteredTopics/weakTopics/frequentErrors/preferences 列表中的元素要具体，不要写"待补充"等占位文字；如果无法提取则留空列表
+4. level/speed/errorType 等枚举值必须从给定选项中选择"""
+
+    try:
+        from langchain_core.messages import SystemMessage, HumanMessage
+        messages = [
+            SystemMessage(content="你是一位专业的学习画像分析专家，只输出 JSON 格式的画像维度数据。"),
+            HumanMessage(content=extract_prompt),
+        ]
+        response = await llm.ainvoke(messages)
+        content = getattr(response, "content", "")
+
+        content = content.strip()
+        if content.startswith("```json"):
+            content = content[7:]
+        if content.startswith("```"):
+            content = content[3:]
+        if content.endswith("```"):
+            content = content[:-3]
+        content = content.strip()
+
+        import json as _json
+        dimensions = _json.loads(content)
+
+        return {"code": 1, "msg": "success", "data": {"dimensions": dimensions}}
+    except Exception as e:
+        logger.error(f"[profile_extract] 画像维度抽取失败: {e}")
+        raise HTTPException(status_code=500, detail=f"画像维度抽取失败: {str(e)}")
+
+
 @app.get("/model/profile/conversation/{talk_id}")
 async def get_profile_conversation(talk_id: str = Path(...)):
     """获取画像对话历史"""

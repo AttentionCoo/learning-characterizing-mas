@@ -78,7 +78,7 @@ function selectPaper(paper) {
     </ul>
 
     <div v-if="!loading && papers.length" class="papers-footer">
-      <p class="papers-disclaimer">文献仅供参考，请结合临床判断</p>
+      <p class="papers-disclaimer">文献仅供参考，请结合实际情况判断</p>
       <p class="papers-source">数据来源: PubMed, U.S. National Library of Medicine</p>
     </div>
   </div>
@@ -158,7 +158,6 @@ function selectPaper(paper) {
 .paper-journal {
   font-size: 10px;
   font-weight: 800;
-  text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--color-primary-dark);
 }

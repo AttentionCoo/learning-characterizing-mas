@@ -29,15 +29,15 @@ import { analyzePatientAPI, syncTalkToPatientAPI } from '@/api/ai'
 defineOptions({ name: 'TalkIndex' })
 
 const tabs = [
-  { key: 'chat', label: '智能诊疗', hint: '对话与同步分析' },
-  { key: 'patients', label: '患者管理', hint: '病历与AI意见' },
+  { key: 'chat', label: '智能诊疗', hint: '脑卒中对话与同步分析' },
+  { key: 'patients', label: '患者管理', hint: '脑卒中病历与AI意见' },
   {
     key: 'learning',
     label: '医生学习',
-    hint: '资料检索与阅读',
+    hint: '脑卒中资料检索与阅读',
     children: [
-      { key: 'pdfs', label: 'PDF 文档库', shortLabel: 'PDF', description: '浏览院内 PDF 资料并在线预览' },
-      { key: 'pubmed', label: 'PubMed 文献', shortLabel: 'PubMed', description: '检索外部医学文献并查看摘要' },
+      { key: 'pdfs', label: 'PDF 文档库', shortLabel: 'PDF', description: '浏览脑卒中相关 PDF 资料并在线预览' },
+      { key: 'pubmed', label: 'PubMed 文献', shortLabel: 'PubMed', description: '检索脑卒中相关医学文献并查看摘要' },
     ],
   },
 ]
@@ -916,7 +916,7 @@ function openPatientWorkspace(patientId) {
           </svg>
         </button>
         <div class="user-anchor" @click="isDialogShow = !isDialogShow">
-          <AppAvatar class="avatar" :src="userStore.image" :name="userStore.name" :size="24" alt="avatar" />
+          <AppAvatar class="avatar" :src="userStore.image" :name="userStore.name" :size="24" alt="头像" />
           <p class="user-name">{{ userStore.name || '医生' }}</p>
           <UserDialog :visible="isDialogShow" @close="isDialogShow = false" />
         </div>

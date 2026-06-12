@@ -17,31 +17,31 @@ const navItems = [
     path: '/profile',
     label: '学习画像',
     icon: 'profile',
-    desc: '对话式画像构建',
+    desc: '脑卒中画像构建',
   },
   {
     path: '/resources',
     label: '资源生成',
     icon: 'resources',
-    desc: '多智能体协同生成',
+    desc: '脑卒中资源生成',
   },
   {
     path: '/learning-path',
     label: '学习路径',
     icon: 'path',
-    desc: '个性化路径规划',
+    desc: '脑卒中路径规划',
   },
   {
     path: '/tutor',
     label: '智能辅导',
     icon: 'tutor',
-    desc: '多模态答疑解惑',
+    desc: '脑卒中答疑解惑',
   },
   {
     path: '/assessment',
     label: '学习评估',
     icon: 'assessment',
-    desc: '效果评估与优化',
+    desc: '脑卒中效果评估',
   },
 ]
 
@@ -82,7 +82,7 @@ function toggleSidebar() {
             </svg>
           </div>
           <transition name="fade-text">
-            <span v-if="!sidebarCollapsed" class="logo-text">MedLearn</span>
+            <span v-if="!sidebarCollapsed" class="logo-text">多智能体辅助学习系统</span>
           </transition>
         </div>
       </div>
@@ -149,8 +149,8 @@ function toggleSidebar() {
 
         <div class="user-section" @click="handleLogout">
           <div class="user-avatar">
-            <img v-if="userStore.image" :src="userStore.image" alt="avatar" />
-            <span v-else>{{ userStore.name?.charAt(0) || 'U' }}</span>
+            <img v-if="userStore.image" :src="userStore.image" alt="头像" />
+            <span v-else>{{ userStore.name?.charAt(0) || '我' }}</span>
           </div>
           <transition name="fade-text">
             <div v-if="!sidebarCollapsed" class="user-info">
@@ -165,7 +165,9 @@ function toggleSidebar() {
     <main class="main-content">
       <router-view v-slot="{ Component }">
         <transition name="page" mode="out-in">
-          <component :is="Component" />
+          <keep-alive>
+            <component :is="Component" />
+          </keep-alive>
         </transition>
       </router-view>
     </main>

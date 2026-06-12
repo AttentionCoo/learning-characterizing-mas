@@ -407,7 +407,7 @@ onBeforeUnmount(() => {
           <div v-if="activeView !== 'pdfs' && currentPaper?.url" class="preview-actions">
             <a class="secondary-action external-link" :href="currentPaper.url" target="_blank"
               rel="noopener noreferrer">
-              打开 PubMed
+              打开文献源
             </a>
           </div>
         </header>
@@ -446,7 +446,7 @@ onBeforeUnmount(() => {
 
         <div v-else class="preview-body paper-preview-body">
           <article v-if="currentPaper" class="paper-detail-card">
-            <div class="paper-detail-topline">{{ shortText(currentPaper.journal, 'PubMed') }}</div>
+            <div class="paper-detail-topline">{{ shortText(currentPaper.journal, '文献') }}</div>
             <h2 class="paper-detail-title">{{ shortText(currentPaper.title) }}</h2>
 
             <p class="paper-detail-meta">
@@ -469,9 +469,9 @@ onBeforeUnmount(() => {
             </section>
           </article>
 
-          <div v-else-if="pubmedLoading" class="empty-card pane-state">PubMed 检索中，请稍候...</div>
+          <div v-else-if="pubmedLoading" class="empty-card pane-state">文献检索中，请稍候...</div>
           <div v-else-if="pubmedSearched" class="empty-card pane-state">暂无可预览文献，请尝试调整关键词。</div>
-          <div v-else class="empty-card pane-state">输入关键词后点击检索，将从 PubMed 返回最相关的 5 篇文献。</div>
+          <div v-else class="empty-card pane-state">输入关键词后点击检索，将返回最相关的 5 篇文献。</div>
         </div>
       </section>
     </div>
@@ -780,7 +780,6 @@ onBeforeUnmount(() => {
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.06em;
-  text-transform: uppercase;
   color: var(--color-primary-dark);
 }
 

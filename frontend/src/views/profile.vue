@@ -1,8 +1,8 @@
 ﻿<script setup>
-import { ref, onMounted, nextTick, computed } from 'vue'
+import { ref, onMounted, onUpdated, nextTick, computed, reactive } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import { getProfileAPI, profileStreamAPI } from '@/api/profile'
+import { getProfileAPI, getProfileConversationsAPI, getProfileConversationHistoryAPI, profileStreamAPI, updateProfileDimensionsAPI } from '@/api/profile'
 
 marked.setOptions({ gfm: true, breaks: true })
 
@@ -16,12 +16,44 @@ const thinkingHint = ref('')
 const chatContainerRef = ref(null)
 const inputRef = ref(null)
 const talkId = ref(null)
+const hasLoadedHistory = ref(false)
+const editingDim = ref(null)
+const editForm = reactive({})
+const saving = ref(false)
+
+const FILLER_PATTERNS = [
+  /根据对话推断/g, /暂无信息/g, /信息不足/g, /待补充/g, /暂缺/g,
+  /无法判断/g, /尚不明确/g, /未提供/g, /待确认/g, /未知/g,
+]
+
+function cleanText(text) {
+  if (!text || typeof text !== 'string') return ''
+  let cleaned = text.trim()
+  for (const p of FILLER_PATTERNS) {
+    cleaned = cleaned.replace(p, '')
+  }
+  cleaned = cleaned.replace(/[，。、；：]$/, '').trim()
+  return cleaned
+}
+
+function cleanList(list) {
+  if (!Array.isArray(list)) return []
+  return list
+    .map(t => (typeof t === 'string' ? t.trim() : String(t)))
+    .filter(t => {
+      if (!t) return false
+      for (const p of FILLER_PATTERNS) {
+        if (p.test(t)) return false
+      }
+      return true
+    })
+}
 
 const dimensionLabels = {
   knowledgeBase: '知识基础',
   cognitiveStyle: '认知风格',
   learningGoal: '学习目标',
-  errorPattern: '易错点',
+  errorPattern: '易错模式',
   learningPace: '学习节奏',
   resourcePreference: '资源偏好',
   clinicalExperience: '临床经验',
@@ -39,25 +71,94 @@ const dimensionIcons = {
   emotionState: '💪',
 }
 
+const levelLabels = {
+  beginner: '入门', intermediate: '进阶', advanced: '高级',
+  slow: '较慢', moderate: '适中', fast: '较快',
+  none: '无', basic: '基础', moderate: '中等', extensive: '丰富',
+  conceptual: '概念性', careful: '粗心性', procedural: '程序性',
+  visual: '视觉型', auditory: '听觉型', kinesthetic: '动觉型', reading: '阅读型',
+  motivated: '积极', anxious: '焦虑', confident: '自信', overwhelmed: '压力',
+}
+
+function levelLabel(val) {
+  return levelLabels[val] || val || ''
+}
+
+const levelColors = {
+  beginner: '#ef4444', intermediate: '#f59e0b', advanced: '#10b981',
+  slow: '#f59e0b', moderate: '#3b82f6', fast: '#10b981',
+  none: '#94a3b8', basic: '#f59e0b', extensive: '#10b981',
+  conceptual: '#8b5cf6', careful: '#f59e0b', procedural: '#3b82f6',
+  visual: '#3b82f6', auditory: '#8b5cf6', kinesthetic: '#f59e0b', reading: '#10b981',
+  motivated: '#10b981', anxious: '#f59e0b', confident: '#3b82f6', overwhelmed: '#ef4444',
+}
+
+function levelColor(val) {
+  return levelColors[val] || '#6b7280'
+}
+
 const hasProfile = computed(() => profile.value && Object.keys(profile.value.dimensions || {}).length > 0)
 
 const dimensionList = computed(() => {
   if (!profile.value?.dimensions) return []
-  return Object.entries(profile.value.dimensions).map(([key, value]) => ({
-    key,
-    label: dimensionLabels[key] || key,
-    icon: dimensionIcons[key] || '📌',
-    ...value,
-  }))
+  return Object.entries(profile.value.dimensions).map(([key, value]) => {
+    const dim = { key, label: dimensionLabels[key] || key, icon: dimensionIcons[key] || '📌' }
+    if (value && typeof value === 'object') {
+      dim.level = value.level || value.speed || value.type || value.status || value.errorType || ''
+      dim.levelText = levelLabel(dim.level)
+      dim.levelColor = levelColor(dim.level)
+      dim.description = cleanText(value.description)
+      dim.masteredTopics = cleanList(value.masteredTopics)
+      dim.weakTopics = cleanList(value.weakTopics)
+      dim.preferences = cleanList(value.preferences)
+      dim.frequentErrors = cleanList(value.frequentErrors)
+      dim.shortTerm = cleanText(value.shortTerm)
+      dim.longTerm = cleanText(value.longTerm)
+      dim.currentCourse = cleanText(value.currentCourse)
+      dim.weeklyHours = value.weeklyHours || 0
+    }
+    return dim
+  })
 })
 
 onMounted(async () => {
   await fetchProfile()
-  chatMessages.value.push({
-    role: 'assistant',
-    content: '你好！我是你的学习画像构建助手 🎓\n\n请告诉我你的专业、年级、学习目标，以及目前的学习情况，我会为你构建专属的学习画像。\n\n例如：\n- "我是临床医学大三学生，正在学神经病学"\n- "我的药理学比较薄弱，想重点补强"\n- "我偏好看视频和做病例分析"',
-  })
+  await loadConversationHistory()
 })
+
+const WELCOME_MESSAGE = {
+  role: 'assistant',
+  content: '你好！我是你的脑卒中学习画像构建助手 🎓\n\n请告诉我你的专业、年级、脑卒中学习目标，以及目前的学习情况，我会为你构建专属的学习画像。\n\n例如：\n- "我是临床医学大三学生，正在学神经病学，关注脑卒中方向"\n- "我的脑血管解剖比较薄弱，想重点补强"\n- "我偏好看视频和做脑卒中病例分析"',
+}
+
+async function loadConversationHistory() {
+  if (hasLoadedHistory.value) return
+  hasLoadedHistory.value = true
+  try {
+    const convRes = await getProfileConversationsAPI()
+    const conversations = convRes.data
+    if (!conversations || conversations.length === 0) {
+      chatMessages.value.push(WELCOME_MESSAGE)
+      return
+    }
+    const latest = conversations[0]
+    if (latest?.talkId) {
+      talkId.value = latest.talkId
+      const historyRes = await getProfileConversationHistoryAPI(latest.talkId)
+      const messages = historyRes.data
+      if (messages && messages.length > 0) {
+        chatMessages.value = messages.map((m) => ({
+          role: m.role,
+          content: m.content,
+        }))
+        return
+      }
+    }
+    chatMessages.value.push(WELCOME_MESSAGE)
+  } catch {
+    chatMessages.value.push(WELCOME_MESSAGE)
+  }
+}
 
 async function fetchProfile() {
   profileLoading.value = true
@@ -65,7 +166,6 @@ async function fetchProfile() {
     const res = await getProfileAPI()
     if (res.data) profile.value = res.data
   } catch {
-    // profile may not exist yet
   } finally {
     profileLoading.value = false
   }
@@ -74,6 +174,56 @@ async function fetchProfile() {
 function renderMarkdown(text) {
   if (!text) return ''
   return DOMPurify.sanitize(marked.parse(text))
+}
+
+function startEdit(dim) {
+  const raw = profile.value?.dimensions?.[dim.key] || {}
+  editingDim.value = dim.key
+  editForm.description = raw.description || ''
+  editForm.level = raw.level || raw.speed || raw.type || raw.status || raw.errorType || ''
+  editForm.masteredTopics = (raw.masteredTopics || []).join('、')
+  editForm.weakTopics = (raw.weakTopics || []).join('、')
+  editForm.preferences = (raw.preferences || []).join('、')
+  editForm.frequentErrors = (raw.frequentErrors || []).join('、')
+  editForm.shortTerm = raw.shortTerm || ''
+  editForm.longTerm = raw.longTerm || ''
+  editForm.currentCourse = raw.currentCourse || ''
+  editForm.weeklyHours = raw.weeklyHours || 0
+}
+
+function cancelEdit() {
+  editingDim.value = null
+}
+
+async function saveEdit(dim) {
+  saving.value = true
+  try {
+    const raw = profile.value?.dimensions?.[dim.key] || {}
+    const updated = { ...raw }
+    updated.description = editForm.description.trim()
+    if (raw.level !== undefined) updated.level = editForm.level
+    if (raw.speed !== undefined) updated.speed = editForm.level
+    if (raw.type !== undefined) updated.type = editForm.level
+    if (raw.status !== undefined) updated.status = editForm.level
+    if (raw.errorType !== undefined) updated.errorType = editForm.level
+    if (raw.masteredTopics !== undefined) updated.masteredTopics = editForm.masteredTopics ? editForm.masteredTopics.split(/[、,，]/).map(s => s.trim()).filter(Boolean) : []
+    if (raw.weakTopics !== undefined) updated.weakTopics = editForm.weakTopics ? editForm.weakTopics.split(/[、,，]/).map(s => s.trim()).filter(Boolean) : []
+    if (raw.preferences !== undefined) updated.preferences = editForm.preferences ? editForm.preferences.split(/[、,，]/).map(s => s.trim()).filter(Boolean) : []
+    if (raw.frequentErrors !== undefined) updated.frequentErrors = editForm.frequentErrors ? editForm.frequentErrors.split(/[、,，]/).map(s => s.trim()).filter(Boolean) : []
+    if (raw.shortTerm !== undefined) updated.shortTerm = editForm.shortTerm.trim()
+    if (raw.longTerm !== undefined) updated.longTerm = editForm.longTerm.trim()
+    if (raw.currentCourse !== undefined) updated.currentCourse = editForm.currentCourse.trim()
+    if (raw.weeklyHours !== undefined) updated.weeklyHours = Number(editForm.weeklyHours) || 0
+
+    const allDimensions = { ...profile.value.dimensions, [dim.key]: updated }
+    await updateProfileDimensionsAPI(allDimensions)
+    await fetchProfile()
+    editingDim.value = null
+  } catch (e) {
+    console.error('保存画像维度失败', e)
+  } finally {
+    saving.value = false
+  }
 }
 
 async function handleSend() {
@@ -89,6 +239,9 @@ async function handleSend() {
   isThinking.value = true
   thinkingHint.value = '正在分析你的学习特征...'
 
+  await nextTick()
+  scrollToBottom()
+
   let displayText = ''
   const charBuffer = []
   let timerId = null
@@ -102,6 +255,7 @@ async function handleSend() {
       const chars = charBuffer.splice(0, 2)
       displayText += chars.join('')
       chatMessages.value[aiIndex] = { role: 'assistant', content: displayText }
+      scrollToBottom()
       timerId = setTimeout(tick, delay)
     }
     timerId = setTimeout(tick, 0)
@@ -129,6 +283,9 @@ async function handleSend() {
     if (result.data?.talkId) talkId.value = result.data.talkId
 
     await fetchProfile()
+    setTimeout(async () => {
+      await fetchProfile()
+    }, 5000)
   } catch (error) {
     console.error('画像对话失败', error)
     chatMessages.value.splice(aiIndex, 1)
@@ -162,7 +319,7 @@ function handleKeydown(e) {
     <div class="page-header">
       <div class="header-content">
         <h1>学习画像</h1>
-        <p>通过自然语言对话，自动构建你的专属学习画像</p>
+        <p>通过自然语言对话，自动构建你的脑卒中专属学习画像</p>
       </div>
       <div class="header-badge">核心功能1 · 必选</div>
     </div>
@@ -177,23 +334,29 @@ function handleKeydown(e) {
             :class="[msg.role, { error: msg.error }]"
           >
             <div class="message-avatar">
-              <span v-if="msg.role === 'assistant'" class="avatar-ai">🤖</span>
+              <span v-if="msg.role === 'assistant'" class="avatar-ai">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                  <rect x="4" y="6" width="16" height="12" rx="4" fill="currentColor" opacity="0.9"/>
+                  <circle cx="9.5" cy="12" r="1.5" fill="#fff"/>
+                  <circle cx="14.5" cy="12" r="1.5" fill="#fff"/>
+                  <path d="M10 15.5c1 .8 3 .8 4 0" stroke="#fff" stroke-width="1" stroke-linecap="round"/>
+                  <line x1="8" y1="6" x2="6" y2="3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                  <line x1="16" y1="6" x2="18" y2="3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                  <circle cx="6" cy="2.5" r="1.2" fill="currentColor"/>
+                  <circle cx="18" cy="2.5" r="1.2" fill="currentColor"/>
+                </svg>
+              </span>
               <span v-else class="avatar-user">{{ '我' }}</span>
             </div>
             <div class="message-body">
-              <div v-if="msg.role === 'assistant'" class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
-              <div v-else class="message-content">{{ msg.content }}</div>
-            </div>
-          </div>
-          <div v-if="isThinking" class="chat-message assistant">
-            <div class="message-avatar"><span class="avatar-ai">🤖</span></div>
-            <div class="message-body">
-              <div class="thinking-indicator">
+              <div v-if="msg.role === 'assistant' && idx === chatMessages.length - 1 && isThinking && !msg.content" class="thinking-indicator">
                 <div class="thinking-dots">
                   <span></span><span></span><span></span>
                 </div>
                 <span class="thinking-text">{{ thinkingHint }}</span>
               </div>
+              <div v-else-if="msg.role === 'assistant'" class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
+              <div v-else class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
             </div>
           </div>
         </div>
@@ -203,7 +366,7 @@ function handleKeydown(e) {
             <textarea
               ref="inputRef"
               v-model="draftMessage"
-              placeholder="告诉我你的学习情况，如专业、年级、学习目标..."
+              placeholder="告诉我你的学习情况，如专业、年级、脑卒中学习目标..."
               rows="1"
               :disabled="isStreaming"
               @keydown="handleKeydown"
@@ -226,6 +389,7 @@ function handleKeydown(e) {
             <circle cx="12" cy="7" r="4"/>
           </svg>
           <span>我的学习画像</span>
+          <span v-if="hasProfile" class="edit-hint">点击卡片可编辑</span>
         </div>
 
         <div v-if="profileLoading" class="profile-loading">
@@ -240,28 +404,123 @@ function handleKeydown(e) {
         </div>
 
         <div v-else class="profile-dimensions">
-          <div v-for="dim in dimensionList" :key="dim.key" class="dimension-card">
+          <div
+            v-for="dim in dimensionList"
+            :key="dim.key"
+            class="dimension-card"
+            :class="{ editing: editingDim === dim.key }"
+            @click="editingDim !== dim.key && startEdit(dim)"
+          >
             <div class="dim-header">
               <span class="dim-icon">{{ dim.icon }}</span>
               <span class="dim-label">{{ dim.label }}</span>
-              <span v-if="dim.level" class="dim-level" :class="dim.level">{{ dim.level }}</span>
+              <span v-if="dim.levelText" class="dim-level-badge" :style="{ background: dim.levelColor + '18', color: dim.levelColor }">
+                {{ dim.levelText }}
+              </span>
+              <button class="dim-edit-btn" @click.stop="startEdit(dim)" title="编辑">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                </svg>
+              </button>
             </div>
-            <div class="dim-description">{{ dim.description }}</div>
-            <div v-if="dim.masteredTopics?.length" class="dim-tags mastered">
-              <span class="tag-label">已掌握</span>
-              <span v-for="t in dim.masteredTopics" :key="t" class="tag">{{ t }}</span>
-            </div>
-            <div v-if="dim.weakTopics?.length" class="dim-tags weak">
-              <span class="tag-label">待加强</span>
-              <span v-for="t in dim.weakTopics" :key="t" class="tag">{{ t }}</span>
-            </div>
-            <div v-if="dim.preferences?.length" class="dim-tags">
-              <span v-for="t in dim.preferences" :key="t" class="tag accent">{{ t }}</span>
-            </div>
-            <div v-if="dim.frequentErrors?.length" class="dim-tags weak">
-              <span class="tag-label">高频错误</span>
-              <span v-for="t in dim.frequentErrors" :key="t" class="tag error">{{ t }}</span>
-            </div>
+
+            <template v-if="editingDim === dim.key">
+              <div class="edit-form">
+                <div class="edit-row">
+                  <label>描述</label>
+                  <textarea v-model="editForm.description" rows="2" placeholder="输入描述..."></textarea>
+                </div>
+                <div v-if="dim.level" class="edit-row">
+                  <label>等级</label>
+                  <input v-model="editForm.level" placeholder="如 入门/进阶/高级" />
+                </div>
+                <div v-if="dim.masteredTopics !== undefined" class="edit-row">
+                  <label>已掌握</label>
+                  <input v-model="editForm.masteredTopics" placeholder="用顿号分隔，如：脑血管解剖、神经病学" />
+                </div>
+                <div v-if="dim.weakTopics !== undefined" class="edit-row">
+                  <label>待加强</label>
+                  <input v-model="editForm.weakTopics" placeholder="用顿号分隔" />
+                </div>
+                <div v-if="dim.preferences !== undefined" class="edit-row">
+                  <label>偏好</label>
+                  <input v-model="editForm.preferences" placeholder="用顿号分隔" />
+                </div>
+                <div v-if="dim.frequentErrors !== undefined" class="edit-row">
+                  <label>高频错误</label>
+                  <input v-model="editForm.frequentErrors" placeholder="用顿号分隔" />
+                </div>
+                <div v-if="dim.shortTerm !== undefined" class="edit-row">
+                  <label>短期目标</label>
+                  <input v-model="editForm.shortTerm" placeholder="短期目标" />
+                </div>
+                <div v-if="dim.longTerm !== undefined" class="edit-row">
+                  <label>长期目标</label>
+                  <input v-model="editForm.longTerm" placeholder="长期目标" />
+                </div>
+                <div v-if="dim.currentCourse !== undefined" class="edit-row">
+                  <label>当前课程</label>
+                  <input v-model="editForm.currentCourse" placeholder="当前课程" />
+                </div>
+                <div v-if="dim.weeklyHours" class="edit-row">
+                  <label>每周学时</label>
+                  <input v-model.number="editForm.weeklyHours" type="number" min="0" />
+                </div>
+                <div class="edit-actions">
+                  <button class="btn-cancel" @click.stop="cancelEdit">取消</button>
+                  <button class="btn-save" :disabled="saving" @click.stop="saveEdit(dim)">
+                    {{ saving ? '保存中...' : '保存' }}
+                  </button>
+                </div>
+              </div>
+            </template>
+
+            <template v-else>
+              <div v-if="dim.description" class="dim-description">{{ dim.description }}</div>
+
+              <div v-if="dim.key === 'learningGoal'" class="goal-section">
+                <div v-if="dim.shortTerm" class="goal-item">
+                  <span class="goal-dot short"></span>
+                  <span class="goal-label">短期</span>
+                  <span class="goal-text">{{ dim.shortTerm }}</span>
+                </div>
+                <div v-if="dim.longTerm" class="goal-item">
+                  <span class="goal-dot long"></span>
+                  <span class="goal-label">长期</span>
+                  <span class="goal-text">{{ dim.longTerm }}</span>
+                </div>
+                <div v-if="dim.currentCourse" class="goal-item">
+                  <span class="goal-dot course"></span>
+                  <span class="goal-label">课程</span>
+                  <span class="goal-text">{{ dim.currentCourse }}</span>
+                </div>
+              </div>
+
+              <div v-if="dim.key === 'learningPace' && dim.weeklyHours" class="pace-section">
+                <div class="pace-bar-wrap">
+                  <div class="pace-bar" :style="{ width: Math.min(dim.weeklyHours / 40 * 100, 100) + '%', background: dim.levelColor }"></div>
+                </div>
+                <span class="pace-hours">{{ dim.weeklyHours }} 小时/周</span>
+              </div>
+
+              <div v-if="dim.masteredTopics?.length" class="dim-tags">
+                <span class="tag-label success">已掌握</span>
+                <span v-for="t in dim.masteredTopics" :key="t" class="tag success">{{ t }}</span>
+              </div>
+              <div v-if="dim.weakTopics?.length" class="dim-tags">
+                <span class="tag-label warn">待加强</span>
+                <span v-for="t in dim.weakTopics" :key="t" class="tag warn">{{ t }}</span>
+              </div>
+              <div v-if="dim.preferences?.length" class="dim-tags">
+                <span class="tag-label info">偏好</span>
+                <span v-for="t in dim.preferences" :key="t" class="tag info">{{ t }}</span>
+              </div>
+              <div v-if="dim.frequentErrors?.length" class="dim-tags">
+                <span class="tag-label danger">易错</span>
+                <span v-for="t in dim.frequentErrors" :key="t" class="tag danger">{{ t }}</span>
+              </div>
+            </template>
           </div>
 
           <div class="profile-meta">
@@ -394,6 +653,8 @@ function handleKeydown(e) {
   justify-content: center;
   background: var(--gradient-aurora);
   border-radius: 50%;
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(17, 150, 127, 0.3);
 }
 
 .avatar-user {
@@ -527,13 +788,15 @@ function handleKeydown(e) {
 }
 
 .profile-panel {
-  width: 380px;
-  min-width: 380px;
+  width: 400px;
+  min-width: 400px;
   display: flex;
   flex-direction: column;
   background: var(--glass-bg);
   backdrop-filter: blur(var(--glass-blur));
   -webkit-backdrop-filter: blur(var(--glass-blur));
+  overflow-y: auto;
+}
 
 .panel-title {
   display: flex;
@@ -545,6 +808,21 @@ function handleKeydown(e) {
   color: var(--color-text-strong);
   border-bottom: 1px solid var(--color-border-light);
   flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  z-index: 2;
+}
+
+.edit-hint {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-weak);
+  background: rgba(17, 150, 127, 0.08);
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
 }
 
 .profile-loading,
@@ -594,19 +872,44 @@ function handleKeydown(e) {
   padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .dimension-card {
   padding: 14px 16px;
   background: var(--color-bg-base);
   border: 1px solid var(--color-border-light);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-lg);
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  border-radius: 12px;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
   position: relative;
   overflow: hidden;
-    box-shadow: 0 2px 12px rgba(17, 150, 127, 0.06);
+
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--color-primary);
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  &:hover {
+    border-color: rgba(17, 150, 127, 0.3);
+    box-shadow: 0 2px 12px rgba(17, 150, 127, 0.08);
+
+    &::before { opacity: 1; }
+  }
+
+  &.editing {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(17, 150, 127, 0.12);
+    cursor: default;
+
+    &::before { opacity: 1; }
   }
 }
 
@@ -614,7 +917,7 @@ function handleKeydown(e) {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
 .dim-icon {
@@ -628,27 +931,107 @@ function handleKeydown(e) {
   color: var(--color-text-strong);
 }
 
-.dim-level {
-  margin-left: auto;
-  padding: 2px 8px;
+.dim-level-badge {
+  margin-left: 4px;
+  padding: 2px 10px;
   border-radius: var(--radius-pill);
   font-size: 11px;
   font-weight: 700;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
 
-  &.beginner { background: rgba(239, 68, 68, 0.1); color: #dc2626; }
-  &.intermediate { background: rgba(245, 158, 11, 0.1); color: #b45309; }
-  &.advanced { background: rgba(17, 150, 127, 0.1); color: #0f7666; }
-  &.good { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
-  &.needs_improvement { background: rgba(239, 68, 68, 0.1); color: #dc2626; }
-  &.slow, &.moderate, &.fast { background: rgba(17, 150, 127, 0.1); color: #0f7666; }
+.dim-edit-btn {
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text-weak);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  opacity: 0;
+
+  .dimension-card:hover & { opacity: 1; }
+
+  &:hover {
+    background: rgba(17, 150, 127, 0.1);
+    color: var(--color-primary);
+  }
 }
 
 .dim-description {
   font-size: 13px;
   color: var(--color-text-medium);
-  line-height: 1.5;
+  line-height: 1.55;
   margin-bottom: 8px;
+}
+
+.goal-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.goal-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.goal-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+
+  &.short { background: #3b82f6; }
+  &.long { background: #10b981; }
+  &.course { background: #f59e0b; }
+}
+
+.goal-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-text-weak);
+  min-width: 28px;
+}
+
+.goal-text {
+  color: var(--color-text-medium);
+}
+
+.pace-section {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.pace-bar-wrap {
+  flex: 1;
+  height: 6px;
+  background: var(--color-border-light);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.pace-bar {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pace-hours {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-medium);
+  white-space: nowrap;
 }
 
 .dim-tags {
@@ -656,32 +1039,110 @@ function handleKeydown(e) {
   flex-wrap: wrap;
   gap: 4px;
   margin-top: 6px;
-
-  &.mastered .tag { background: rgba(17, 150, 127, 0.1); color: var(--color-primary-dark); }
-  &.weak .tag { background: rgba(245, 158, 11, 0.1); color: #b45309; }
-  &.weak .tag.error { background: rgba(239, 68, 68, 0.1); color: #dc2626; }
 }
 
 .tag-label {
   font-size: 11px;
   font-weight: 700;
-  color: var(--color-text-weak);
   margin-right: 2px;
   line-height: 22px;
+
+  &.success { color: #10b981; }
+  &.warn { color: #f59e0b; }
+  &.info { color: #3b82f6; }
+  &.danger { color: #ef4444; }
 }
 
 .tag {
-  padding: 2px 8px;
+  padding: 2px 10px;
   border-radius: var(--radius-pill);
   font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
   line-height: 20px;
 
-  &.accent {
-    background: rgba(59, 130, 246, 0.1);
-    color: #3b82f6;
+  &.success { background: rgba(16, 185, 129, 0.1); color: #059669; }
+  &.warn { background: rgba(245, 158, 11, 0.1); color: #b45309; }
+  &.info { background: rgba(59, 130, 246, 0.1); color: #2563eb; }
+  &.danger { background: rgba(239, 68, 68, 0.1); color: #dc2626; }
+}
+
+.edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.edit-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--color-text-weak);
+    letter-spacing: 0.04em;
   }
+
+  input, textarea {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    background: var(--color-bg-input);
+    color: var(--color-text-strong);
+    font: inherit;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s;
+
+    &:focus {
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 2px rgba(17, 150, 127, 0.12);
+    }
+
+    &::placeholder { color: var(--color-text-weak); }
+  }
+
+  textarea {
+    resize: vertical;
+    min-height: 48px;
+    line-height: 1.5;
+  }
+}
+
+.edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.btn-cancel, .btn-save {
+  padding: 6px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s;
+}
+
+.btn-cancel {
+  background: var(--color-border-light);
+  color: var(--color-text-medium);
+
+  &:hover { background: var(--color-border); }
+}
+
+.btn-save {
+  background: var(--gradient-aurora);
+  color: #fff;
+
+  &:hover:not(:disabled) { opacity: 0.85; }
+  &:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 
 .profile-meta {
@@ -693,8 +1154,8 @@ function handleKeydown(e) {
 
 @media (max-width: 1024px) {
   .profile-panel {
-    width: 320px;
-    min-width: 320px;
+    width: 340px;
+    min-width: 340px;
   }
 }
 
@@ -712,5 +1173,10 @@ function handleKeydown(e) {
 
 .dimension-card {
   animation: fade-in-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 </style>

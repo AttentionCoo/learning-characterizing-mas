@@ -25,10 +25,10 @@ const courseName = ref('')
 const customMessage = ref('')
 
 const assessmentTypes = [
-  { value: 'comprehensive', label: '综合评估', icon: '📊', desc: '全面评估学习效果' },
-  { value: 'knowledge', label: '知识掌握', icon: '📚', desc: '评估知识点掌握程度' },
-  { value: 'skill', label: '技能水平', icon: '🎯', desc: '评估临床技能水平' },
-  { value: 'progress', label: '学习进度', icon: '📈', desc: '评估学习进度与效率' },
+  { value: 'comprehensive', label: '综合评估', icon: '📊', desc: '全面评估脑卒中学习效果' },
+  { value: 'knowledge', label: '知识掌握', icon: '📚', desc: '评估脑卒中知识点掌握程度' },
+  { value: 'skill', label: '临床技能', icon: '🎯', desc: '评估脑卒中临床技能水平' },
+  { value: 'progress', label: '学习进度', icon: '📈', desc: '评估脑卒中学习进度与效率' },
 ]
 
 function renderMarkdown(text) {
@@ -142,7 +142,7 @@ function getScoreColor(score) {
     <div class="page-header">
       <div class="header-content">
         <h1>学习评估</h1>
-        <p>多维度学习效果评估与优化建议</p>
+        <p>脑卒中多维度学习效果评估与优化建议</p>
       </div>
       <div class="header-badge">核心功能5 · 必选</div>
     </div>
@@ -170,11 +170,11 @@ function getScoreColor(score) {
           <div class="form-row">
             <div class="form-field">
               <label>课程名称 <span class="hint">可选</span></label>
-              <input v-model="courseName" placeholder="如：内科学" />
+              <input v-model="courseName" placeholder="如：神经病学" />
             </div>
             <div class="form-field">
               <label>补充说明 <span class="hint">可选</span></label>
-              <input v-model="customMessage" placeholder="如：重点评估神经病学" />
+              <input v-model="customMessage" placeholder="如：重点评估脑卒中诊疗知识" />
             </div>
           </div>
 

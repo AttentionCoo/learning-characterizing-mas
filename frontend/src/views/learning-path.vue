@@ -143,7 +143,7 @@ const overallProgress = computed(() => {
     <div class="page-header">
       <div class="header-content">
         <h1>学习路径</h1>
-        <p>基于学习画像的个性化路径规划与推荐</p>
+        <p>基于学习画像的脑卒中个性化路径规划与推荐</p>
       </div>
       <div class="header-badge">核心功能3 · 必选</div>
     </div>
@@ -244,11 +244,11 @@ const overallProgress = computed(() => {
           <div class="card-body">
             <div class="form-field">
               <label>课程名称 <span class="hint">可选</span></label>
-              <input v-model="courseName" placeholder="如：内科学" />
+              <input v-model="courseName" placeholder="如：神经病学" />
             </div>
             <div class="form-field">
               <label>学习目标</label>
-              <textarea v-model="customGoal" placeholder="描述你的学习目标，如：\n系统掌握神经病学核心知识\n重点突破脑血管疾病" rows="4"></textarea>
+              <textarea v-model="customGoal" placeholder="描述你的学习目标，如：\n系统掌握脑卒中诊疗核心知识\n重点突破缺血性脑卒中溶栓治疗" rows="4"></textarea>
             </div>
             <button class="gen-btn" :disabled="isGenerating" @click="handleGenerate">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

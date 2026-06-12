@@ -560,7 +560,7 @@ function getThinkingData(msgIndex) {
           </button>
         </div>
 
-        <div v-if="!talkTitleList.length" class="empty-card compact">还没有历史对话，开始一轮新的问诊即可生成记录。</div>
+        <div v-if="!talkTitleList.length" class="empty-card compact">还没有历史对话，开始一轮新的对话即可生成记录。</div>
       </div>
     </aside>
 
@@ -623,7 +623,7 @@ function getThinkingData(msgIndex) {
           </article>
         </div>
 
-        <div v-else class="empty-card">输入症状、病史或问题后，AI会在这里持续生成回复。</div>
+        <div v-else class="empty-card">输入脑卒中相关症状、病史或问题后，AI会在这里持续生成回复。</div>
       </main>
 
       <div class="input-box" :class="{ 'drag-over': isDragOver }" @dragenter="handleDragEnter"
@@ -642,7 +642,7 @@ function getThinkingData(msgIndex) {
             @change="handleImageSelect" />
 
           <textarea ref="inputRef" v-model="draftMessage" rows="1"
-            :placeholder="imageList.length ? '可补充文字描述（直接发送将询问图片内容）' : '请输入症状、病史或希望AI分析的问题'" @input="autoResize"
+            :placeholder="imageList.length ? '可补充文字描述（直接发送将询问图片内容）' : '请输入脑卒中症状、病史或希望AI分析的问题'" @input="autoResize"
             @keydown.enter.exact.prevent="handleSendMessage" />
 
           <!-- 📎 上传图片按钮 -->
