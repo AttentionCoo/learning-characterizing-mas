@@ -223,6 +223,71 @@ class ExpertConfigManager:
         """获取意见综合配置"""
         return self._data.get("synthesis", {})
 
+    def get_debate_config(self) -> Dict[str, Any]:
+        """获取辩论-仲裁配置"""
+        return self._data.get("debate", {})
+
+    def is_debate_enabled(self) -> bool:
+        """是否启用辩论模式"""
+        debate = self._data.get("debate", {})
+        return debate.get("enabled", False)
+
+    def get_debate_max_rounds(self) -> int:
+        """获取辩论最大轮数"""
+        debate = self._data.get("debate", {})
+        return debate.get("max_rounds", 2)
+
+    def get_arbitrator_role(self) -> str:
+        """获取仲裁智能体角色名"""
+        debate = self._data.get("debate", {})
+        return debate.get("arbitrator_role", "仲裁智能体")
+
+    def get_dynamic_orchestration_config(self) -> Dict[str, Any]:
+        """获取动态编排配置"""
+        return self._data.get("dynamic_orchestration", {})
+
+    def is_dynamic_orchestration_enabled(self) -> bool:
+        """是否启用动态编排"""
+        orch = self._data.get("dynamic_orchestration", {})
+        return orch.get("enabled", False)
+
+    def get_intent_expert_mapping(self) -> Dict[str, list]:
+        """获取意图-专家映射"""
+        orch = self._data.get("dynamic_orchestration", {})
+        return orch.get("intent_expert_mapping", {})
+
+    def get_difficulty_thresholds(self) -> Dict[str, float]:
+        """获取难度阈值配置"""
+        orch = self._data.get("dynamic_orchestration", {})
+        return orch.get("difficulty_thresholds", {"low": 0.3, "medium": 0.6, "high": 1.0})
+
+    def get_experts_for_intent_and_difficulty(self, intent_type: str, difficulty_score: float) -> list:
+        """根据意图类型和难度评分获取应参与的专家列表"""
+        orch = self._data.get("dynamic_orchestration", {})
+        if not orch.get("enabled", False):
+            return [e.get("role") for e in self.get_experts()]
+
+        intent_mapping = orch.get("intent_expert_mapping", {})
+        intent_experts = intent_mapping.get(intent_type, [])
+
+        if not intent_experts:
+            return [e.get("role") for e in self.get_experts()]
+
+        all_experts = self.get_experts()
+        result = []
+        for expert in all_experts:
+            role = expert.get("role")
+            if role not in intent_experts:
+                continue
+            min_diff = expert.get("min_difficulty", 0.0)
+            if difficulty_score >= min_diff:
+                result.append(role)
+
+        if not result:
+            result = intent_experts[:3]
+
+        return result
+
     def reload(self, config_file: str = "expert_config.yaml"):
         """重新加载配置"""
         self._data = _load_yaml(config_file)
@@ -273,6 +338,42 @@ class ValidationConfigManager:
         """是否启用LLM反思"""
         settings = self._data.get("validation_settings", {})
         return settings.get("enable_llm_reflection", True)
+
+    def is_annealing_enabled(self) -> bool:
+        """是否启用动态退火策略"""
+        annealing = self._data.get("annealing", {})
+        return annealing.get("enabled", False)
+
+    def get_weight_decay_factor(self) -> float:
+        """获取权重衰减因子"""
+        annealing = self._data.get("annealing", {})
+        return annealing.get("weight_decay_factor", 0.5)
+
+    def get_category_correction_prompts(self) -> Dict[str, str]:
+        """获取分类修正提示词"""
+        annealing = self._data.get("annealing", {})
+        return annealing.get("category_correction_prompts", {})
+
+    def get_rejection_category_keywords(self) -> Dict[str, list]:
+        """获取驳回分类关键词映射"""
+        annealing = self._data.get("annealing", {})
+        return annealing.get("rejection_category_keywords", {})
+
+    def classify_rejection(self, feedback: str) -> str:
+        """根据驳回反馈自动分类驳回原因"""
+        category_keywords = self.get_rejection_category_keywords()
+        if not category_keywords:
+            return "general"
+        for category, keywords in category_keywords.items():
+            for kw in keywords:
+                if kw in feedback:
+                    return category
+        return "general"
+
+    def get_correction_prompt_for_category(self, category: str) -> str:
+        """根据驳回分类获取针对性修正提示词"""
+        correction_prompts = self.get_category_correction_prompts()
+        return correction_prompts.get(category, "请根据反馈意见修正你的输出。")
 
     def reload(self, config_file: str = "rules_config.yaml"):
         """重新加载配置"""

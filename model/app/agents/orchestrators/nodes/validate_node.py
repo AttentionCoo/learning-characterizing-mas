@@ -7,6 +7,7 @@ from app.config.config_loader import get_validation_manager
 
 logger = logging.getLogger(__name__)
 
+
 class ValidateNode(BaseNode):
 
     def __init__(self, llm, validation_config=None):
@@ -16,11 +17,14 @@ class ValidateNode(BaseNode):
         self.max_reflection_count = self.validation_manager.get_max_reflection_count()
         self.enable_rule_engine = self.validation_manager.is_rule_engine_enabled()
         self.enable_llm_reflection = self.validation_manager.is_llm_reflection_enabled()
+        self.annealing_enabled = self.validation_manager.is_annealing_enabled()
+        self.weight_decay_factor = self.validation_manager.get_weight_decay_factor()
         logger.info(f"[validate] 已加载校验配置")
         logger.info(f"  - 质量规则: {len(self.contraindication_rules)} 个类别")
         logger.info(f"  - 最大反思次数: {self.max_reflection_count}")
         logger.info(f"  - 规则引擎: {'启用' if self.enable_rule_engine else '禁用'}")
         logger.info(f"  - LLM反思: {'启用' if self.enable_llm_reflection else '禁用'}")
+        logger.info(f"  - 动态退火: {'启用' if self.annealing_enabled else '禁用'} (衰减因子: {self.weight_decay_factor})")
 
     async def run(self, state: LearningState) -> Dict:
         logger.info(f"[validate] 开始后层结果校验，当前已反思次数: {state['reflection_count']}")
@@ -62,7 +66,7 @@ class ValidateNode(BaseNode):
 
 判断要求：
 如果没有严重问题，请回复 "PASS"。
-如果存在严重错误或违背教育原则的建议，请回复 "REJECT: "，并紧接详细的驳回理由。"""
+如果存在严重错误或违背教育原则的建议，请回复 "REJECT: "，并紧接详细的驳回理由。驳回理由请明确指出问题类别（如：事实错误、逻辑矛盾、个性化不足、医学专业性错误、内容不完整等）。"""
 
         try:
             res = await self.llm.ainvoke([
@@ -100,4 +104,44 @@ class ValidateNode(BaseNode):
         if state['critique']:
             result["critique"] = state['critique']
 
+        if self.annealing_enabled:
+            annealing_updates = self._apply_annealing(state, reason)
+            result.update(annealing_updates)
+
         return result
+
+    def _apply_annealing(self, state: LearningState, reason: str) -> Dict:
+        """应用动态退火策略：分类驳回原因、衰减智能体权重"""
+        category = self.validation_manager.classify_rejection(reason)
+        correction_prompt = self.validation_manager.get_correction_prompt_for_category(category)
+
+        logger.info(f"[validate] 退火策略: 驳回分类={category}")
+
+        rejection_categories = list(state.get('rejection_categories', []))
+        if category != "general":
+            rejection_categories.append(category)
+
+        agent_weights = dict(state.get('agent_weights', {}))
+        active_experts = state.get('active_experts', [])
+
+        decayed_roles = []
+        for role in active_experts:
+            current_weight = agent_weights.get(role, 1.0)
+            if current_weight > 0.2:
+                new_weight = round(current_weight * self.weight_decay_factor, 2)
+                agent_weights[role] = new_weight
+                if new_weight < current_weight:
+                    decayed_roles.append(f"{role}: {current_weight:.1f}->{new_weight:.1f}")
+
+        if decayed_roles:
+            logger.info(f"[validate] 权重衰减: {', '.join(decayed_roles)}")
+
+        enhanced_feedback = reason
+        if correction_prompt:
+            enhanced_feedback += f"\n\n【退火修正指引】{correction_prompt}"
+
+        return {
+            "agent_weights": agent_weights,
+            "rejection_categories": rejection_categories,
+            "validation_feedback": enhanced_feedback,
+        }

@@ -60,6 +60,12 @@ class ReportNode(BaseNode):
             warning_text = f"\n\n⚠️ **质量警告**: {state['validation_feedback']}\n\n"
             logger.info(f"[report] 添加质量警告到报告")
 
+        motivational_text = ""
+        motivational_feedback = state.get('motivational_feedback', '')
+        if motivational_feedback:
+            motivational_text = f"\n\n💡 **学习激励**: {motivational_feedback}\n\n"
+            logger.info(f"[report] 添加学习激励反馈到报告")
+
         report_template = self.report_manager.get_template(state['report_mode'])
         prompt_text = report_template.format(
             context=context_str,
@@ -71,6 +77,9 @@ class ReportNode(BaseNode):
 
         if warning_text:
             prompt_text = prompt_text.replace("### 个性化建议", f"### 质量警告{warning_text}### 个性化建议")
+
+        if motivational_text:
+            prompt_text = prompt_text.replace("### 个性化建议", f"### 学习激励{motivational_text}### 个性化建议")
 
         logger.info(f"[report] Prompt长度: {len(prompt_text)}")
         logger.info(f"[report] 开始生成报告")

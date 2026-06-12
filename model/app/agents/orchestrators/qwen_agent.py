@@ -81,6 +81,7 @@ class LearningAgent:
             "learning_questions": [],
             "key_risks": [],
             "complexity": "high",
+            "difficulty_score": 0.5,
             "evidence": "",
             "proposal": "",
             "critique": "",
@@ -89,7 +90,12 @@ class LearningAgent:
             "expert_advices": {},
             "validation_passed": True,
             "validation_feedback": "",
-            "reflection_count": 0
+            "reflection_count": 0,
+            "agent_weights": {},
+            "rejection_categories": [],
+            "debate_history": [],
+            "active_experts": [],
+            "motivational_feedback": "",
         }
         streamed_nodes: set = set()
 
@@ -175,7 +181,12 @@ class LearningAgent:
             count = ev.count("---") + 1 if ev.strip() else 0
             return f"检索到 {count} 个参考片段"
         if node == "reason":
-            return "多智能体推理完成"
+            active = output.get("active_experts", [])
+            debate_history = output.get("debate_history", [])
+            parts = [f"多智能体推理完成 ({len(active)} 位专家)"]
+            if debate_history:
+                parts.append(f"辩论 {len(debate_history)} 轮")
+            return "，".join(parts)
         if node == "validate":
             return "质量校验完成"
         if node == "generate_report":

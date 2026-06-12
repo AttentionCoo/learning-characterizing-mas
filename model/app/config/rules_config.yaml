@@ -11,7 +11,44 @@ contraindication_rules:
   - 阶段划分不合理
   - 时间估算不可行
   - 缺少评估节点
+
 validation_settings:
-  max_reflection_count: 1
+  max_reflection_count: 3
   enable_rule_engine: true
-  enable_llm_reflection: false
+  enable_llm_reflection: true
+
+annealing:
+  enabled: true
+  weight_decay_factor: 0.5
+  category_correction_prompts:
+    factual_error: "你的上一次输出存在事实性错误，请严格依据提供的参考证据重新推理，禁止编造未在证据中出现的数据或结论。"
+    logical_contradiction: "你的上一次输出存在逻辑矛盾，请检查推理链中的因果关系是否自洽，确保前后结论一致。"
+    personalization_insufficient: "你的上一次输出个性化不足，请更紧密地结合学生的画像特征（知识水平、认知风格、学习目标等），给出针对性更强的建议。"
+    medical_inaccuracy: "你的上一次输出存在医学专业性错误，请严格参照权威指南和文献证据，确保所有医学表述准确无误。"
+    completeness_issue: "你的上一次输出不够完整，请补充遗漏的关键内容，确保覆盖所有必要的教学要点。"
+  rejection_category_keywords:
+    factual_error:
+      - "事实错误"
+      - "数据不准确"
+      - "信息有误"
+      - "与证据不符"
+    logical_contradiction:
+      - "逻辑矛盾"
+      - "前后不一致"
+      - "自相矛盾"
+      - "推理不成立"
+    personalization_insufficient:
+      - "个性化不足"
+      - "未结合画像"
+      - "缺乏针对性"
+      - "通用化"
+    medical_inaccuracy:
+      - "医学错误"
+      - "诊疗不规范"
+      - "不符合指南"
+      - "专业性不足"
+    completeness_issue:
+      - "不完整"
+      - "遗漏"
+      - "缺少关键"
+      - "覆盖不全"

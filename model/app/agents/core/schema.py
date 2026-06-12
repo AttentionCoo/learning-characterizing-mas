@@ -27,6 +27,7 @@ class LearningState(TypedDict):
     learning_questions: List[str]
     key_risks: List[str]
     complexity: str
+    difficulty_score: float
     evidence: str
     proposal: str
     critique: str
@@ -36,3 +37,8 @@ class LearningState(TypedDict):
     validation_passed: bool
     validation_feedback: str
     reflection_count: int
+    agent_weights: Dict
+    rejection_categories: List[str]
+    debate_history: List[Dict]
+    active_experts: List[str]
+    motivational_feedback: str

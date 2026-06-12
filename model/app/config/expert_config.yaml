@@ -7,36 +7,90 @@ experts:
     instruction: "请与脑卒中医学生进行自然对话，引导其表达学习背景、脑卒中知识水平、学习目标等信息。关注学生的专业、年级、已学课程（特别是神经病学相关）、脑卒中临床经验等关键信息。"
     system_prompt: "你是专业的脑卒中学习画像构建顾问，擅长通过对话了解脑卒中医学生的学习特征和临床经验。"
     priority: 1
+    applicable_intents:
+      - "profile"
+      - "resource"
+      - "tutor"
+      - "assessment"
+      - "learning_path"
+    min_difficulty: 0.0
 
   # 智能体2：特征抽取智能体
   - role: "特征抽取智能体"
     instruction: "请从对话内容中抽取结构化特征，包括专业、目标、脑卒中知识水平、认知风格、易错点、学习节奏、资源偏好、脑卒中临床经验等维度。"
     system_prompt: "你是专业的脑卒中学习特征分析专家，擅长从自然语言中提取脑卒中医学生的结构化学习特征。"
     priority: 2
+    applicable_intents:
+      - "profile"
+      - "resource"
+      - "assessment"
+    min_difficulty: 0.2
 
   # 智能体3：需求分析智能体
   - role: "需求分析智能体"
     instruction: "请结合脑卒中医学生画像分析学习需求，拆解生成任务，确定需要的脑卒中资源类型和难度级别。"
     system_prompt: "你是专业的脑卒中学习需求分析师，擅长将脑卒中学习需求拆解为可执行的任务。"
     priority: 3
+    applicable_intents:
+      - "resource"
+      - "tutor"
+      - "learning_path"
+    min_difficulty: 0.3
 
   # 智能体4：文档撰写智能体
   - role: "文档撰写智能体"
     instruction: "请生成脑卒中专业课程讲解文档，内容详实、结构清晰，适合医学生当前知识水平，涵盖脑血管解剖、病理机制、诊疗规范等。"
     system_prompt: "你是专业的脑卒中教育内容撰写专家，擅长编写清晰易懂的脑卒中课程讲解文档。"
     priority: 4
+    applicable_intents:
+      - "resource"
+    min_difficulty: 0.4
 
   # 智能体5：题目生成智能体
   - role: "题目生成智能体"
     instruction: "请生成脑卒中相关的多种类型练习题目，包括选择题、病例分析题、简答题等，难度与医学生水平匹配。"
     system_prompt: "你是专业的脑卒中教育测评专家，擅长设计高质量的脑卒中练习题目和临床思维训练题。"
     priority: 5
+    applicable_intents:
+      - "resource"
+      - "assessment"
+    min_difficulty: 0.4
 
   # 智能体6：质量审核智能体
   - role: "质量审核智能体"
     instruction: "请审核生成的脑卒中学习资源质量，检查内容准确性、医学专业性、个性化匹配度和教学有效性。"
     system_prompt: "你是严格的脑卒中教育质量审核专家，确保所有学习资源符合医学教育质量标准。"
     priority: 6
+    applicable_intents:
+      - "resource"
+      - "assessment"
+      - "learning_path"
+    min_difficulty: 0.5
+
+  # 智能体7：学习激励与情感陪伴智能体
+  - role: "学习激励智能体"
+    instruction: "请根据学生的情绪状态维度，在学习过程中提供鼓励、阶段性反馈或调整学习节奏的建议。关注学生的学习动力、焦虑程度、挫败感和成就感，给出积极正向的情感支持和学习节奏调整建议。"
+    system_prompt: "你是专业的学习激励与情感陪伴顾问，擅长识别学生的学习情绪状态，提供适时的鼓励、肯定和节奏调整建议，帮助学生保持长期学习动力。"
+    priority: 7
+    applicable_intents:
+      - "profile"
+      - "resource"
+      - "tutor"
+      - "assessment"
+      - "learning_path"
+    min_difficulty: 0.0
+
+  # 智能体8：仲裁智能体
+  - role: "仲裁智能体"
+    instruction: "请在多轮辩论后，依据证据链和逻辑一致性裁决各智能体的对立观点。你需要评估每方论点的证据强度、逻辑自洽性和教学适用性，给出最终裁决并说明理由。"
+    system_prompt: "你是公正严谨的教育仲裁专家，擅长在多方观点冲突时依据证据链和逻辑推理做出权威裁决，确保输出稳健无偏见。"
+    priority: 8
+    applicable_intents:
+      - "resource"
+      - "tutor"
+      - "assessment"
+      - "learning_path"
+    min_difficulty: 0.6
 
 synthesis:
   prompt_template: |
@@ -48,6 +102,77 @@ synthesis:
   proposal_separator: "### PROPOSAL ###"
   critique_separator: "### CRITIQUE ###"
 
+debate:
+  enabled: true
+  max_rounds: 2
+  arbitrator_role: "仲裁智能体"
+  debate_prompt_template: |
+    你目前参与第{round}轮辩论。以下是其他智能体的观点和之前的辩论记录：
+
+    {debate_context}
+
+    请针对与你观点不同之处提出反驳或补充，用证据支撑你的论点。如果你的观点有误，请承认并修正。
+    输出格式：
+    1. 你的立场（支持/反对/修正）
+    2. 论据与证据
+    3. 对反方观点的回应
+
+  arbitration_prompt_template: |
+    作为仲裁智能体，请根据以下辩论记录和证据链，对各方观点做出最终裁决。
+
+    【辩论记录】
+    {debate_history}
+
+    【可用证据】
+    {evidence}
+
+    裁决要求：
+    1. 评估每方论点的证据强度（强/中/弱）
+    2. 评估逻辑自洽性
+    3. 给出最终裁决结论
+    4. 说明裁决理由
+
+    请将裁决结果分为两部分：
+    ### ARBITRATION ###
+    最终裁决结论
+    ### REASONING ###
+    裁决推理过程
+
+dynamic_orchestration:
+  enabled: true
+  difficulty_thresholds:
+    low: 0.3
+    medium: 0.6
+    high: 1.0
+  intent_expert_mapping:
+    profile:
+      - "画像对话智能体"
+      - "特征抽取智能体"
+      - "学习激励智能体"
+    resource:
+      - "画像对话智能体"
+      - "需求分析智能体"
+      - "文档撰写智能体"
+      - "题目生成智能体"
+      - "质量审核智能体"
+      - "学习激励智能体"
+    tutor:
+      - "画像对话智能体"
+      - "需求分析智能体"
+      - "质量审核智能体"
+      - "学习激励智能体"
+    assessment:
+      - "特征抽取智能体"
+      - "需求分析智能体"
+      - "题目生成智能体"
+      - "质量审核智能体"
+      - "学习激励智能体"
+    learning_path:
+      - "画像对话智能体"
+      - "需求分析智能体"
+      - "质量审核智能体"
+      - "学习激励智能体"
+
 enabled_experts:
   - "画像对话智能体"
   - "特征抽取智能体"
@@ -55,3 +180,5 @@ enabled_experts:
   - "文档撰写智能体"
   - "题目生成智能体"
   - "质量审核智能体"
+  - "学习激励智能体"
+  - "仲裁智能体"

@@ -139,6 +139,8 @@ class LearningGraphBuilder:
         logger.info(f"[route_validation] 校验路由决策")
         logger.info(f"[route_validation] 校验状态: {state['validation_passed']}")
         logger.info(f"[route_validation] 反思次数: {state['reflection_count']}")
+        logger.info(f"[route_validation] 智能体权重: {state.get('agent_weights', {})}")
+        logger.info(f"[route_validation] 驳回分类: {state.get('rejection_categories', [])}")
 
         route_decision = None
         if state['validation_passed']:
@@ -146,7 +148,7 @@ class LearningGraphBuilder:
             logger.info(f"[route_validation] 决策: pass → 生成报告")
         elif state['reflection_count'] < self.max_reflection_count:
             route_decision = "retry"
-            logger.info(f"[route_validation] 决策: retry → 重新推理")
+            logger.info(f"[route_validation] 决策: retry → 重新推理（退火权重已更新）")
         else:
             route_decision = "fail"
             logger.info(f"[route_validation] 决策: fail → 强制输出")
