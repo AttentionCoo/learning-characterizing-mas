@@ -13,7 +13,10 @@
 
 * **画像构建智能体群**：由 Profiler Agent、Extractor Agent、Portrait Builder Agent 组成，通过自然语言对话自动抽取学生特征，构建包含 8 个维度（知识基础、认知风格、学习目标、易错点偏好、学习节奏、资源偏好、临床经验、情绪状态）的动态学生画像，支持画像的随学随新。
 * **资源生成智能体群**：由 Requirement Analyzer、Document Writer、Mindmap Generator、Quiz Creator、Reading Curator、Video Script Writer、Code Practice Agent、Quality Reviewer 等多角色智能体协作，完成 10 种类型的个性化资源生成（课程讲解文档、知识体系思维导图、练习题目、临床指南与文献、教学视频脚本、医学编程实操、临床实操案例、课程 PPT、资源设计方案、实践项目材料等）。
-* **辅导评估智能体群**：由 Question Analyzer、Text Tutor、Diagram Generator、Code Tutor、Video Explainer、Evaluator Agent 组成，提供多模态智能辅导与学习效果精准评估。
+* **辅导评估智能体群**：由 Question Analyzer、Text Tutor、Diagram Generator、Code Tutor、Video Explainer、Evaluator Agent、Motivator Agent 组成，提供多模态智能辅导、学习效果精准评估与情感激励陪伴。
+* **辩论-仲裁机制**：不同智能体就争议性知识点提出对立观点，经多轮辩论后由 Arbitrator Agent 依据证据链裁决，减少单一模型偏见，尤其适用于争议性医学问题。
+* **动态退火反思**：校验失败后根据驳回原因自动分类（事实错误、逻辑矛盾、个性化不足等），生成针对性修正提示词，并衰减不通过智能体的发言权重，避免无效重试。
+* **智能体动态编排**：根据意图难度评分（0.0-1.0）动态裁剪参与智能体的数量和类型，简单任务精简参与，复杂任务全量协同，减少 Token 消耗与延迟。
 
 ### 🔎 2. 证据前置的深度定制 Hybrid RAG
 
@@ -64,7 +67,7 @@
 ```
 用户输入
     ↓
-[Intent Node] ←── 意图分类（profile / resource / tutor / assessment / learning_path / knowledge / irrelevant）
+[Intent Node] ←── 意图分类 + 难度评分（0.0-1.0）
     ↓
 [路由决策]
     ├── irrelevant ──► [Reject Node] ──► END
@@ -75,11 +78,14 @@
          ↓
     [Retrieve Node] ── Hybrid RAG 证据检索
          ↓
-    [Reason Node]  ── 多智能体协同推理
+    [Reason Node]  ── 动态编排 → 八智能体协同推理
+         │              ├─ 并行推理（根据难度评分选择参与专家）
+         │              ├─ 辩论-仲裁（多轮辩论 → 仲裁智能体裁决）
+         │              └─ 统筹汇总 → Proposal + Critique
          ↓
-    [Validate Node] ── 质量校验与反思循环（最多 3 次）
-         ├── pass  ──► [Report Node] ──► END
-         ├── retry ──► [Reason Node]（反思重推理）
+    [Validate Node] ── 质量校验与动态退火反思循环
+         ├── pass  ──► [Report Node]（含学习激励反馈）──► END
+         ├── retry ──► [Reason Node]（权重衰减 + 针对性修正提示词）
          └── fail  ──► [Report Node] ──► END
 ```
 
@@ -104,6 +110,8 @@
 | | Code Tutor | 代码辅助辅导 |
 | | Video Explainer | 生成短视频讲解脚本 |
 | | Evaluator Agent | 多维度学习效果评估 |
+| | Motivator Agent | 根据情绪状态提供学习激励与节奏调整建议 |
+| ⚖️ 仲裁群 | Arbitrator Agent | 依据证据链裁决辩论中的对立观点，确保输出稳健无偏见 |
 
 ---
 
@@ -525,7 +533,9 @@ npm run dev
 ### 防幻觉策略
 * **证据溯源**：所有生成内容强制引用来源文献与页码，杜绝无依据输出
 * **双层校验**：Validate Node 规则引擎进行学术准确性审查 + LLM 反思机制深层逻辑审查
-* **反思循环**：校验未通过时自动触发重新推理，最多 3 次反思机会
+* **辩论-仲裁模式**：不同智能体就争议观点进行多轮辩论，仲裁智能体依据证据链裁决，减少单一模型偏见
+* **动态退火反思**：校验未通过时自动分类驳回原因（事实错误、逻辑矛盾、个性化不足等），生成针对性修正提示词，同时衰减不通过智能体的发言权重，避免无效重试
+* **智能体动态编排**：根据意图难度评分动态裁剪参与智能体数量，简单任务精简参与，复杂任务全量协同
 * **规则引擎**：关键知识点设置硬性校验规则，校验失败自动拦截
 
 ### 系统安全
