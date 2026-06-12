@@ -82,7 +82,7 @@ function toggleSidebar() {
             </svg>
           </div>
           <transition name="fade-text">
-            <span v-if="!sidebarCollapsed" class="logo-text">多智能体辅助学习系统</span>
+            <span v-if="!sidebarCollapsed" class="logo-text">辅助学习系统</span>
           </transition>
         </div>
       </div>
