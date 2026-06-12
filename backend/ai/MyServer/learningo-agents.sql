@@ -209,6 +209,9 @@ CREATE TABLE `user` (
   `name` varchar(32) NOT NULL COMMENT '用户名',
   `password` varchar(255) NOT NULL COMMENT '密码哈希',
   `image` varchar(255) DEFAULT NULL COMMENT '头像',
+  `major` varchar(64) DEFAULT NULL COMMENT '专业',
+  `grade` varchar(16) DEFAULT NULL COMMENT '年级',
+  `specialty` varchar(64) DEFAULT NULL COMMENT '专长',
   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
@@ -222,7 +225,7 @@ CREATE TABLE `user` (
 
 LOCK TABLES `user` WRITE;
 /*!40000 ALTER TABLE `user` DISABLE KEYS */;
-INSERT INTO `user` VALUES (1,'dddd','$2a$10$eWwIFxZm1vYpXIqgS459UuMTBr/1zH35bynX/NuoZtZgFp0NZRj3a','/images/default.png','2026-04-04 18:04:50','2026-04-04 18:04:50'),(2,'12345','$2a$10$U65TIFpghMRLeM.uMhsIze5NjIrsv3mD4uvOIfJzfSry/xhsI4bJ.','/images/default.png','2026-04-04 21:23:08','2026-04-04 21:23:08'),(3,'nomV7yfN7SWNtz','$2a$10$uxNWUNqhck/mkL.6hwWrfewJpbrXDUyejHfsOBdYuSguAs2D6PK9.','/images/default.png','2026-04-06 11:20:37','2026-04-06 11:20:37'),(4,'Dsl','$2a$10$63CuG/CWobSlElzhhtP7t.VoDwCtgKBoI8JCOuV9KMCFERqQ1WmP2','/images/default.png','2026-04-07 11:51:26','2026-04-07 11:51:26'),(5,'MHY','$2a$10$X0D5znEK6udQTNjpCQDU/uk2F8MLrfyjsQPikmIWavp/9TAMXfmUW','/images/default.png','2026-04-07 15:56:47','2026-04-07 15:56:47'),(6,'HACHIMI256','$2a$10$HxjTL/wgCn2m6Cn8GWc33uX0G5xBso3PSzQsPfm/RepAnHB3J4U6a','/images/default.png','2026-04-08 13:51:29','2026-04-08 13:51:29'),(7,'aaa','$2a$10$l0e69wrjO.oE22mIm83keeTLKchhOQqKuHUbWWLWYFT4We3IAUVOq','/images/default.png','2026-04-09 11:12:36','2026-04-09 11:12:36'),(8,'mikko','$2a$10$xTQGyvtJ04zYKAMmWsbgY.jE6erJoNCTa/d.UIf/BLt0TA3fDaQxu','/images/default.png','2026-04-09 12:42:02','2026-04-09 12:42:02'),(9,'龚世孟','$2a$10$OImTyCP78.nnsR7SSNw/..c/mSIthv/T0Wb5PCUVaSsV3UVVYMcum','/images/default.png','2026-04-17 10:52:47','2026-04-17 10:52:47'),(10,'龚小明','$2a$10$.hBBnC5GDDVX4qxFmno7y.ryAK1jJtyg0ksK523qrWQSyP6aI7Rh6','/images/default.png','2026-04-17 10:54:56','2026-04-17 10:54:56');
+INSERT INTO `user` VALUES (1,'dddd','$2a$10$eWwIFxZm1vYpXIqgS459UuMTBr/1zH35bynX/NuoZtZgFp0NZRj3a','/images/default.png',NULL,NULL,NULL,'2026-04-04 18:04:50','2026-04-04 18:04:50'),(2,'12345','$2a$10$U65TIFpghMRLeM.uMhsIze5NjIrsv3mD4uvOIfJzfSry/xhsI4bJ.','/images/default.png',NULL,NULL,NULL,'2026-04-04 21:23:08','2026-04-04 21:23:08'),(3,'nomV7yfN7SWNtz','$2a$10$uxNWUNqhck/mkL.6hwWrfewJpbrXDUyejHfsOBdYuSguAs2D6PK9.','/images/default.png',NULL,NULL,NULL,'2026-04-06 11:20:37','2026-04-06 11:20:37'),(4,'Dsl','$2a$10$63CuG/CWobSlElzhhtP7t.VoDwCtgKBoI8JCOuV9KMCFERqQ1WmP2','/images/default.png',NULL,NULL,NULL,'2026-04-07 11:51:26','2026-04-07 11:51:26'),(5,'MHY','$2a$10$X0D5znEK6udQTNjpCQDU/uk2F8MLrfyjsQPikmIWavp/9TAMXfmUW','/images/default.png',NULL,NULL,NULL,'2026-04-07 15:56:47','2026-04-07 15:56:47'),(6,'HACHIMI256','$2a$10$HxjTL/wgCn2m6Cn8GWc33uX0G5xBso3PSzQsPfm/RepAnHB3J4U6a','/images/default.png',NULL,NULL,NULL,'2026-04-08 13:51:29','2026-04-08 13:51:29'),(7,'aaa','$2a$10$l0e69wrjO.oE22mIm83keeTLKchhOQqKuHUbWWLWYFT4We3IAUVOq','/images/default.png',NULL,NULL,NULL,'2026-04-09 11:12:36','2026-04-09 11:12:36'),(8,'mikko','$2a$10$xTQGyvtJ04zYKAMmWsbgY.jE6erJoNCTa/d.UIf/BLt0TA3fDaQxu','/images/default.png',NULL,NULL,NULL,'2026-04-09 12:42:02','2026-04-09 12:42:02'),(9,'龚世孟','$2a$10$OImTyCP78.nnsR7SSNw/..c/mSIthv/T0Wb5PCUVaSsV3UVVYMcum','/images/default.png',NULL,NULL,NULL,'2026-04-17 10:52:47','2026-04-17 10:52:47'),(10,'龚小明','$2a$10$.hBBnC5GDDVX4qxFmno7y.ryAK1jJtyg0ksK523qrWQSyP6aI7Rh6','/images/default.png',NULL,NULL,NULL,'2026-04-17 10:54:56','2026-04-17 10:54:56');
 /*!40000 ALTER TABLE `user` ENABLE KEYS */;
 UNLOCK TABLES;
 

@@ -33,6 +33,7 @@ from app.services.vision_service import VisionAnalysisService
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage
 from app.utils.context_summary import ConversationSummaryService
+from app.utils.task_manager import AsyncTaskManager
 
 
 os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
@@ -52,7 +53,7 @@ logger = logging.getLogger(__name__)
 performance_logger = logging.getLogger("performance")
 performance_logger.setLevel(logging.INFO)
 
-resources = {"model": None, "naming_model": None, "executor": None, "context_summary": None, "vision_service": None, "llm_turbo": None, "learning_assistant": None}
+resources = {"model": None, "naming_model": None, "executor": None, "context_summary": None, "vision_service": None, "llm_turbo": None, "learning_assistant": None, "task_manager": AsyncTaskManager()}
 
 
 # ============================================================
@@ -206,6 +207,125 @@ class LegacyQueryRequest(BaseModel):
 class QuickAnalyzeRequest(BaseModel):
     question: str = Field(..., min_length=1)
     token: str
+
+
+# ============================================================
+# 后台任务辅助函数
+# ============================================================
+
+async def _stream_task_events(task_id: str, task_mgr: AsyncTaskManager, init_event: dict = None):
+    if init_event:
+        yield json.dumps(init_event, ensure_ascii=False)
+    event_index = 0
+    while True:
+        task = task_mgr.get_task(task_id)
+        if not task:
+            yield json.dumps({"type": "error", "content": "Task not found"}, ensure_ascii=False)
+            return
+        while event_index < len(task.events):
+            yield json.dumps(task.events[event_index], ensure_ascii=False)
+            event_index += 1
+        if task.status in ("completed", "failed"):
+            return
+        await task.wait_for_new_event(event_index, timeout=2.0)
+
+
+async def _run_agent_background(
+    task_id: str,
+    agent,
+    case_text: str,
+    all_info: str,
+    report_mode: str,
+    task_mgr: AsyncTaskManager,
+    naming_model=None,
+    executor=None,
+    naming_input: str = None,
+    images: List[str] = None,
+    image_question: str = None,
+    update_all_info: bool = False,
+    original_all_info: str = "",
+):
+    try:
+        loop = asyncio.get_running_loop()
+        final_parts = []
+
+        naming_future = None
+        if naming_model and executor and naming_input:
+            naming_future = loop.run_in_executor(executor, naming_model.run_naming, naming_input)
+
+        if images:
+            vision_svc = resources.get("vision_service")
+            if vision_svc:
+                async for event in vision_svc.analyze_stream(
+                    images=images,
+                    question=image_question or "",
+                    all_info="",
+                ):
+                    if event.get("type") == "thinking":
+                        task_mgr.add_event(task_id, {
+                            "type": "node_start",
+                            "node": "vision",
+                            "label": event.get("title", "正在分析图片..."),
+                        })
+                    elif event.get("type") == "chunk":
+                        content_str = str(event.get("content", ""))
+                        if content_str:
+                            final_parts.append(content_str)
+                            task_mgr.add_event(task_id, {"type": "token", "content": content_str})
+
+        async for event in agent.run_learning_reasoning(
+            case_text=case_text,
+            all_info=all_info,
+            report_mode=report_mode,
+            show_thinking=True,
+        ):
+            if not isinstance(event, dict):
+                continue
+            if event.get("type") == "error":
+                task_mgr.add_event(task_id, event)
+                task_mgr.fail_task(task_id, event.get("content", "Unknown error"))
+                return
+            if event.get("type") == "token":
+                content_str = str(event.get("content", ""))
+                if content_str:
+                    final_parts.append(content_str)
+            task_mgr.add_event(task_id, event)
+
+        result_text = "".join(final_parts).strip()
+
+        generated_name = None
+        if naming_future:
+            try:
+                generated_name = await naming_future
+            except Exception:
+                pass
+
+        done_event = {
+            "type": "done",
+            "taskId": task_id,
+            "title": generated_name or "生成完成",
+        }
+
+        if update_all_info and result_text and resources.get("context_summary") and executor:
+            try:
+                summary_result = await loop.run_in_executor(
+                    executor,
+                    resources["context_summary"].update_all_info,
+                    original_all_info,
+                    case_text,
+                    result_text,
+                    0.4,
+                )
+                done_event["all_info"] = summary_result.get("updated_all_info", original_all_info)
+            except Exception:
+                done_event["all_info"] = original_all_info
+
+        task_mgr.add_event(task_id, done_event)
+        task_mgr.complete_task(task_id, result=result_text)
+    except Exception as e:
+        logger.error(f"[background] 任务 {task_id} 失败: {e}")
+        task_mgr.add_event(task_id, build_error_event(e, talk_id=None))
+        task_mgr.fail_task(task_id, str(e))
 
 
 # ============================================================
@@ -371,104 +491,31 @@ async def profile_conversation(request: ProfileConversationRequest):
     if not agent:
         raise HTTPException(status_code=503, detail="Model service not ready")
 
-    async def generate():
-        req_id = uuid.uuid4().hex[:12]
-        start_time = time.time()
-        talk_id = request.talkId or str(uuid.uuid4().int % 100000)
-        new_talk = request.talkId is None
+    task_mgr = resources["task_manager"]
+    task_id = uuid.uuid4().hex
+    talk_id = request.talkId or str(uuid.uuid4().int % 100000)
+    new_talk = request.talkId is None
 
-        try:
-            logger.info(f"[profile] 请求 {req_id} 开始画像对话, talkId={talk_id}")
-            yield json.dumps({"type": "init", "talkId": talk_id, "newTalk": new_talk}, ensure_ascii=False)
+    task_mgr.create_task(task_id, "profile_conversation", {"talkId": talk_id})
 
-            loop = asyncio.get_running_loop()
-            final_answer_parts = []
-            node_start_time = {}
-            current_node = None
+    asyncio.create_task(_run_agent_background(
+        task_id=task_id,
+        agent=agent,
+        case_text=request.message,
+        all_info="",
+        report_mode="profile_build",
+        task_mgr=task_mgr,
+        naming_model=resources.get("naming_model") if new_talk else None,
+        executor=resources.get("executor"),
+        naming_input=request.message if new_talk else None,
+        images=request.images if request.images else None,
+        image_question=request.message,
+        update_all_info=True,
+        original_all_info="",
+    ))
 
-            naming_future = None
-            if new_talk and resources.get("naming_model"):
-                naming_future = loop.run_in_executor(
-                    resources["executor"],
-                    resources["naming_model"].run_naming,
-                    request.message,
-                )
-
-            if request.images:
-                vision_svc = resources.get("vision_service")
-                if vision_svc:
-                    async for event in vision_svc.analyze_stream(
-                        images=request.images,
-                        question=request.message,
-                        all_info="",
-                    ):
-                        if event.get("type") == "thinking":
-                            yield json.dumps({
-                                "type": "node_start",
-                                "node": "vision",
-                                "label": event.get("title", "正在分析图片..."),
-                            }, ensure_ascii=False)
-                        elif event.get("type") == "chunk":
-                            content_str = str(event.get("content", ""))
-                            if content_str:
-                                final_answer_parts.append(content_str)
-                                yield json.dumps({"type": "token", "content": content_str}, ensure_ascii=False)
-
-            node_start_time["reasoning"] = time.time()
-
-            async for event in agent.run_learning_reasoning(
-                case_text=request.message,
-                all_info="",
-                report_mode="profile_build",
-                show_thinking=True,
-            ):
-                if not isinstance(event, dict):
-                    continue
-                if event.get("type") == "error":
-                    yield json.dumps(event, ensure_ascii=False)
-                    return
-                if event.get("type") == "node_start":
-                    current_node = event.get("node")
-                if event.get("type") == "token":
-                    content_str = str(event.get("content", ""))
-                    if content_str:
-                        final_answer_parts.append(content_str)
-                yield json.dumps(event, ensure_ascii=False)
-
-            generated_name = "学习画像构建"
-            if naming_future:
-                try:
-                    generated_name = await naming_future or "学习画像构建"
-                except Exception:
-                    pass
-
-            answer_text = "".join(final_answer_parts).strip()
-            updated_all_info = ""
-            if answer_text and resources.get("context_summary"):
-                try:
-                    summary_result = await loop.run_in_executor(
-                        resources["executor"],
-                        resources["context_summary"].update_all_info,
-                        "",
-                        request.message,
-                        answer_text,
-                    )
-                    updated_all_info = summary_result.get("updated_all_info", "")
-                except Exception:
-                    pass
-
-            yield json.dumps({
-                "type": "done",
-                "talkId": talk_id,
-                "title": generated_name,
-                "all_info": updated_all_info,
-            }, ensure_ascii=False)
-
-        except Exception as e:
-            logger.error(f"[profile] 请求 {req_id} 失败: {e}")
-            yield json.dumps(build_error_event(e, talk_id=talk_id), ensure_ascii=False)
-
-    return EventSourceResponse(generate(), ping=15)
+    init_event = {"type": "init", "taskId": task_id, "talkId": talk_id, "newTalk": new_talk}
+    return EventSourceResponse(_stream_task_events(task_id, task_mgr, init_event), ping=15)
 
 
 @app.get("/model/profile")
@@ -510,278 +557,169 @@ async def delete_profile_conversation(talk_id: str = Path(...)):
 
 @app.post("/model/resources/generate")
 async def resources_generate(request: ResourceGenerateRequest):
-    """综合资源生成（SSE 流式）"""
+    """综合资源生成（SSE 流式 + 后台持久化）"""
     agent = resources.get("model")
     if not agent:
         raise HTTPException(status_code=503, detail="Model service not ready")
 
-    async def generate():
-        req_id = uuid.uuid4().hex[:12]
-        talk_id = request.talkId or str(uuid.uuid4().int % 100000)
-        new_talk = request.talkId is None
+    task_mgr = resources["task_manager"]
+    task_id = uuid.uuid4().hex
+    talk_id = request.talkId or str(uuid.uuid4().int % 100000)
+    new_talk = request.talkId is None
 
-        try:
-            logger.info(f"[resource] 请求 {req_id} 开始资源生成, talkId={talk_id}")
-            yield json.dumps({"type": "init", "talkId": talk_id, "newTalk": new_talk}, ensure_ascii=False)
+    resource_context = f"课程：{request.courseName}\n知识点：{', '.join(request.knowledgePoints)}\n难度：{request.difficulty}\n资源类型：{', '.join(request.resourceTypes)}"
+    combined_message = f"{request.message}\n\n【资源生成参数】\n{resource_context}"
 
-            loop = asyncio.get_running_loop()
-            final_answer_parts = []
-            current_node = None
+    task_mgr.create_task(task_id, "resource_generate", {"talkId": talk_id})
 
-            naming_future = None
-            if new_talk and resources.get("naming_model"):
-                naming_future = loop.run_in_executor(
-                    resources["executor"],
-                    resources["naming_model"].run_naming,
-                    request.message,
-                )
+    asyncio.create_task(_run_agent_background(
+        task_id=task_id,
+        agent=agent,
+        case_text=combined_message,
+        all_info="",
+        report_mode="resource_generate",
+        task_mgr=task_mgr,
+        naming_model=resources.get("naming_model") if new_talk else None,
+        executor=resources.get("executor"),
+        naming_input=request.message if new_talk else None,
+        images=request.images if request.images else None,
+        image_question=request.message,
+    ))
 
-            resource_context = f"课程：{request.courseName}\n知识点：{', '.join(request.knowledgePoints)}\n难度：{request.difficulty}\n资源类型：{', '.join(request.resourceTypes)}"
-            combined_message = f"{request.message}\n\n【资源生成参数】\n{resource_context}"
-
-            if request.images:
-                vision_svc = resources.get("vision_service")
-                if vision_svc:
-                    async for event in vision_svc.analyze_stream(
-                        images=request.images,
-                        question=request.message,
-                        all_info="",
-                    ):
-                        if event.get("type") == "thinking":
-                            yield json.dumps({
-                                "type": "node_start",
-                                "node": "vision",
-                                "label": event.get("title", "正在分析图片..."),
-                            }, ensure_ascii=False)
-                        elif event.get("type") == "chunk":
-                            content_str = str(event.get("content", ""))
-                            if content_str:
-                                final_answer_parts.append(content_str)
-                                yield json.dumps({"type": "token", "content": content_str}, ensure_ascii=False)
-
-            async for event in agent.run_learning_reasoning(
-                case_text=combined_message,
-                all_info="",
-                report_mode="resource_generate",
-                show_thinking=True,
-            ):
-                if not isinstance(event, dict):
-                    continue
-                if event.get("type") == "error":
-                    yield json.dumps(event, ensure_ascii=False)
-                    return
-                if event.get("type") == "node_start":
-                    current_node = event.get("node")
-                if event.get("type") == "token":
-                    content_str = str(event.get("content", ""))
-                    if content_str:
-                        final_answer_parts.append(content_str)
-                yield json.dumps(event, ensure_ascii=False)
-
-            generated_name = "资源生成完成"
-            if naming_future:
-                try:
-                    generated_name = await naming_future or "资源生成完成"
-                except Exception:
-                    pass
-
-            yield json.dumps({
-                "type": "done",
-                "talkId": talk_id,
-                "title": generated_name,
-            }, ensure_ascii=False)
-
-        except Exception as e:
-            logger.error(f"[resource] 请求 {req_id} 失败: {e}")
-            yield json.dumps(build_error_event(e, talk_id=talk_id), ensure_ascii=False)
-
-    return EventSourceResponse(generate(), ping=15)
+    init_event = {"type": "init", "taskId": task_id, "talkId": talk_id, "newTalk": new_talk}
+    return EventSourceResponse(_stream_task_events(task_id, task_mgr, init_event), ping=15)
 
 
 @app.post("/model/resources/generate/document")
 async def generate_document(request: SingleDocumentRequest):
-    """生成课程讲解文档（SSE 流式）"""
+    """生成课程讲解文档（SSE 流式 + 后台持久化）"""
     agent = resources.get("model")
     if not agent:
         raise HTTPException(status_code=503, detail="Model service not ready")
 
-    async def generate():
-        talk_id = str(uuid.uuid4().int % 100000)
-        yield json.dumps({"type": "init", "talkId": talk_id, "newTalk": True}, ensure_ascii=False)
+    task_mgr = resources["task_manager"]
+    task_id = uuid.uuid4().hex
+    talk_id = str(uuid.uuid4().int % 100000)
+    combined_message = f"请生成课程讲解文档。\n课程：{request.courseName}\n知识点：{', '.join(request.knowledgePoints)}\n难度：{request.difficulty}\n风格：{request.style}"
 
-        combined_message = f"请生成课程讲解文档。\n课程：{request.courseName}\n知识点：{', '.join(request.knowledgePoints)}\n难度：{request.difficulty}\n风格：{request.style}"
+    task_mgr.create_task(task_id, "document_generate", {"talkId": talk_id})
+    asyncio.create_task(_run_agent_background(
+        task_id=task_id, agent=agent, case_text=combined_message, all_info="",
+        report_mode="resource_generate", task_mgr=task_mgr,
+    ))
 
-        async for event in agent.run_learning_reasoning(
-            case_text=combined_message,
-            all_info="",
-            report_mode="resource_generate",
-            show_thinking=True,
-        ):
-            if not isinstance(event, dict):
-                continue
-            if event.get("type") == "error":
-                yield json.dumps(event, ensure_ascii=False)
-                return
-            yield json.dumps(event, ensure_ascii=False)
-
-        yield json.dumps({"type": "done", "talkId": talk_id, "title": "课程讲解文档生成完成"}, ensure_ascii=False)
-
-    return EventSourceResponse(generate(), ping=15)
+    init_event = {"type": "init", "taskId": task_id, "talkId": talk_id, "newTalk": True}
+    return EventSourceResponse(_stream_task_events(task_id, task_mgr, init_event), ping=15)
 
 
 @app.post("/model/resources/generate/mindmap")
 async def generate_mindmap(request: SingleMindmapRequest):
-    """生成知识点思维导图（SSE 流式）"""
+    """生成知识点思维导图（SSE 流式 + 后台持久化）"""
     agent = resources.get("model")
     if not agent:
         raise HTTPException(status_code=503, detail="Model service not ready")
 
-    async def generate():
-        talk_id = str(uuid.uuid4().int % 100000)
-        yield json.dumps({"type": "init", "talkId": talk_id, "newTalk": True}, ensure_ascii=False)
+    task_mgr = resources["task_manager"]
+    task_id = uuid.uuid4().hex
+    talk_id = str(uuid.uuid4().int % 100000)
+    combined_message = f"请生成知识点思维导图。\n课程：{request.courseName}\n知识点：{', '.join(request.knowledgePoints)}\n格式：{request.format}\n展开层级：{request.depth}"
 
-        combined_message = f"请生成知识点思维导图。\n课程：{request.courseName}\n知识点：{', '.join(request.knowledgePoints)}\n格式：{request.format}\n展开层级：{request.depth}"
+    task_mgr.create_task(task_id, "mindmap_generate", {"talkId": talk_id})
+    asyncio.create_task(_run_agent_background(
+        task_id=task_id, agent=agent, case_text=combined_message, all_info="",
+        report_mode="resource_generate", task_mgr=task_mgr,
+    ))
 
-        async for event in agent.run_learning_reasoning(
-            case_text=combined_message,
-            all_info="",
-            report_mode="resource_generate",
-            show_thinking=True,
-        ):
-            if not isinstance(event, dict):
-                continue
-            if event.get("type") == "error":
-                yield json.dumps(event, ensure_ascii=False)
-                return
-            yield json.dumps(event, ensure_ascii=False)
-
-        yield json.dumps({"type": "done", "talkId": talk_id, "title": "思维导图生成完成"}, ensure_ascii=False)
-
-    return EventSourceResponse(generate(), ping=15)
+    init_event = {"type": "init", "taskId": task_id, "talkId": talk_id, "newTalk": True}
+    return EventSourceResponse(_stream_task_events(task_id, task_mgr, init_event), ping=15)
 
 
 @app.post("/model/resources/generate/quiz")
 async def generate_quiz(request: SingleQuizRequest):
-    """生成练习题目（SSE 流式）"""
+    """生成练习题目（SSE 流式 + 后台持久化）"""
     agent = resources.get("model")
     if not agent:
         raise HTTPException(status_code=503, detail="Model service not ready")
 
-    async def generate():
-        talk_id = str(uuid.uuid4().int % 100000)
-        yield json.dumps({"type": "init", "talkId": talk_id, "newTalk": True}, ensure_ascii=False)
+    task_mgr = resources["task_manager"]
+    task_id = uuid.uuid4().hex
+    talk_id = str(uuid.uuid4().int % 100000)
+    combined_message = f"请生成练习题目。\n课程：{request.courseName}\n知识点：{', '.join(request.knowledgePoints)}\n难度：{request.difficulty}\n题目类型：{', '.join(request.quizTypes)}\n数量：{request.count}\n{'包含参考答案' if request.includeAnswer else '不包含参考答案'}"
 
-        combined_message = f"请生成练习题目。\n课程：{request.courseName}\n知识点：{', '.join(request.knowledgePoints)}\n难度：{request.difficulty}\n题目类型：{', '.join(request.quizTypes)}\n数量：{request.count}\n{'包含参考答案' if request.includeAnswer else '不包含参考答案'}"
+    task_mgr.create_task(task_id, "quiz_generate", {"talkId": talk_id})
+    asyncio.create_task(_run_agent_background(
+        task_id=task_id, agent=agent, case_text=combined_message, all_info="",
+        report_mode="resource_generate", task_mgr=task_mgr,
+    ))
 
-        async for event in agent.run_learning_reasoning(
-            case_text=combined_message,
-            all_info="",
-            report_mode="resource_generate",
-            show_thinking=True,
-        ):
-            if not isinstance(event, dict):
-                continue
-            if event.get("type") == "error":
-                yield json.dumps(event, ensure_ascii=False)
-                return
-            yield json.dumps(event, ensure_ascii=False)
-
-        yield json.dumps({"type": "done", "talkId": talk_id, "title": "练习题目生成完成"}, ensure_ascii=False)
-
-    return EventSourceResponse(generate(), ping=15)
+    init_event = {"type": "init", "taskId": task_id, "talkId": talk_id, "newTalk": True}
+    return EventSourceResponse(_stream_task_events(task_id, task_mgr, init_event), ping=15)
 
 
 @app.post("/model/resources/generate/reading")
 async def generate_reading(request: SingleReadingRequest):
-    """生成拓展阅读材料（SSE 流式）"""
+    """生成拓展阅读材料（SSE 流式 + 后台持久化）"""
     agent = resources.get("model")
     if not agent:
         raise HTTPException(status_code=503, detail="Model service not ready")
 
-    async def generate():
-        talk_id = str(uuid.uuid4().int % 100000)
-        yield json.dumps({"type": "init", "talkId": talk_id, "newTalk": True}, ensure_ascii=False)
+    task_mgr = resources["task_manager"]
+    task_id = uuid.uuid4().hex
+    talk_id = str(uuid.uuid4().int % 100000)
+    combined_message = f"请生成拓展阅读材料。\n课程：{request.courseName}\n知识点：{', '.join(request.knowledgePoints)}\n类型：{request.readingType}\n语言：{request.language}\n数量：{request.count}"
 
-        combined_message = f"请生成拓展阅读材料。\n课程：{request.courseName}\n知识点：{', '.join(request.knowledgePoints)}\n类型：{request.readingType}\n语言：{request.language}\n数量：{request.count}"
+    task_mgr.create_task(task_id, "reading_generate", {"talkId": talk_id})
+    asyncio.create_task(_run_agent_background(
+        task_id=task_id, agent=agent, case_text=combined_message, all_info="",
+        report_mode="resource_generate", task_mgr=task_mgr,
+    ))
 
-        async for event in agent.run_learning_reasoning(
-            case_text=combined_message,
-            all_info="",
-            report_mode="resource_generate",
-            show_thinking=True,
-        ):
-            if not isinstance(event, dict):
-                continue
-            if event.get("type") == "error":
-                yield json.dumps(event, ensure_ascii=False)
-                return
-            yield json.dumps(event, ensure_ascii=False)
-
-        yield json.dumps({"type": "done", "talkId": talk_id, "title": "拓展阅读材料生成完成"}, ensure_ascii=False)
-
-    return EventSourceResponse(generate(), ping=15)
+    init_event = {"type": "init", "taskId": task_id, "talkId": talk_id, "newTalk": True}
+    return EventSourceResponse(_stream_task_events(task_id, task_mgr, init_event), ping=15)
 
 
 @app.post("/model/resources/generate/video-script")
 async def generate_video_script(request: SingleVideoScriptRequest):
-    """生成教学视频/动画脚本（SSE 流式）"""
+    """生成教学视频/动画脚本（SSE 流式 + 后台持久化）"""
     agent = resources.get("model")
     if not agent:
         raise HTTPException(status_code=503, detail="Model service not ready")
 
-    async def generate():
-        talk_id = str(uuid.uuid4().int % 100000)
-        yield json.dumps({"type": "init", "talkId": talk_id, "newTalk": True}, ensure_ascii=False)
+    task_mgr = resources["task_manager"]
+    task_id = uuid.uuid4().hex
+    talk_id = str(uuid.uuid4().int % 100000)
+    combined_message = f"请生成教学视频/动画脚本。\n课程：{request.courseName}\n知识点：{', '.join(request.knowledgePoints)}\n预期时长：{request.duration}\n风格：{request.style}\n{'包含旁白脚本' if request.includeNarration else '不包含旁白脚本'}\n{'包含画面描述' if request.includeVisual else '不包含画面描述'}"
 
-        combined_message = f"请生成教学视频/动画脚本。\n课程：{request.courseName}\n知识点：{', '.join(request.knowledgePoints)}\n预期时长：{request.duration}\n风格：{request.style}\n{'包含旁白脚本' if request.includeNarration else '不包含旁白脚本'}\n{'包含画面描述' if request.includeVisual else '不包含画面描述'}"
+    task_mgr.create_task(task_id, "video_script_generate", {"talkId": talk_id})
+    asyncio.create_task(_run_agent_background(
+        task_id=task_id, agent=agent, case_text=combined_message, all_info="",
+        report_mode="resource_generate", task_mgr=task_mgr,
+    ))
 
-        async for event in agent.run_learning_reasoning(
-            case_text=combined_message,
-            all_info="",
-            report_mode="resource_generate",
-            show_thinking=True,
-        ):
-            if not isinstance(event, dict):
-                continue
-            if event.get("type") == "error":
-                yield json.dumps(event, ensure_ascii=False)
-                return
-            yield json.dumps(event, ensure_ascii=False)
-
-        yield json.dumps({"type": "done", "talkId": talk_id, "title": "视频脚本生成完成"}, ensure_ascii=False)
-
-    return EventSourceResponse(generate(), ping=15)
+    init_event = {"type": "init", "taskId": task_id, "talkId": talk_id, "newTalk": True}
+    return EventSourceResponse(_stream_task_events(task_id, task_mgr, init_event), ping=15)
 
 
 @app.post("/model/resources/generate/code-practice")
 async def generate_code_practice(request: SingleCodePracticeRequest):
-    """生成代码实操案例（SSE 流式）"""
+    """生成代码实操案例（SSE 流式 + 后台持久化）"""
     agent = resources.get("model")
     if not agent:
         raise HTTPException(status_code=503, detail="Model service not ready")
 
-    async def generate():
-        talk_id = str(uuid.uuid4().int % 100000)
-        yield json.dumps({"type": "init", "talkId": talk_id, "newTalk": True}, ensure_ascii=False)
+    task_mgr = resources["task_manager"]
+    task_id = uuid.uuid4().hex
+    talk_id = str(uuid.uuid4().int % 100000)
+    combined_message = f"请生成代码实操案例。\n课程：{request.courseName}\n知识点：{', '.join(request.knowledgePoints)}\n编程语言：{request.language}\n项目类型：{request.projectType}\n难度：{request.difficulty}\n{'包含测试用例' if request.includeTest else '不包含测试用例'}\n{'包含代码注释说明' if request.includeExplanation else '不包含代码注释说明'}"
 
-        combined_message = f"请生成代码实操案例。\n课程：{request.courseName}\n知识点：{', '.join(request.knowledgePoints)}\n编程语言：{request.language}\n项目类型：{request.projectType}\n难度：{request.difficulty}\n{'包含测试用例' if request.includeTest else '不包含测试用例'}\n{'包含代码注释说明' if request.includeExplanation else '不包含代码注释说明'}"
+    task_mgr.create_task(task_id, "code_practice_generate", {"talkId": talk_id})
+    asyncio.create_task(_run_agent_background(
+        task_id=task_id, agent=agent, case_text=combined_message, all_info="",
+        report_mode="resource_generate", task_mgr=task_mgr,
+    ))
 
-        async for event in agent.run_learning_reasoning(
-            case_text=combined_message,
-            all_info="",
-            report_mode="resource_generate",
-            show_thinking=True,
-        ):
-            if not isinstance(event, dict):
-                continue
-            if event.get("type") == "error":
-                yield json.dumps(event, ensure_ascii=False)
-                return
-            yield json.dumps(event, ensure_ascii=False)
-
-        yield json.dumps({"type": "done", "talkId": talk_id, "title": "代码实操案例生成完成"}, ensure_ascii=False)
-
-    return EventSourceResponse(generate(), ping=15)
+    init_event = {"type": "init", "taskId": task_id, "talkId": talk_id, "newTalk": True}
+    return EventSourceResponse(_stream_task_events(task_id, task_mgr, init_event), ping=15)
 
 
 @app.get("/model/resources")
@@ -1043,109 +981,54 @@ async def adjust_learning_path(
 
 @app.post("/model/tutor/ask")
 async def tutor_ask(request: TutorAskRequest):
-    """智能辅导问答（SSE 流式）"""
+    """智能辅导问答（SSE 流式 + 后台持久化）"""
     agent = resources.get("model")
     if not agent:
         raise HTTPException(status_code=503, detail="Model service not ready")
 
-    async def generate():
-        req_id = uuid.uuid4().hex[:12]
-        talk_id = request.talkId or str(uuid.uuid4().int % 100000)
-        new_talk = request.talkId is None
+    task_mgr = resources["task_manager"]
+    task_id = uuid.uuid4().hex
+    talk_id = request.talkId or str(uuid.uuid4().int % 100000)
+    new_talk = request.talkId is None
 
-        try:
-            logger.info(f"[tutor] 请求 {req_id} 开始智能辅导, talkId={talk_id}")
-            yield json.dumps({"type": "init", "talkId": talk_id, "newTalk": new_talk}, ensure_ascii=False)
+    context_parts = []
+    if request.context:
+        if request.context.get("courseName"):
+            context_parts.append(f"课程：{request.context['courseName']}")
+        if request.context.get("currentKnowledgePoint"):
+            context_parts.append(f"当前知识点：{request.context['currentKnowledgePoint']}")
+        if request.context.get("pathId"):
+            context_parts.append(f"学习路径ID：{request.context['pathId']}")
+        if request.context.get("stepId"):
+            context_parts.append(f"步骤ID：{request.context['stepId']}")
 
-            loop = asyncio.get_running_loop()
-            final_answer_parts = []
-            current_node = None
+    context_str = "\n".join(context_parts)
+    format_str = f"期望回答形式：{', '.join(request.preferredAnswerFormat)}" if request.preferredAnswerFormat else ""
 
-            naming_future = None
-            if new_talk and resources.get("naming_model"):
-                naming_future = loop.run_in_executor(
-                    resources["executor"],
-                    resources["naming_model"].run_naming,
-                    request.question,
-                )
+    combined_message = f"{request.question}"
+    if context_str:
+        combined_message += f"\n\n【学习上下文】\n{context_str}"
+    if format_str:
+        combined_message += f"\n{format_str}"
 
-            context_parts = []
-            if request.context:
-                if request.context.get("courseName"):
-                    context_parts.append(f"课程：{request.context['courseName']}")
-                if request.context.get("currentKnowledgePoint"):
-                    context_parts.append(f"当前知识点：{request.context['currentKnowledgePoint']}")
-                if request.context.get("pathId"):
-                    context_parts.append(f"学习路径ID：{request.context['pathId']}")
-                if request.context.get("stepId"):
-                    context_parts.append(f"步骤ID：{request.context['stepId']}")
+    task_mgr.create_task(task_id, "tutor_ask", {"talkId": talk_id})
 
-            context_str = "\n".join(context_parts)
-            format_str = f"期望回答形式：{', '.join(request.preferredAnswerFormat)}" if request.preferredAnswerFormat else ""
+    asyncio.create_task(_run_agent_background(
+        task_id=task_id,
+        agent=agent,
+        case_text=combined_message,
+        all_info="",
+        report_mode="tutor",
+        task_mgr=task_mgr,
+        naming_model=resources.get("naming_model") if new_talk else None,
+        executor=resources.get("executor"),
+        naming_input=request.question if new_talk else None,
+        images=request.images if request.images else None,
+        image_question=request.question,
+    ))
 
-            combined_message = f"{request.question}"
-            if context_str:
-                combined_message += f"\n\n【学习上下文】\n{context_str}"
-            if format_str:
-                combined_message += f"\n{format_str}"
-
-            if request.images:
-                vision_svc = resources.get("vision_service")
-                if vision_svc:
-                    async for event in vision_svc.analyze_stream(
-                        images=request.images,
-                        question=request.question,
-                        all_info="",
-                    ):
-                        if event.get("type") == "thinking":
-                            yield json.dumps({
-                                "type": "node_start",
-                                "node": "vision",
-                                "label": event.get("title", "正在分析图片..."),
-                            }, ensure_ascii=False)
-                        elif event.get("type") == "chunk":
-                            content_str = str(event.get("content", ""))
-                            if content_str:
-                                final_answer_parts.append(content_str)
-                                yield json.dumps({"type": "token", "content": content_str}, ensure_ascii=False)
-
-            async for event in agent.run_learning_reasoning(
-                case_text=combined_message,
-                all_info="",
-                report_mode="tutor",
-                show_thinking=True,
-            ):
-                if not isinstance(event, dict):
-                    continue
-                if event.get("type") == "error":
-                    yield json.dumps(event, ensure_ascii=False)
-                    return
-                if event.get("type") == "node_start":
-                    current_node = event.get("node")
-                if event.get("type") == "token":
-                    content_str = str(event.get("content", ""))
-                    if content_str:
-                        final_answer_parts.append(content_str)
-                yield json.dumps(event, ensure_ascii=False)
-
-            generated_name = "智能辅导"
-            if naming_future:
-                try:
-                    generated_name = await naming_future or "智能辅导"
-                except Exception:
-                    pass
-
-            yield json.dumps({
-                "type": "done",
-                "talkId": talk_id,
-                "title": generated_name,
-            }, ensure_ascii=False)
-
-        except Exception as e:
-            logger.error(f"[tutor] 请求 {req_id} 失败: {e}")
-            yield json.dumps(build_error_event(e, talk_id=talk_id), ensure_ascii=False)
-
-    return EventSourceResponse(generate(), ping=15)
+    init_event = {"type": "init", "taskId": task_id, "talkId": talk_id, "newTalk": new_talk}
+    return EventSourceResponse(_stream_task_events(task_id, task_mgr, init_event), ping=15)
 
 
 @app.get("/model/tutor/conversation/{talk_id}")
@@ -1325,120 +1208,67 @@ async def pubmed_search(request: PubMedSearchRequest):
 
 @app.post("/model/get_result")
 async def get_model_result(request: LegacyQueryRequest):
-    """兼容旧版临床推理接口"""
+    """兼容旧版临床推理接口（SSE 流式 + 后台持久化）"""
     verify_token(request.token)
 
     agent = resources.get("model")
     if not agent:
         raise HTTPException(status_code=503, detail="Model service not ready")
 
-    async def generate():
-        req_id = uuid.uuid4().hex[:12]
-        start_time = time.time()
+    task_mgr = resources["task_manager"]
+    task_id = uuid.uuid4().hex
 
-        try:
-            logger.info(f"[legacy] 请求 {req_id} 开始处理")
-            loop = asyncio.get_running_loop()
-            final_answer_parts = []
-            node_start_time = {}
-            node_count = 0
+    if request.images:
+        vision_svc = resources.get("vision_service")
+        if not vision_svc:
+            return EventSourceResponse(iter([json.dumps({"type": "token", "content": "影像识别服务未就绪，请稍后重试。"}, ensure_ascii=False)]), ping=15)
 
-            if request.images:
-                vision_svc = resources.get("vision_service")
-                if not vision_svc:
-                    yield json.dumps({"type": "token", "content": "影像识别服务未就绪，请稍后重试。"}, ensure_ascii=False)
-                else:
-                    async for event in vision_svc.analyze_stream(
-                        images=request.images,
-                        question=request.question,
-                        all_info=request.all_info,
-                    ):
-                        if event.get("type") == "thinking":
-                            yield json.dumps({
-                                "type": "node_start",
-                                "node": "vision",
-                                "label": event.get("title", "正在分析图片..."),
-                            }, ensure_ascii=False)
-                        elif event.get("type") == "chunk":
-                            content_str = str(event.get("content", ""))
-                            if content_str:
-                                final_answer_parts.append(content_str)
-                                yield json.dumps({"type": "token", "content": content_str}, ensure_ascii=False)
+        task_mgr.create_task(task_id, "legacy_vision", {})
 
-                    yield json.dumps({
-                        "type": "done",
-                        "request_id": req_id,
-                        "name": "影像分析",
-                        "all_info": request.all_info,
-                    }, ensure_ascii=False)
-                    return
+        async def _run_vision():
+            try:
+                final_parts = []
+                async for event in vision_svc.analyze_stream(
+                    images=request.images,
+                    question=request.question,
+                    all_info=request.all_info,
+                ):
+                    if event.get("type") == "thinking":
+                        task_mgr.add_event(task_id, {"type": "node_start", "node": "vision", "label": event.get("title", "正在分析图片...")})
+                    elif event.get("type") == "chunk":
+                        content_str = str(event.get("content", ""))
+                        if content_str:
+                            final_parts.append(content_str)
+                            task_mgr.add_event(task_id, {"type": "token", "content": content_str})
 
-            naming_future = None
-            if not request.all_info and resources.get("naming_model"):
-                naming_future = loop.run_in_executor(
-                    resources["executor"],
-                    resources["naming_model"].run_naming,
-                    request.question,
-                )
+                task_mgr.add_event(task_id, {"type": "done", "taskId": task_id, "request_id": task_id, "name": "影像分析", "all_info": request.all_info})
+                task_mgr.complete_task(task_id, result="".join(final_parts))
+            except Exception as e:
+                task_mgr.add_event(task_id, build_error_event(e, talk_id=None))
+                task_mgr.fail_task(task_id, str(e))
 
-            current_node = None
+        asyncio.create_task(_run_vision())
+        init_event = {"type": "init", "taskId": task_id}
+        return EventSourceResponse(_stream_task_events(task_id, task_mgr, init_event), ping=15)
 
-            async for event in agent.run_learning_reasoning(
-                case_text=request.question,
-                all_info=request.all_info,
-                report_mode=request.report_mode,
-                show_thinking=request.show_thinking,
-            ):
-                if not isinstance(event, dict):
-                    continue
-                if event.get("type") == "error":
-                    yield json.dumps(event, ensure_ascii=False)
-                    return
-                if event.get("type") == "node_start":
-                    node_count += 1
-                    current_node = event.get("node")
-                if event.get("type") == "token":
-                    content_str = str(event.get("content", ""))
-                    if content_str:
-                        final_answer_parts.append(content_str)
-                yield json.dumps(event, ensure_ascii=False)
+    task_mgr.create_task(task_id, "legacy_query", {})
 
-            generated_name = "学习咨询"
-            if naming_future:
-                try:
-                    generated_name = await naming_future or "学习咨询"
-                except Exception:
-                    pass
+    asyncio.create_task(_run_agent_background(
+        task_id=task_id,
+        agent=agent,
+        case_text=request.question,
+        all_info=request.all_info,
+        report_mode=request.report_mode,
+        task_mgr=task_mgr,
+        naming_model=resources.get("naming_model") if not request.all_info else None,
+        executor=resources.get("executor"),
+        naming_input=request.question if not request.all_info else None,
+        update_all_info=True,
+        original_all_info=request.all_info,
+    ))
 
-            answer_text = "".join(final_answer_parts).strip()
-            updated_all_info = request.all_info
-
-            if answer_text and resources.get("context_summary"):
-                try:
-                    summary_result = await loop.run_in_executor(
-                        resources["executor"],
-                        resources["context_summary"].update_all_info,
-                        request.all_info,
-                        request.question,
-                        answer_text,
-                        0.4,
-                    )
-                    updated_all_info = summary_result.get("updated_all_info", request.all_info)
-                except Exception:
-                    pass
-
-            yield json.dumps({
-                "type": "done",
-                "request_id": req_id,
-                "name": generated_name,
-                "all_info": updated_all_info,
-            }, ensure_ascii=False)
-
-        except Exception as e:
-            logger.error(f"[legacy] 请求 {req_id} 失败: {e}")
-            yield json.dumps(build_error_event(e, talk_id=None), ensure_ascii=False)
-
-    return EventSourceResponse(generate(), ping=15)
+    init_event = {"type": "init", "taskId": task_id}
+    return EventSourceResponse(_stream_task_events(task_id, task_mgr, init_event), ping=15)
 
 
 @app.post("/ai/analyze")
@@ -1493,6 +1323,64 @@ async def analyze_learning_risk(request: QuickAnalyzeRequest):
     except Exception as e:
         logger.error(f"[analyze] 请求 {req_id} 失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================
+# 后台任务查询与重连接口
+# ============================================================
+
+@app.get("/model/tasks/{task_id}")
+async def get_task_status(task_id: str = Path(...)):
+    """查询后台任务状态与结果（切换页面后轮询此接口获取结果）"""
+    task_mgr = resources["task_manager"]
+    task = task_mgr.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    token_events = []
+    for e in task.events:
+        if e.get("type") == "token":
+            token_events.append(e.get("content", ""))
+
+    return {
+        "taskId": task.task_id,
+        "taskType": task.task_type,
+        "status": task.status,
+        "result": task.result,
+        "content": "".join(token_events),
+        "events": task.events,
+        "metadata": task.metadata,
+        "createdAt": task.created_at,
+        "completedAt": task.completed_at,
+    }
+
+
+@app.get("/model/tasks/{task_id}/stream")
+async def stream_task_result(
+    task_id: str = Path(...),
+    last_event_index: int = Query(0, ge=0, description="上次接收到的最后事件索引"),
+):
+    """重连后台任务的 SSE 流（切换页面后用此接口继续接收事件）"""
+    task_mgr = resources["task_manager"]
+    task = task_mgr.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    async def generate():
+        event_index = last_event_index
+        while True:
+            task = task_mgr.get_task(task_id)
+            if not task:
+                yield json.dumps({"type": "error", "content": "Task not found"}, ensure_ascii=False)
+                return
+            while event_index < len(task.events):
+                yield json.dumps(task.events[event_index], ensure_ascii=False)
+                event_index += 1
+            if task.status in ("completed", "failed"):
+                return
+            await task.wait_for_new_event(event_index, timeout=2.0)
+
+    return EventSourceResponse(generate(), ping=15)
 
 
 # ============================================================

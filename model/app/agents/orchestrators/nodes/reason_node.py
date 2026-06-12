@@ -11,12 +11,15 @@ logger = logging.getLogger(__name__)
 
 class ReasonNode(BaseNode):
 
-    def __init__(self, llm, expert_config=None):
+    def __init__(self, llm, expert_config=None, llm_synthesis=None):
         self.llm = llm
+        self.llm_synthesis = llm_synthesis or llm
         self.expert_manager = expert_config or get_expert_manager()
         self.experts = self.expert_manager.get_experts()
         self.synthesis_config = self.expert_manager.get_synthesis_config()
         logger.info(f"[reason] 已加载 {len(self.experts)} 位专家配置")
+        logger.info(f"[reason] 专家推理模型: {getattr(self.llm, 'model_name', 'unknown')}")
+        logger.info(f"[reason] 综合汇总模型: {getattr(self.llm_synthesis, 'model_name', 'unknown')}")
         for expert in self.experts:
             logger.info(f"  - {expert.get('role')} (优先级: {expert.get('priority', 'N/A')})")
 
@@ -71,10 +74,10 @@ class ReasonNode(BaseNode):
             "作为教学总监，请统筹以下各位智能体的意见，并给出最终综合提案(Proposal)和潜在问题批评(Critique)：\n{expert_opinions}\n请将输出分为两部分，用 \"### PROPOSAL ###\" 和 \"### CRITIQUE ###\" 隔开。"
         ).format(expert_opinions=expert_opinions_text)
 
-        logger.info(f"[reason] 开始调用LLM进行意见综合")
+        logger.info(f"[reason] 开始调用LLM进行意见综合 (模型: {getattr(self.llm_synthesis, 'model_name', 'unknown')})")
 
         try:
-            synthesis_res = await self.llm.ainvoke([HumanMessage(content=synthesis_prompt)])
+            synthesis_res = await self.llm_synthesis.ainvoke([HumanMessage(content=synthesis_prompt)])
             content = getattr(synthesis_res, "content", str(synthesis_res))
             logger.info(f"[reason] 意见综合完成，结果长度: {len(content)}")
         except Exception as e:

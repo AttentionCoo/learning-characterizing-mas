@@ -50,7 +50,7 @@ class LearningAgent:
         self.intent_node = IntentNode(self.llm_turbo)
         self.analysis_node = AnalysisNode(self.llm_critic)
         self.retrieve_node = RetrieveNode(learning_assistant)
-        self.reason_node = ReasonNode(self.llm_proposer)
+        self.reason_node = ReasonNode(self.llm_critic, llm_synthesis=self.llm_proposer)
         self.validate_node = ValidateNode(self.llm_critic)
         self.report_node = ReportNode(self.llm_proposer, report_manager)
 

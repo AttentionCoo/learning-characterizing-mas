@@ -80,3 +80,12 @@ JOIN (
     FROM cont
 ) ranked ON c.id = ranked.id
 SET c.role = IF(ranked.rn % 2 = 0, 'assistant', 'user');
+
+-- =====================
+-- user 表字段补充
+-- 与 Java 实体 User.java 对齐：major, grade, specialty
+-- =====================
+ALTER TABLE user
+    ADD COLUMN major     VARCHAR(64)  NULL COMMENT '专业',
+    ADD COLUMN grade     VARCHAR(16)  NULL COMMENT '年级',
+    ADD COLUMN specialty VARCHAR(64)  NULL COMMENT '专长';
