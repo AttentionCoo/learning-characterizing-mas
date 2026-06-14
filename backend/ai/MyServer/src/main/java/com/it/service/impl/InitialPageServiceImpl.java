@@ -42,7 +42,7 @@ public class InitialPageServiceImpl extends ServiceImpl<InitialPageMapper, Talk>
         // 将 Entity (Talk) 转换为 VO (InitialPageVO)
         // 确保 InitialPageVO 加了 @AllArgsConstructor 注解
         return talks.stream()
-                .map(talk -> new InitialPageVO(talk.getId(), talk.getTitle()))
+                .map(talk -> new InitialPageVO(talk.getId(), talk.getTitle(), talk.getCreateTime(), talk.getUpdateTime()))
                 .collect(Collectors.toList());
     }
 
@@ -88,4 +88,3 @@ public class InitialPageServiceImpl extends ServiceImpl<InitialPageMapper, Talk>
         }
     }
 }
-

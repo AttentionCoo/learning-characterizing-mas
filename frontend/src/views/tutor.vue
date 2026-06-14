@@ -6,6 +6,8 @@ import { getTutorConversationsAPI, getTutorConversationHistoryAPI, deleteTutorCo
 
 marked.setOptions({ gfm: true, breaks: true })
 
+const MAX_CONVERSATIONS = 50
+
 const conversations = ref([])
 const conversationsLoading = ref(false)
 const activeConversationId = ref(null)
@@ -37,7 +39,16 @@ async function fetchConversations() {
   conversationsLoading.value = true
   try {
     const res = await getTutorConversationsAPI()
-    conversations.value = res.data || []
+    let convList = res.data || []
+    convList.sort((a, b) => new Date(b.updateTime || b.createTime || 0) - new Date(a.updateTime || a.createTime || 0))
+    if (convList.length > MAX_CONVERSATIONS) {
+      const toDelete = convList.slice(MAX_CONVERSATIONS)
+      convList = convList.slice(0, MAX_CONVERSATIONS)
+      toDelete.forEach(async (conv) => {
+        try { await deleteTutorConversationAPI(conv.talkId) } catch {}
+      })
+    }
+    conversations.value = convList
   } catch {
     // ignore
   } finally {
@@ -148,6 +159,30 @@ function scrollToBottom() {
   if (chatContainerRef.value) {
     chatContainerRef.value.scrollTop = chatContainerRef.value.scrollHeight
   }
+}
+
+function formatTime(timeStr) {
+  if (!timeStr) return ''
+  const date = new Date(timeStr)
+  const now = new Date()
+  const diff = now - date
+  const minutes = Math.floor(diff / 60000)
+  const hours = Math.floor(diff / 3600000)
+  const days = Math.floor(diff / 86400000)
+
+  if (minutes < 1) return '刚刚'
+  if (minutes < 60) return `${minutes}分钟前`
+  if (hours < 24) return `${hours}小时前`
+  if (days < 7) return `${days}天前`
+
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const currentYear = now.getFullYear()
+  if (year === currentYear) {
+    return `${month}-${day}`
+  }
+  return `${year}-${month}-${day}`
 }
 
 function handleKeydown(e) {
@@ -267,7 +302,7 @@ const quickQuestions = [
             </div>
             <div class="conv-info">
               <div class="conv-title">{{ conv.title || '新对话' }}</div>
-              <div class="conv-time">{{ conv.updateTime || '' }}</div>
+              <div class="conv-time">{{ formatTime(conv.updateTime || conv.createTime) }}</div>
             </div>
             <button class="conv-delete" @click="deleteConversation(conv, $event)">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

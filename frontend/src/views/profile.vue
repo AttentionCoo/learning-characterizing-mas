@@ -2,9 +2,11 @@
 import { ref, onMounted, onUpdated, nextTick, computed, reactive } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import { getProfileAPI, getProfileConversationsAPI, getProfileConversationHistoryAPI, profileStreamAPI, updateProfileDimensionsAPI } from '@/api/profile'
+import { getProfileAPI, getProfileConversationsAPI, getProfileConversationHistoryAPI, profileStreamAPI, updateProfileDimensionsAPI, deleteProfileConversationAPI } from '@/api/profile'
 
 marked.setOptions({ gfm: true, breaks: true })
+
+const MAX_CONVERSATIONS = 50
 
 const profile = ref(null)
 const profileLoading = ref(false)
@@ -20,6 +22,9 @@ const hasLoadedHistory = ref(false)
 const editingDim = ref(null)
 const editForm = reactive({})
 const saving = ref(false)
+
+const conversations = ref([])
+const conversationsLoading = ref(false)
 
 const FILLER_PATTERNS = [
   /根据对话推断/g, /暂无信息/g, /信息不足/g, /待补充/g, /暂缺/g,
@@ -123,41 +128,83 @@ const dimensionList = computed(() => {
 
 onMounted(async () => {
   await fetchProfile()
-  await loadConversationHistory()
+  await fetchConversations()
+  if (conversations.value.length > 0) {
+    const latest = conversations.value[0]
+    if (latest?.talkId) {
+      talkId.value = latest.talkId
+      await loadConversationHistory(latest.talkId)
+      return
+    }
+  }
+  chatMessages.value.push(WELCOME_MESSAGE)
 })
+
+async function fetchConversations() {
+  conversationsLoading.value = true
+  try {
+    const res = await getProfileConversationsAPI()
+    let convList = res.data || []
+    convList.sort((a, b) => new Date(b.updateTime || b.createTime || 0) - new Date(a.updateTime || a.createTime || 0))
+    if (convList.length > MAX_CONVERSATIONS) {
+      const toDelete = convList.slice(MAX_CONVERSATIONS)
+      convList = convList.slice(0, MAX_CONVERSATIONS)
+      toDelete.forEach(async (conv) => {
+        try { await deleteProfileConversationAPI(conv.talkId) } catch {}
+      })
+    }
+    conversations.value = convList
+  } catch {
+    // ignore
+  } finally {
+    conversationsLoading.value = false
+  }
+}
+
+async function selectConversation(conv) {
+  talkId.value = conv.talkId
+  await loadConversationHistory(conv.talkId)
+}
+
+function startNewConversation() {
+  talkId.value = null
+  chatMessages.value = [WELCOME_MESSAGE]
+}
+
+async function deleteConversation(conv, e) {
+  e.stopPropagation()
+  try {
+    await deleteProfileConversationAPI(conv.talkId)
+    conversations.value = conversations.value.filter(c => c.talkId !== conv.talkId)
+    if (talkId.value === conv.talkId) {
+      startNewConversation()
+    }
+  } catch {
+    // ignore
+  }
+}
+
+async function loadConversationHistory(selectedTalkId) {
+  hasLoadedHistory.value = true
+  try {
+    const historyRes = await getProfileConversationHistoryAPI(selectedTalkId)
+    const messages = historyRes.data
+    if (messages && messages.length > 0) {
+      chatMessages.value = messages.map((m) => ({
+        role: m.role,
+        content: m.content,
+      }))
+      return
+    }
+  } catch {
+    // ignore
+  }
+  chatMessages.value = [WELCOME_MESSAGE]
+}
 
 const WELCOME_MESSAGE = {
   role: 'assistant',
   content: '你好！我是你的脑卒中学习画像构建助手 🎓\n\n请告诉我你的专业、年级、脑卒中学习目标，以及目前的学习情况，我会为你构建专属的学习画像。\n\n例如：\n- "我是临床医学大三学生，正在学神经病学，关注脑卒中方向"\n- "我的脑血管解剖比较薄弱，想重点补强"\n- "我偏好看视频和做脑卒中病例分析"',
-}
-
-async function loadConversationHistory() {
-  if (hasLoadedHistory.value) return
-  hasLoadedHistory.value = true
-  try {
-    const convRes = await getProfileConversationsAPI()
-    const conversations = convRes.data
-    if (!conversations || conversations.length === 0) {
-      chatMessages.value.push(WELCOME_MESSAGE)
-      return
-    }
-    const latest = conversations[0]
-    if (latest?.talkId) {
-      talkId.value = latest.talkId
-      const historyRes = await getProfileConversationHistoryAPI(latest.talkId)
-      const messages = historyRes.data
-      if (messages && messages.length > 0) {
-        chatMessages.value = messages.map((m) => ({
-          role: m.role,
-          content: m.content,
-        }))
-        return
-      }
-    }
-    chatMessages.value.push(WELCOME_MESSAGE)
-  } catch {
-    chatMessages.value.push(WELCOME_MESSAGE)
-  }
 }
 
 async function fetchProfile() {
@@ -283,8 +330,10 @@ async function handleSend() {
     if (result.data?.talkId) talkId.value = result.data.talkId
 
     await fetchProfile()
+    await fetchConversations()
     setTimeout(async () => {
       await fetchProfile()
+      await fetchConversations()
     }, 5000)
   } catch (error) {
     console.error('画像对话失败', error)
@@ -312,6 +361,30 @@ function handleKeydown(e) {
     handleSend()
   }
 }
+
+function formatTime(timeStr) {
+  if (!timeStr) return ''
+  const date = new Date(timeStr)
+  const now = new Date()
+  const diff = now - date
+  const minutes = Math.floor(diff / 60000)
+  const hours = Math.floor(diff / 3600000)
+  const days = Math.floor(diff / 86400000)
+
+  if (minutes < 1) return '刚刚'
+  if (minutes < 60) return `${minutes}分钟前`
+  if (hours < 24) return `${hours}小时前`
+  if (days < 7) return `${days}天前`
+
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const currentYear = now.getFullYear()
+  if (year === currentYear) {
+    return `${month}-${day}`
+  }
+  return `${year}-${month}-${day}`
+}
 </script>
 
 <template>
@@ -325,6 +398,50 @@ function handleKeydown(e) {
     </div>
 
     <div class="profile-body">
+      <div class="conversation-sidebar">
+        <div class="sidebar-header">
+          <span class="sidebar-title">对话历史</span>
+          <button class="new-chat-btn" @click="startNewConversation">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            新对话
+          </button>
+        </div>
+
+        <div class="conversation-list">
+          <div v-if="conversationsLoading" class="list-loading">
+            <div class="loading-spinner"></div>
+          </div>
+          <div v-else-if="!conversations.length" class="list-empty">
+            <span>暂无对话</span>
+          </div>
+          <div
+            v-else
+            v-for="conv in conversations"
+            :key="conv.talkId"
+            class="conv-item"
+            :class="{ active: talkId === conv.talkId }"
+            @click="selectConversation(conv)"
+          >
+            <div class="conv-icon">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              </svg>
+            </div>
+            <div class="conv-info">
+              <div class="conv-title">{{ conv.title || '新对话' }}</div>
+              <div class="conv-time">{{ formatTime(conv.updateTime || conv.createTime) }}</div>
+            </div>
+            <button class="conv-delete" @click="deleteConversation(conv, $event)">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div class="chat-panel">
         <div class="chat-messages" ref="chatContainerRef">
           <div
@@ -580,6 +697,176 @@ function handleKeydown(e) {
   display: flex;
   min-height: 0;
   overflow: hidden;
+}
+
+.conversation-sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--color-border-light);
+  background: var(--color-bg-base);
+}
+
+.sidebar-header {
+  padding: 16px;
+  border-bottom: 1px solid var(--color-border-light);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sidebar-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-text-strong);
+}
+
+.new-chat-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-medium);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover {
+    background: var(--color-hover-bg);
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+}
+
+.conversation-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+
+  &::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: var(--color-border-medium);
+    border-radius: 2px;
+  }
+}
+
+.list-loading,
+.list-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 120px;
+  color: var(--color-text-light);
+  font-size: 13px;
+}
+
+.loading-spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid var(--color-border-light);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.conv-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-bottom: 4px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  position: relative;
+
+  &:hover {
+    background: var(--color-ghost-hover);
+
+    .conv-delete {
+      opacity: 1;
+    }
+  }
+
+  &.active {
+    background: rgba(17, 150, 127, 0.08);
+    box-shadow: inset 3px 0 0 var(--color-primary);
+
+    .conv-title {
+      color: var(--color-primary-dark);
+      font-weight: 600;
+    }
+  }
+}
+
+.conv-icon {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  background: var(--color-secondary-bg);
+  color: var(--color-text-medium);
+}
+
+.conv-info {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.conv-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4;
+}
+
+.conv-time {
+  font-size: 11px;
+  color: var(--color-text-light);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+
+.conv-delete {
+  opacity: 0;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-light);
+  cursor: pointer;
+  transition: all 0.15s;
+
+  &:hover {
+    background: rgba(220, 38, 38, 0.1);
+    color: #dc2626;
+  }
 }
 
 .chat-panel {
