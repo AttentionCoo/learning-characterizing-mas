@@ -10,7 +10,8 @@ const route = useRoute()
 const userStore = useUserStore()
 const themeStore = useThemeStore()
 
-const sidebarCollapsed = ref(false)
+const sidebarCollapsed = ref(true)
+let hoverTimer = null
 
 const navItems = [
   {
@@ -62,11 +63,29 @@ async function handleLogout() {
 function toggleSidebar() {
   sidebarCollapsed.value = !sidebarCollapsed.value
 }
+
+function handleMouseEnter() {
+  if (hoverTimer) {
+    clearTimeout(hoverTimer)
+    hoverTimer = null
+  }
+  if (sidebarCollapsed.value) {
+    sidebarCollapsed.value = false
+  }
+}
+
+function handleMouseLeave() {
+  if (!sidebarCollapsed.value) {
+    hoverTimer = setTimeout(() => {
+      sidebarCollapsed.value = true
+    }, 300)
+  }
+}
 </script>
 
 <template>
   <div class="app-layout" :class="{ collapsed: sidebarCollapsed }">
-    <aside class="sidebar">
+    <aside class="sidebar" @mouseenter="handleMouseEnter" @mouseleave="handleMouseLeave">
       <div class="sidebar-header">
         <div class="logo" @click="toggleSidebar">
           <div class="logo-icon">
@@ -85,6 +104,11 @@ function toggleSidebar() {
             <span v-if="!sidebarCollapsed" class="logo-text">辅助学习系统</span>
           </transition>
         </div>
+        <button class="toggle-btn" @click.stop="toggleSidebar" :title="sidebarCollapsed ? '展开菜单' : '收起菜单'">
+          <svg :class="{ rotated: !sidebarCollapsed }" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+        </button>
       </div>
 
       <nav class="sidebar-nav">
@@ -94,6 +118,7 @@ function toggleSidebar() {
           :to="item.path"
           class="nav-item"
           :class="{ active: activeNav === item.path }"
+          :title="sidebarCollapsed ? item.label : ''"
         >
           <div class="nav-icon">
             <svg v-if="item.icon === 'profile'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -206,6 +231,42 @@ function toggleSidebar() {
   padding: 20px 16px 16px;
   border-bottom: 1px solid var(--color-border-light);
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.toggle-btn {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--color-ghost-hover);
+  color: var(--color-text-medium);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+
+  svg {
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+    &.rotated {
+      transform: rotate(180deg);
+    }
+  }
+
+  &:hover {
+    background: var(--color-hover-bg);
+    color: var(--color-text-strong);
+    transform: scale(1.05);
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
 }
 
 .logo {
@@ -275,11 +336,21 @@ function toggleSidebar() {
 
     .nav-icon {
       color: var(--color-primary);
+      background: rgba(17, 150, 127, 0.1);
     }
 
     .nav-label {
       font-weight: 700;
       color: var(--color-primary-dark);
+    }
+  }
+
+  .collapsed & {
+    justify-content: center;
+    padding: 10px;
+
+    &:hover {
+      transform: translateX(0);
     }
   }
 }
@@ -294,8 +365,9 @@ function toggleSidebar() {
   border-radius: var(--radius-md);
   transition: all var(--transition-fast);
 
-  .active & {
-    background: rgba(17, 150, 127, 0.1);
+  .collapsed & {
+    width: 40px;
+    height: 40px;
   }
 }
 
@@ -339,6 +411,11 @@ function toggleSidebar() {
   display: flex;
   flex-direction: column;
   gap: 4px;
+
+  .collapsed & {
+    align-items: center;
+    padding: 12px 4px;
+  }
 }
 
 .theme-toggle {
@@ -360,6 +437,15 @@ function toggleSidebar() {
     background: var(--color-ghost-hover);
     color: var(--color-text-strong);
   }
+
+  .collapsed & {
+    justify-content: center;
+    padding: 8px;
+
+    span {
+      display: none !important;
+    }
+  }
 }
 
 .user-section {
@@ -373,6 +459,15 @@ function toggleSidebar() {
 
   &:hover {
     background: var(--color-ghost-hover);
+  }
+
+  .collapsed & {
+    justify-content: center;
+    padding: 8px;
+
+    .user-info {
+      display: none !important;
+    }
   }
 }
 
@@ -469,6 +564,43 @@ function toggleSidebar() {
   .user-info,
   .theme-toggle span {
     display: none !important;
+  }
+
+  .toggle-btn {
+    display: none;
+  }
+
+  .sidebar-header {
+    justify-content: center;
+    padding: 16px 8px;
+  }
+
+  .sidebar-nav {
+    padding: 8px 4px;
+  }
+
+  .nav-item {
+    justify-content: center;
+    padding: 10px;
+
+    &:hover {
+      transform: translateX(0);
+    }
+  }
+
+  .sidebar-footer {
+    align-items: center;
+    padding: 12px 4px;
+  }
+
+  .theme-toggle,
+  .user-section {
+    justify-content: center;
+    padding: 8px;
+
+    span {
+      display: none !important;
+    }
   }
 }
 
