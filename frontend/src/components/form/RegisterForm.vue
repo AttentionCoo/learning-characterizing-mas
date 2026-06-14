@@ -3,6 +3,8 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { registerAPI, loginAPI } from '@/api/user'
 import { useUserStore } from '@/stores/user'
+import UserSVG from '@/components/svg/UserSVG.vue'
+import PasswordSVG from '@/components/svg/PasswordSVG.vue'
 
 const router = useRouter()
 const userStore = useUserStore()

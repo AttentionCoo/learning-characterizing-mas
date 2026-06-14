@@ -23,6 +23,7 @@ const thinkingHint = ref('')
 const talkId = ref(null)
 const chatContainerRef = ref(null)
 const inputRef = ref(null)
+const shouldAutoScroll = ref(true)
 
 const showSidebar = ref(true)
 
@@ -103,6 +104,7 @@ async function handleSend() {
   if (!message || isStreaming.value) return
 
   draftMessage.value = ''
+  shouldAutoScroll.value = true
   chatMessages.value.push({ role: 'user', content: message })
   chatMessages.value.push({ role: 'assistant', content: '' })
   const aiIndex = chatMessages.value.length - 1
@@ -124,6 +126,9 @@ async function handleSend() {
       const chars = charBuffer.splice(0, 2)
       displayText += chars.join('')
       chatMessages.value[aiIndex] = { role: 'assistant', content: displayText }
+      if (shouldAutoScroll.value) {
+        nextTick(() => scrollToBottom())
+      }
       timerId = setTimeout(tick, delay)
     }
     timerId = setTimeout(tick, 0)
@@ -161,8 +166,18 @@ async function handleSend() {
 
 function scrollToBottom() {
   if (chatContainerRef.value) {
-    chatContainerRef.value.scrollTop = chatContainerRef.value.scrollHeight
+    chatContainerRef.value.scrollTo({
+      top: chatContainerRef.value.scrollHeight,
+      behavior: 'smooth'
+    })
   }
+}
+
+function handleScroll() {
+  if (!chatContainerRef.value) return
+  const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.value
+  const distanceFromBottom = scrollHeight - scrollTop - clientHeight
+  shouldAutoScroll.value = distanceFromBottom < 100
 }
 
 function formatTime(timeStr) {
@@ -216,7 +231,7 @@ const quickQuestions = [
 
     <div class="tutor-body">
       <div class="chat-area">
-        <div class="chat-messages" ref="chatContainerRef">
+        <div class="chat-messages" ref="chatContainerRef" @scroll="handleScroll">
           <div
             v-for="(msg, idx) in chatMessages"
             :key="idx"
