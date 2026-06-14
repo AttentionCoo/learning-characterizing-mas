@@ -424,7 +424,7 @@ public class AIStreamingServiceImpl implements AIStreamingService {
             JsonNode json = objectMapper.readTree(line);
             String type = json.path("type").asText("");
 
-            // done 事件：提取 name/all_info 后结束流
+            // done 事件：提取 name/all_info/profile_dimensions 后结束流
             if ("done".equalsIgnoreCase(type)) {
                 String name = json.path("name").asText("");
                 if (StrUtil.isNotBlank(name)) {
@@ -436,6 +436,19 @@ public class AIStreamingServiceImpl implements AIStreamingService {
                 if (StrUtil.isNotBlank(allInfo)) {
                     updatedAllInfo[0] = allInfo;
                 }
+
+                // 提取 profile_dimensions 并透传给前端（用于自动保存学习画像）
+                JsonNode profileDimensionsNode = json.path("profile_dimensions");
+                if (!profileDimensionsNode.isMissingNode() && !profileDimensionsNode.isNull()) {
+                    log.info("✅ 检测到画像维度数据，透传给前端, talkId={}", talkId);
+                    Map<String, Object> doneResp = baseResponse(talkId, generatedTitle[0], "done");
+                    doneResp.put("profile_dimensions", objectMapper.convertValue(
+                            profileDimensionsNode,
+                            new TypeReference<Map<String, Object>>() {}
+                    ));
+                    return Flux.just(objectMapper.writeValueAsString(doneResp));
+                }
+
                 return Flux.empty();
             }
 

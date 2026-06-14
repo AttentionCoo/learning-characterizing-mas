@@ -333,6 +333,16 @@ async function handleSend() {
     chatMessages.value[aiIndex] = { role: 'assistant', content }
     if (result.data?.talkId) talkId.value = result.data.talkId
 
+    if (result.data?.profileDimensions && Object.keys(result.data.profileDimensions).length > 0) {
+      try {
+        console.log('🎯 自动保存学习画像维度:', result.data.profileDimensions)
+        await updateProfileDimensionsAPI(result.data.profileDimensions)
+        console.log('✅ 画像维度已自动保存到数据库')
+      } catch (saveError) {
+        console.error('❌ 自动保存画像维度失败:', saveError)
+      }
+    }
+
     await fetchProfile()
     await fetchConversations()
     setTimeout(async () => {

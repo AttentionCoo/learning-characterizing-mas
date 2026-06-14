@@ -13,7 +13,7 @@ contraindication_rules:
   - 缺少评估节点
 
 validation_settings:
-  max_reflection_count: 3
+  max_reflection_count: 1
   enable_rule_engine: true
   enable_llm_reflection: true
 

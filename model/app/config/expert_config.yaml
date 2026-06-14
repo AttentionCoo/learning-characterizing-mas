@@ -104,7 +104,7 @@ synthesis:
 
 debate:
   enabled: true
-  max_rounds: 2
+  max_rounds: 1
   arbitrator_role: "仲裁智能体"
   debate_prompt_template: |
     你目前参与第{round}轮辩论。以下是其他智能体的观点和之前的辩论记录：

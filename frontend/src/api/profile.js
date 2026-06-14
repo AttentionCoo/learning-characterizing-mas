@@ -63,7 +63,8 @@ export function profileStreamAPI(params, onChunk, onThinking) {
           return
         }
         if (type === 'done') {
-          safeResolve({ data: { talkId: realTalkId, content: fullAnswer } })
+          const profileDimensions = data.profile_dimensions || null
+          safeResolve({ data: { talkId: realTalkId, content: fullAnswer, profileDimensions } })
           return
         }
         if (type === 'error') {

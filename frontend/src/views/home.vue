@@ -5,6 +5,7 @@ import { useUserStore } from '@/stores/user'
 import { useThemeStore } from '@/stores/theme'
 import { logoutAPI } from '@/api/user'
 import AppAvatar from '@/components/AppAvatar.vue'
+import UserDialog from '@/components/UserDialog.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -12,6 +13,7 @@ const userStore = useUserStore()
 const themeStore = useThemeStore()
 
 const sidebarCollapsed = ref(true)
+const showUserDialog = ref(false)
 let hoverTimer = null
 
 const navItems = [
@@ -173,7 +175,7 @@ function handleMouseLeave() {
           </transition>
         </button>
 
-        <div class="user-section">
+        <div class="user-section" @click="showUserDialog = true">
           <AppAvatar :src="userStore.image" :name="userStore.name" :size="36" />
           <transition name="fade-text">
             <div v-if="!sidebarCollapsed" class="user-info">
@@ -182,6 +184,8 @@ function handleMouseLeave() {
             </div>
           </transition>
         </div>
+
+        <UserDialog v-if="showUserDialog" @close="showUserDialog = false" @logout="handleLogout" />
       </div>
     </aside>
 
