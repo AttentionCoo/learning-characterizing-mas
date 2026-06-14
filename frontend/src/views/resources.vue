@@ -113,7 +113,16 @@ async function handleGenerate() {
     await fetchResources()
   } catch (error) {
     console.error('资源生成失败', error)
-    generatedContent.value = '生成失败，请稍后重试。'
+    const errorMsg = error?.message || error?.msg || '未知错误'
+    if (errorMsg.includes('未登录') || errorMsg.includes('401') || errorMsg.includes('403')) {
+      generatedContent.value = '⚠️ 登录已过期，请重新登录后重试。'
+    } else if (errorMsg.includes('网络') || errorMsg.includes('fetch') || errorMsg.includes('Failed')) {
+      generatedContent.value = '❌ 网络连接失败，请检查后端服务是否启动。'
+    } else if (errorMsg.includes('timeout') || errorMsg.includes('Timeout')) {
+      generatedContent.value = '⏰ 请求超时，请稍后重试。'
+    } else {
+      generatedContent.value = `❌ 生成失败：${errorMsg}`
+    }
   } finally {
     isGenerating.value = false
     isThinking.value = false

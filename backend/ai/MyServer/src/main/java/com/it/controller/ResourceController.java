@@ -61,19 +61,30 @@ public class ResourceController {
         String upstreamToken = resolveToken(token, authorization);
         Long userId = ThreadLocalUtil.getCurrentUser().getId();
 
-        StringBuilder questionBuilder = new StringBuilder(param.getMessage());
-        if (param.getCourseName() != null) {
-            questionBuilder.append("\n课程：").append(param.getCourseName());
+        StringBuilder questionBuilder = new StringBuilder();
+        questionBuilder.append("【任务类型：学习资源内容生成】\n");
+        questionBuilder.append("请为以下学习需求生成具体的教学内容和知识点讲解。\n\n");
+        questionBuilder.append("【学生资源需求】\n");
+        questionBuilder.append(param.getMessage() != null ? param.getMessage() : "请生成相关学习资料");
+        questionBuilder.append("\n\n【课程信息】\n");
+        if (param.getCourseName() != null && !param.getCourseName().isEmpty()) {
+            questionBuilder.append("- 课程名称：").append(param.getCourseName()).append("\n");
         }
         if (param.getKnowledgePoints() != null && !param.getKnowledgePoints().isEmpty()) {
-            questionBuilder.append("\n知识点：").append(String.join("、", param.getKnowledgePoints()));
+            questionBuilder.append("- 目标知识点：").append(String.join("、", param.getKnowledgePoints())).append("\n");
         }
-        if (param.getDifficulty() != null) {
-            questionBuilder.append("\n难度：").append(param.getDifficulty());
+        if (param.getDifficulty() != null && !param.getDifficulty().isEmpty()) {
+            questionBuilder.append("- 难度级别：").append(param.getDifficulty()).append("\n");
         }
         if (param.getResourceTypes() != null && !param.getResourceTypes().isEmpty()) {
-            questionBuilder.append("\n资源类型：").append(String.join("、", param.getResourceTypes()));
+            questionBuilder.append("- 资源格式要求：").append(String.join("、", param.getResourceTypes())).append("\n");
         }
+        questionBuilder.append("\n【输出要求】\n");
+        questionBuilder.append("1. 生成具体的知识内容，包括定义、要点、临床应用等\n");
+        questionBuilder.append("2. 提供详细的知识点讲解（每个知识点200-300字）\n");
+        questionBuilder.append("3. 包含典型案例和实践应用\n");
+        questionBuilder.append("4. 给出自测检查点和拓展阅读材料\n");
+        questionBuilder.append("5. 使用通俗易懂的语言，适合医学生学习\n");
 
         QuesParam quesParam = new QuesParam();
         quesParam.setTalkId(param.getTalkId());

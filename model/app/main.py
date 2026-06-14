@@ -791,8 +791,24 @@ async def resources_generate(request: ResourceGenerateRequest):
     talk_id = request.talkId or str(uuid.uuid4().int % 100000)
     new_talk = request.talkId is None
 
-    resource_context = f"课程：{request.courseName}\n知识点：{', '.join(request.knowledgePoints)}\n难度：{request.difficulty}\n资源类型：{', '.join(request.resourceTypes)}"
-    combined_message = f"{request.message}\n\n【资源生成参数】\n{resource_context}"
+    resource_context = f"【课程信息】\n"
+    if request.courseName:
+        resource_context += f"- 课程名称：{request.courseName}\n"
+    if request.knowledgePoints:
+        resource_context += f"- 目标知识点：{', '.join(request.knowledgePoints)}\n"
+    if request.difficulty:
+        resource_context += f"- 难度级别：{request.difficulty}\n"
+    if request.resourceTypes:
+        resource_context += f"- 资源格式要求：{', '.join(request.resourceTypes)}\n"
+
+    output_requirements = """【输出要求】
+1. 生成具体的知识内容，包括定义、要点、临床应用等
+2. 提供详细的知识点讲解（每个知识点200-300字）
+3. 包含典型案例和实践应用
+4. 给出自测检查点和拓展阅读材料
+5. 使用通俗易懂的语言，适合医学生学习"""
+
+    combined_message = f"【任务类型：学习资源内容生成】\n请为以下学习需求生成具体的教学内容和知识点讲解。\n\n{request.message}\n\n{resource_context}\n{output_requirements}"
 
     task_mgr.create_task(task_id, "resource_generate", {"talkId": talk_id})
 

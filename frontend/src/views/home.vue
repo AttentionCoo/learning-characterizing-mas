@@ -185,7 +185,7 @@ function handleMouseLeave() {
           </transition>
         </div>
 
-        <UserDialog v-if="showUserDialog" @close="showUserDialog = false" @logout="handleLogout" />
+        <UserDialog v-if="showUserDialog" :visible="showUserDialog" @close="showUserDialog = false" @logout="handleLogout" />
       </div>
     </aside>
 

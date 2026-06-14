@@ -80,14 +80,36 @@ export function resourceStreamAPI(params, onChunk, onThinking) {
       }
     }
 
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => {
+      controller.abort()
+      safeReject(new Error('请求超时，请稍后重试'))
+    }, 120000)
+
     fetch('/api/resources/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: token, token },
       body: JSON.stringify(params),
+      signal: controller.signal,
     })
       .then((res) => {
-        if (!res.ok) throw new Error(`请求失败: ${res.status}`)
-        if (!res.body) throw new Error('ReadableStream不存在')
+        clearTimeout(timeoutId)
+        if (!res.ok) {
+          if (res.status === 401 || res.status === 403) {
+            safeReject(new Error('未登录或登录已过期'))
+          } else if (res.status === 404) {
+            safeReject(new Error('资源生成接口不存在，请检查后端服务配置'))
+          } else if (res.status >= 500) {
+            safeReject(new Error(`服务器内部错误 (${res.status})，请稍后重试`))
+          } else {
+            safeReject(new Error(`请求失败: ${res.status} ${res.statusText}`))
+          }
+          return
+        }
+        if (!res.body) {
+          safeReject(new Error('响应体为空'))
+          return
+        }
         const reader = res.body.getReader()
         const decoder = new TextDecoder('utf-8')
         let buffer = ''
@@ -118,10 +140,26 @@ export function resourceStreamAPI(params, onChunk, onThinking) {
               }
               read()
             })
-            .catch(safeReject)
+            .catch((err) => {
+              clearTimeout(timeoutId)
+              if (err.name === 'AbortError') {
+                safeReject(new Error('请求被取消或超时'))
+              } else {
+                safeReject(err)
+              }
+            })
         }
         read()
       })
-      .catch(safeReject)
+      .catch((err) => {
+        clearTimeout(timeoutId)
+        if (err.name === 'AbortError') {
+          safeReject(new Error('请求被取消或超时'))
+        } else if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+          safeReject(new Error('网络连接失败，请检查后端服务是否启动'))
+        } else {
+          safeReject(err)
+        }
+      })
   })
 }
