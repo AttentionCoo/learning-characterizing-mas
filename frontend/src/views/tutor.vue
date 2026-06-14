@@ -3,6 +3,10 @@ import { ref, onMounted, nextTick, computed } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { getTutorConversationsAPI, getTutorConversationHistoryAPI, deleteTutorConversationAPI, tutorStreamAPI } from '@/api/tutor'
+import AppAvatar from '@/components/AppAvatar.vue'
+import { useUserStore } from '@/stores/user'
+
+const userStore = useUserStore()
 
 marked.setOptions({ gfm: true, breaks: true })
 
@@ -220,21 +224,31 @@ const quickQuestions = [
             :class="msg.role"
           >
             <div class="message-avatar">
-              <span v-if="msg.role === 'assistant'" class="avatar-ai">🤖</span>
-              <span v-else class="avatar-user">我</span>
+              <span v-if="msg.role === 'assistant'" class="avatar-ai">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                  <rect x="3" y="8" width="18" height="12" rx="3" fill="url(#tutor-grad)" opacity="0.95"/>
+                  <circle cx="9" cy="14" r="1.5" fill="#fff"/>
+                  <circle cx="15" cy="14" r="1.5" fill="#fff"/>
+                  <path d="M10 17c1 .7 3 .7 4 0" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/>
+                  <path d="M8 8V5a4 4 0 0 1 8 0v3" stroke="url(#tutor-grad)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  <circle cx="12" cy="4" r="1" fill="#11967f"/>
+                  <defs>
+                    <linearGradient id="tutor-grad" x1="3" y1="8" x2="21" y2="20">
+                      <stop stop-color="#6366f1"/>
+                      <stop offset="1" stop-color="#8b5cf6"/>
+                    </linearGradient>
+                  </defs>
+                </svg>
+              </span>
+              <AppAvatar v-else :src="userStore.image" :name="userStore.name" :size="40" />
             </div>
             <div class="message-body">
-              <div v-if="msg.role === 'assistant'" class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
-              <div v-else class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
-            </div>
-          </div>
-          <div v-if="isThinking" class="chat-message assistant">
-            <div class="message-avatar"><span class="avatar-ai">🤖</span></div>
-            <div class="message-body">
-              <div class="thinking-indicator">
+              <div v-if="msg.role === 'assistant' && idx === chatMessages.length - 1 && isThinking && !msg.content" class="thinking-indicator">
                 <div class="thinking-dots"><span></span><span></span><span></span></div>
                 <span class="thinking-text">{{ thinkingHint }}</span>
               </div>
+              <div v-else-if="msg.role === 'assistant'" class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
+              <div v-else class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
             </div>
           </div>
         </div>
@@ -407,10 +421,28 @@ const quickQuestions = [
 }
 
 .avatar-ai {
-  width: 36px; height: 36px;
-  display: flex; align-items: center; justify-content: center;
-  background: var(--gradient-aurora);
-  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #f0f4ff 0%, #e8ecff 100%);
+  border-radius: 12px;
+  box-shadow:
+    0 2px 8px rgba(99, 102, 241, 0.15),
+    0 1px 3px rgba(99, 102, 241, 0.1);
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  &:hover {
+    transform: scale(1.05) rotate(-3deg);
+    box-shadow:
+      0 4px 16px rgba(99, 102, 241, 0.25),
+      0 2px 6px rgba(139, 92, 246, 0.15);
+  }
+
+  svg {
+    filter: drop-shadow(0 2px 4px rgba(99, 102, 241, 0.2));
+  }
 }
 
 .avatar-user {
@@ -434,26 +466,41 @@ const quickQuestions = [
 .thinking-indicator {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 16px;
-  background: var(--color-message-bg);
-  border: 1px solid var(--color-border-light);
+  gap: 12px;
+  padding: 14px 18px;
+  background: linear-gradient(135deg, #fafbff 0%, #f5f3ff 100%);
+  border: 1px solid rgba(99, 102, 241, 0.12);
   border-radius: 16px 16px 16px 4px;
+  box-shadow:
+    0 2px 8px rgba(99, 102, 241, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 
 .thinking-dots {
   display: flex;
-  gap: 4px;
+  gap: 5px;
+  align-items: center;
+
   span {
-    width: 6px; height: 6px; border-radius: 50%; background: var(--color-primary);
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
     animation: bounce 1.4s infinite ease-in-out;
+    box-shadow: 0 2px 4px rgba(99, 102, 241, 0.3);
+
     &:nth-child(1) { animation-delay: 0s; }
-    &:nth-child(2) { animation-delay: 0.2s; }
-    &:nth-child(3) { animation-delay: 0.4s; }
+    &:nth-child(2) { animation-delay: 0.16s; }
+    &:nth-child(3) { animation-delay: 0.32s; }
   }
 }
 
-.thinking-text { font-size: 13px; color: var(--color-text-medium); }
+.thinking-text {
+  font-size: 13px;
+  font-weight: 500;
+  color: #6366f1;
+  letter-spacing: 0.01em;
+}
 
 @keyframes bounce {
   0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }

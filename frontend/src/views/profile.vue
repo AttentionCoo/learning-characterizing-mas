@@ -3,6 +3,10 @@ import { ref, onMounted, onUpdated, nextTick, computed, reactive } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { getProfileAPI, getProfileConversationsAPI, getProfileConversationHistoryAPI, profileStreamAPI, updateProfileDimensionsAPI, deleteProfileConversationAPI } from '@/api/profile'
+import AppAvatar from '@/components/AppAvatar.vue'
+import { useUserStore } from '@/stores/user'
+
+const userStore = useUserStore()
 
 marked.setOptions({ gfm: true, breaks: true })
 
@@ -463,7 +467,7 @@ function formatTime(timeStr) {
                   <circle cx="18" cy="2.5" r="1.2" fill="currentColor"/>
                 </svg>
               </span>
-              <span v-else class="avatar-user">{{ '我' }}</span>
+              <AppAvatar v-else :src="userStore.image" :name="userStore.name" :size="40" />
             </div>
             <div class="message-body">
               <div v-if="msg.role === 'assistant' && idx === chatMessages.length - 1 && isThinking && !msg.content" class="thinking-indicator">

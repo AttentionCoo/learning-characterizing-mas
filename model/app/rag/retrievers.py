@@ -19,10 +19,8 @@ ef_module.DefaultEmbeddingFunction = lambda: None
 
 from langchain_chroma import Chroma
 
-# Add parent directory to path to absolute imports work
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from app.rag.data_loader import load_pdfs_from_dir, split_documents
-from app.rag.qa_generator import QAGenerator
+from .data_loader import load_pdfs_from_dir, split_documents
+from .qa_generator import QAGenerator
 
 
 load_dotenv()
@@ -75,44 +73,62 @@ class BGEReranker:
         if not self.api_key:
             logger.warning("⚠️ 未找到 DASHSCOPE_API_KEY，Rerank 功能已禁用")
         self.top_k = top_k
-        self.model = "gte-rerank"
-        self.enabled = bool(self.api_key)  # 根据API密钥是否存在决定是否启用
+        self.candidate_models = [
+            "qwen-rerank-v1",
+            "gte-rerank-v2", 
+            "qwen-rerank",
+            "gte-rerank"
+        ]
+        self.enabled = bool(self.api_key)
 
     def rerank(self, query: str, docs: List[Document], top_k: int = None) -> List[Document]:
         if not docs:
             return []
-        
+
         actual_top_k = top_k if top_k is not None else self.top_k
-        
-        # 如果Rerank未启用或API密钥无效，直接返回原始结果
+
         if not self.enabled:
             logger.info(f"ℹ️  Rerank 功能已禁用，直接返回原始结果")
             return docs[:actual_top_k]
-        
-        try:
-            doc_contents = [doc.page_content for doc in docs]
-            resp = dashscope.TextReRank.call(
-                model=self.model,
-                query=query,
-                documents=doc_contents,
-                top_n=actual_top_k,
-                return_documents=True,
-                api_key=self.api_key,
-            )
-            if resp.status_code == HTTPStatus.OK:
-                reranked = []
-                for item in resp.output.results:
-                    original_doc = docs[item.index]
-                    original_doc.metadata["relevance_score"] = item.relevance_score
-                    reranked.append(original_doc)
-                logger.info(f"✅ Rerank 完成，{len(docs)} → {len(reranked)} 条")
-                return reranked
-            else:
-                logger.warning(f"⚠️  Rerank API 失败 ({resp.code}): {resp.message}，使用原始结果")
-                return docs[:actual_top_k]
-        except Exception as e:
-            logger.warning(f"⚠️  Rerank 异常: {type(e).__name__} - {str(e)}，使用原始结果")
-            return docs[:actual_top_k]
+
+        for model in self.candidate_models:
+            try:
+                logger.info(f"🚀 尝试使用模型 {model} 进行 Rerank...")
+                doc_contents = [doc.page_content for doc in docs]
+                resp = dashscope.TextReRank.call(
+                    model=model,
+                    query=query,
+                    documents=doc_contents,
+                    top_n=actual_top_k,
+                    return_documents=True,
+                    api_key=self.api_key,
+                )
+                if resp.status_code == HTTPStatus.OK:
+                    reranked = []
+                    for item in resp.output.results:
+                        original_doc = docs[item.index]
+                        original_doc.metadata["relevance_score"] = item.relevance_score
+                        reranked.append(original_doc)
+                    logger.info(f"✅ Rerank 成功 (使用 {model})，{len(docs)} → {len(reranked)} 条")
+                    return reranked
+                else:
+                    if "AccessDenied" in str(resp.code) or resp.code == "AccessDenied":
+                        logger.warning(f"⚠️  模型 {model} 遭遇权限阻碍 (AccessDenied)，尝试切换下一个...")
+                        continue
+                    else:
+                        logger.warning(f"⚠️  Rerank API 失败 ({model}, {resp.code}): {resp.message}，尝试切换下一个...")
+                        continue
+            except Exception as e:
+                error_str = str(e)
+                if "AccessDenied" in error_str:
+                    logger.warning(f"⚠️  模型 {model} 遭遇混杂因素阻碍 (AccessDenied)，尝试切换下一个...")
+                    continue
+                else:
+                    logger.warning(f"⚠️  模型 {model} 调用异常: {type(e).__name__} - {error_str}，尝试切换下一个...")
+                    continue
+
+        logger.error("❌ 所有百炼 Rerank 模型均鉴权失败或调用异常，启用原始结果兜底。")
+        return docs[:actual_top_k]
 
 
 def build_or_load_vectorstore(chunks, persist_dir: str, enable_qa: bool = False):

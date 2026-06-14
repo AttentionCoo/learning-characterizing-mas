@@ -4,6 +4,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useThemeStore } from '@/stores/theme'
 import { logoutAPI } from '@/api/user'
+import AppAvatar from '@/components/AppAvatar.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -172,11 +173,8 @@ function handleMouseLeave() {
           </transition>
         </button>
 
-        <div class="user-section" @click="handleLogout">
-          <div class="user-avatar">
-            <img v-if="userStore.image" :src="userStore.image" alt="头像" />
-            <span v-else>{{ userStore.name?.charAt(0) || '我' }}</span>
-          </div>
+        <div class="user-section">
+          <AppAvatar :src="userStore.image" :name="userStore.name" :size="36" />
           <transition name="fade-text">
             <div v-if="!sidebarCollapsed" class="user-info">
               <span class="user-name">{{ userStore.name || '用户' }}</span>
