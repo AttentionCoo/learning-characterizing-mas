@@ -13,20 +13,25 @@ logger = logging.getLogger(__name__)
 
 class NamingModel(object):
     def __init__(self):
-        api_key = os.environ.get("DEEPSEEK-API-KEY")
+        api_key = os.environ.get("DEEPSEEK_API_KEY")
         if not api_key:
-            raise ValueError("未找到环境变量 DEEPSEEK-API-KEY，请设置该环境变量")
-        self.llm = ChatOpenAI(
-            model="deepseek-chat",
-            base_url="https://api.deepseek.com/v1",
-            api_key=api_key,
-            temperature=0.3,
-            max_tokens=300,
-            timeout=25
-        )
+            logger.warning("未找到环境变量 DEEPSEEK_API_KEY，标题生成功能将不可用")
+            self.llm = None
+        else:
+            self.llm = ChatOpenAI(
+                model="deepseek-chat",
+                base_url="https://api.deepseek.com/v1",
+                api_key=api_key,
+                temperature=0.3,
+                max_tokens=300,
+                timeout=25
+            )
 
     def run_naming(self, question):
         logger.info(f"开始执行 run_naming() 方法，待处理内容: {question}")
+        if self.llm is None:
+            logger.warning("DEEPSEEK_API_KEY 未配置，跳过标题生成，返回默认标题")
+            return "学习咨询"
         try:
             response = self.llm.invoke([
                 SystemMessage(

@@ -712,6 +712,8 @@ def _extract_profile_from_conversation(conversation: str) -> dict:
         import asyncio
         import threading
 
+        result_container = [None]
+
         def _run_sync():
             loop = asyncio.new_event_loop()
             try:
@@ -731,8 +733,7 @@ def _extract_profile_from_conversation(conversation: str) -> dict:
                     content = content[:-3]
                 content = content.strip()
 
-                dimensions = _json.loads(content)
-                return dimensions
+                result_container[0] = _json.loads(content)
             finally:
                 loop.close()
 
@@ -744,7 +745,7 @@ def _extract_profile_from_conversation(conversation: str) -> dict:
             logger.error("[profile_extract] 画像提取超时(30s)")
             return None
 
-        result = _run_sync()
+        result = result_container[0]
         if result and isinstance(result, dict) and len(result) > 0:
             logger.info(f"[profile_extract] 成功提取 {len(result)} 个画像维度")
             return result

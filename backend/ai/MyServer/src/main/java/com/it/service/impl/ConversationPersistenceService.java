@@ -1,6 +1,5 @@
 package com.it.service.impl;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.it.po.uo.Cont;
@@ -9,11 +8,11 @@ import com.it.service.IContService;
 import com.it.service.ITalkService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.Collections;
 import java.util.List;
 
 @Service
@@ -25,6 +24,7 @@ public class ConversationPersistenceService {
     private final IContService contService;
     private final ITalkService talkService;
     private final ObjectMapper objectMapper;
+    private final StringRedisTemplate stringRedisTemplate;
 
     @Transactional
     public void persistConversation(Long userId, Long talkId, String question, String answer,
@@ -63,12 +63,6 @@ public class ConversationPersistenceService {
 
         // 可选：如果有summary，可以保存到另一个字段或单独的Cont，但根据代码兼容，暂不处理
 
-        // 加载历史（可选，用于验证或日志）
-        List<Cont> history = contService.list(new LambdaQueryWrapper<Cont>()
-                .eq(Cont::getUserId, userId)
-                .eq(Cont::getTalkId, talkId)
-                .orderByAsc(Cont::getId));
-
         // 更新Talk
         Talk talk = talkService.getById(talkId);
         if (talk != null) {
@@ -88,7 +82,8 @@ public class ConversationPersistenceService {
         } else {
             log.warn("Talk不存在，无法更新: talkId={}", talkId);
         }
-        // 清除历史缓存
+        // 持久化完成后清除历史缓存，确保下一轮对话从 DB 重新加载最新记录
         String historyKey = "chat:history:" + userId + ":" + talkId;
+        stringRedisTemplate.delete(historyKey);
     }
 }

@@ -75,7 +75,7 @@ public class AssessmentController {
         eventCache.registerStream(finalTalkIdStr);
 
         Flux<String> chatFlux = streamingService
-                .streamChat(userId, talkId, questionBuilder.toString(), upstreamToken, null)
+                .streamChat(userId, talkId, questionBuilder.toString(), upstreamToken, null, "assessment")
                 .map(this::wrapChunkIfNeeded);
 
         Sinks.One<Void> doneSink = Sinks.one();
