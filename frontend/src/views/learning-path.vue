@@ -1,5 +1,5 @@
 ﻿<script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { getLearningPathAPI, updateTaskProgressAPI, learningPathStreamAPI } from '@/api/learningPath'
@@ -14,6 +14,23 @@ const thinkingHint = ref('')
 const generatedContent = ref('')
 const talkId = ref(null)
 const expandedPhases = ref(new Set([0]))
+const showResult = ref(false)
+const resultContentRef = ref(null)
+const userScrolled = ref(false)
+
+function onResultScroll() {
+  const el = resultContentRef.value
+  if (!el) return
+  const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+  userScrolled.value = distFromBottom > 80
+}
+
+function scrollToBottom(force = false) {
+  const el = resultContentRef.value
+  if (!el) return
+  if (!force && userScrolled.value) return
+  el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+}
 
 const courseName = ref('')
 const customGoal = ref('')
@@ -69,6 +86,8 @@ async function handleGenerate() {
   isThinking.value = true
   thinkingHint.value = '正在规划学习路径...'
   generatedContent.value = ''
+  showResult.value = true
+  userScrolled.value = false
 
   let displayText = ''
   const charBuffer = []
@@ -83,6 +102,7 @@ async function handleGenerate() {
       const chars = charBuffer.splice(0, 2)
       displayText += chars.join('')
       generatedContent.value = displayText
+      nextTick(() => scrollToBottom())
       timerId = setTimeout(tick, delay)
     }
     timerId = setTimeout(tick, 0)
@@ -92,7 +112,7 @@ async function handleGenerate() {
     const result = await learningPathStreamAPI(
       {
         talkId: talkId.value,
-        message: customGoal.value || '请为我规划学习路径',
+        goalDescription: customGoal.value || '请为我规划学习路径',
         courseName: courseName.value,
       },
       (chunk) => {
@@ -106,6 +126,7 @@ async function handleGenerate() {
     if (timerId !== null) { clearTimeout(timerId); timerId = null }
     generatedContent.value = result.data?.content || displayText
     if (result.data?.talkId) talkId.value = result.data.talkId
+    nextTick(() => scrollToBottom(true))
 
     await fetchLearningPath()
   } catch (error) {
@@ -116,6 +137,10 @@ async function handleGenerate() {
     isThinking.value = false
     thinkingHint.value = ''
   }
+}
+
+function backToPathView() {
+  showResult.value = false
 }
 
 async function toggleTaskStatus(task) {
@@ -150,92 +175,119 @@ const overallProgress = computed(() => {
 
     <div class="path-body">
       <div class="path-main">
-        <div v-if="pathLoading" class="path-loading">
-          <div class="loading-spinner"></div>
-          <span>加载学习路径...</span>
-        </div>
-
-        <div v-else-if="!learningPath" class="path-empty">
-          <div class="empty-visual">
-            <div class="empty-icon">🗺️</div>
-          </div>
-          <div class="empty-title">尚未生成学习路径</div>
-          <div class="empty-desc">请在右侧填写信息，系统将为你规划专属学习路径</div>
-        </div>
-
-        <div v-else class="path-content">
-          <div class="progress-overview">
-            <div class="progress-ring">
-              <svg viewBox="0 0 100 100">
-                <circle cx="50" cy="50" r="42" fill="none" stroke="var(--color-border-light)" stroke-width="6"/>
-                <circle cx="50" cy="50" r="42" fill="none" stroke="var(--color-primary)" stroke-width="6"
-                  :stroke-dasharray="`${overallProgress * 2.64} 264`"
-                  stroke-linecap="round"
-                  transform="rotate(-90 50 50)"
-                  style="transition: stroke-dasharray 0.6s ease"
-                />
+        <div v-if="showResult" class="result-area">
+          <div class="result-header">
+            <button class="back-btn" @click="backToPathView">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
               </svg>
-              <div class="progress-text">{{ overallProgress }}%</div>
-            </div>
-            <div class="progress-info">
-              <div class="progress-title">总体进度</div>
-              <div class="progress-sub">{{ learningPath.phases?.length || 0 }} 个阶段</div>
-            </div>
+              返回路径
+            </button>
+            <span class="result-title">AI 学习路径规划</span>
           </div>
 
-          <div class="phases-timeline">
-            <div
-              v-for="(phase, pIdx) in learningPath.phases"
-              :key="pIdx"
-              class="phase-card"
-              :class="{ expanded: expandedPhases.has(pIdx), [getPhaseStatus(phase)]: true }"
-            >
-              <div class="phase-header" @click="togglePhase(pIdx)">
-                <div class="phase-marker">
-                  <div class="marker-dot"></div>
-                  <div v-if="pIdx < learningPath.phases.length - 1" class="marker-line"></div>
-                </div>
-                <div class="phase-info">
-                  <div class="phase-name">{{ phase.phaseName }}</div>
-                  <div class="phase-meta">
-                    <span class="phase-duration">⏱ {{ phase.estimatedDuration || '—' }}</span>
-                    <span class="phase-status-badge" :class="getPhaseStatus(phase)">
-                      {{ getPhaseStatus(phase) === 'completed' ? '已完成' : getPhaseStatus(phase) === 'in_progress' ? '进行中' : '待开始' }}
-                    </span>
-                  </div>
-                </div>
-                <svg class="expand-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                  :style="{ transform: expandedPhases.has(pIdx) ? 'rotate(180deg)' : 'rotate(0)' }">
-                  <polyline points="6 9 12 15 18 9"/>
-                </svg>
-              </div>
+          <div v-if="isThinking" class="thinking-bar">
+            <div class="thinking-dots"><span></span><span></span><span></span></div>
+            <span>{{ thinkingHint }}</span>
+          </div>
 
-              <transition name="expand">
-                <div v-if="expandedPhases.has(pIdx)" class="phase-tasks">
-                  <div
-                    v-for="task in phase.tasks"
-                    :key="task.taskId"
-                    class="task-item"
-                    :class="{ completed: task.status === 'completed' }"
-                    @click="toggleTaskStatus(task)"
-                  >
-                    <div class="task-check">
-                      <span v-if="task.status === 'completed'">✓</span>
-                      <span v-else>{{ getStatusIcon(task.status) }}</span>
+          <div ref="resultContentRef" class="result-content markdown-body" @scroll="onResultScroll" v-html="renderMarkdown(generatedContent)"></div>
+
+          <div v-if="isGenerating && !generatedContent" class="generating-overlay">
+            <div class="gen-spinner"></div>
+            <div class="gen-text">多智能体协同规划中...</div>
+            <div class="gen-sub">{{ thinkingHint || '请稍候' }}</div>
+          </div>
+        </div>
+
+        <template v-else>
+          <div v-if="pathLoading" class="path-loading">
+            <div class="loading-spinner"></div>
+            <span>加载学习路径...</span>
+          </div>
+
+          <div v-else-if="!learningPath" class="path-empty">
+            <div class="empty-visual">
+              <div class="empty-icon">🗺️</div>
+            </div>
+            <div class="empty-title">尚未生成学习路径</div>
+            <div class="empty-desc">请在右侧填写信息，系统将为你规划专属学习路径</div>
+          </div>
+
+          <div v-else class="path-content">
+            <div class="progress-overview">
+              <div class="progress-ring">
+                <svg viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" r="42" fill="none" stroke="var(--color-border-light)" stroke-width="6"/>
+                  <circle cx="50" cy="50" r="42" fill="none" stroke="var(--color-primary)" stroke-width="6"
+                    :stroke-dasharray="`${overallProgress * 2.64} 264`"
+                    stroke-linecap="round"
+                    transform="rotate(-90 50 50)"
+                    style="transition: stroke-dasharray 0.6s ease"
+                  />
+                </svg>
+                <div class="progress-text">{{ overallProgress }}%</div>
+              </div>
+              <div class="progress-info">
+                <div class="progress-title">总体进度</div>
+                <div class="progress-sub">{{ learningPath.phases?.length || 0 }} 个阶段</div>
+              </div>
+            </div>
+
+            <div class="phases-timeline">
+              <div
+                v-for="(phase, pIdx) in learningPath.phases"
+                :key="pIdx"
+                class="phase-card"
+                :class="{ expanded: expandedPhases.has(pIdx), [getPhaseStatus(phase)]: true }"
+              >
+                <div class="phase-header" @click="togglePhase(pIdx)">
+                  <div class="phase-marker">
+                    <div class="marker-dot"></div>
+                    <div v-if="pIdx < learningPath.phases.length - 1" class="marker-line"></div>
+                  </div>
+                  <div class="phase-info">
+                    <div class="phase-name">{{ phase.phaseName }}</div>
+                    <div class="phase-meta">
+                      <span class="phase-duration">⏱ {{ phase.estimatedDuration || '—' }}</span>
+                      <span class="phase-status-badge" :class="getPhaseStatus(phase)">
+                        {{ getPhaseStatus(phase) === 'completed' ? '已完成' : getPhaseStatus(phase) === 'in_progress' ? '进行中' : '待开始' }}
+                      </span>
                     </div>
-                    <div class="task-content">
-                      <div class="task-name">{{ task.taskName }}</div>
-                      <div v-if="task.description" class="task-desc">{{ task.description }}</div>
-                      <div v-if="task.resources?.length" class="task-resources">
-                        <span v-for="r in task.resources" :key="r" class="task-resource-tag">{{ r }}</span>
+                  </div>
+                  <svg class="expand-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    :style="{ transform: expandedPhases.has(pIdx) ? 'rotate(180deg)' : 'rotate(0)' }">
+                    <polyline points="6 9 12 15 18 9"/>
+                  </svg>
+                </div>
+
+                <transition name="expand">
+                  <div v-if="expandedPhases.has(pIdx)" class="phase-tasks">
+                    <div
+                      v-for="task in phase.tasks"
+                      :key="task.taskId"
+                      class="task-item"
+                      :class="{ completed: task.status === 'completed' }"
+                      @click="toggleTaskStatus(task)"
+                    >
+                      <div class="task-check">
+                        <span v-if="task.status === 'completed'">✓</span>
+                        <span v-else>{{ getStatusIcon(task.status) }}</span>
+                      </div>
+                      <div class="task-content">
+                        <div class="task-name">{{ task.taskName }}</div>
+                        <div v-if="task.description" class="task-desc">{{ task.description }}</div>
+                        <div v-if="task.resources?.length" class="task-resources">
+                          <span v-for="r in task.resources" :key="r" class="task-resource-tag">{{ r }}</span>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              </transition>
+                </transition>
+              </div>
             </div>
           </div>
-        </div>
+        </template>
       </div>
 
       <div class="path-sidebar">
@@ -256,13 +308,6 @@ const overallProgress = computed(() => {
               </svg>
               {{ isGenerating ? '生成中...' : '规划路径' }}
             </button>
-          </div>
-        </div>
-
-        <div v-if="generatedContent" class="sidebar-card">
-          <div class="card-title">AI 建议</div>
-          <div class="card-body">
-            <div class="markdown-body compact" v-html="renderMarkdown(generatedContent)"></div>
           </div>
         </div>
       </div>
@@ -313,6 +358,127 @@ const overallProgress = computed(() => {
   overflow-y: auto;
   padding: 24px 28px;
   min-width: 0;
+  position: relative;
+}
+
+.result-area {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 16px;
+}
+
+.result-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+}
+
+.back-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-base);
+  color: var(--color-text-medium);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+
+  &:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+    background: rgba(17, 150, 127, 0.05);
+  }
+}
+
+.result-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text-strong);
+}
+
+.thinking-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: rgba(17, 150, 127, 0.06);
+  border: 1px solid rgba(17, 150, 127, 0.15);
+  border-radius: var(--radius-lg);
+  font-size: 13px;
+  color: var(--color-primary-dark);
+  flex-shrink: 0;
+}
+
+.thinking-dots {
+  display: flex;
+  gap: 4px;
+
+  span {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--color-primary);
+    animation: dot-bounce 1.4s ease-in-out infinite;
+
+    &:nth-child(2) { animation-delay: 0.16s; }
+    &:nth-child(3) { animation-delay: 0.32s; }
+  }
+}
+
+@keyframes dot-bounce {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
+}
+
+.result-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 28px;
+  background: var(--color-bg-base);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-xl);
+  line-height: 1.8;
+  min-height: 0;
+}
+
+.generating-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(4px);
+  z-index: 10;
+}
+
+.gen-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--color-border-light);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.gen-text {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text-strong);
+}
+
+.gen-sub {
+  font-size: 13px;
+  color: var(--color-text-weak);
 }
 
 .path-loading, .path-empty {
