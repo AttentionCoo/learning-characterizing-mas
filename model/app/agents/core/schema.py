@@ -42,3 +42,4 @@ class LearningState(TypedDict):
     debate_history: List[Dict]
     active_experts: List[str]
     motivational_feedback: str
+    profile_summary: str

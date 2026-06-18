@@ -1,7 +1,7 @@
 ﻿# LearnAgent / 多智能体个性化学习系统
 
 > **基于大模型技术体系的高等教育个性化学习智能体系统**
-> 本项目是一套面向高等教育场景（脑卒中方向医学生）的个性化学习智能体系统。系统以高校专业课程知识库为底座，融合 **多智能体协同推理**、**Hybrid RAG（混合检索增强生成）** 与 **全栈响应式流式架构**，实现了从学生画像构建到个性化资源生成、学习路径规划、智能辅导、学习效果评估的完整闭环，真正实现因材施教的数字化落地。
+> 本项目是一套面向高等教育场景（脑卒中方向医学生）的个性化学习智能体系统。系统以高校专业课程知识库为底座，融合 **多智能体协同推理**、**Hybrid RAG（混合检索增强生成）**、**多模态影像识别** 与 **全栈响应式流式架构**，实现了从学生画像构建到个性化资源生成、学习路径规划、智能辅导、学习效果评估的完整闭环，真正实现因材施教的数字化落地。
 
 ---
 
@@ -42,6 +42,174 @@
 
 依托多智能体协同工作机制，整合系统生成的个性化资源，结合大模型对学生专业、学习进度、知识掌握情况及学习偏好的深度分析，为学生规划科学、动态的个性化学习路径，明确学习步骤和顺序；同时基于画像实现学习资源的精准推送，涵盖文档、视频、题库、实操案例等多类型内容，并根据评估结果动态调整。
 
+### 5. 多模态影像识别与循证扩展
+
+* **qwen-vl-max 视觉理解**：集成阿里云多模态大模型，支持学生上传医学影像、课件截图、代码截图等图片，系统自动识别图片类型（课件笔记/代码编程/通用医学影像）并匹配对应分析策略，实现图文联合理解与答疑。
+* **PubMed 国际文献检索**：集成 NCBI E-utilities API，支持自动检索 PubMed 国际医学文献数据库，内置 8 级证据等级排序体系（指南 > 荟萃分析 > 系统综述 > RCT > 临床试验 > 综述 > 病例报告），与本地 ChromaDB 知识库互补，扩展循证医学证据来源覆盖面。
+
+---
+
+## 项目目录结构
+
+```
+learning-multi-agent-system/
+├── frontend/                          # 前端交互层（Vue 3）
+│   ├── src/
+│   │   ├── api/                       # API 请求模块
+│   │   │   ├── ai.js                  # AI 流式对话接口
+│   │   │   ├── profile.js             # 学习画像接口
+│   │   │   ├── resources.js           # 资源生成接口
+│   │   │   ├── learningPath.js        # 学习路径接口
+│   │   │   ├── tutor.js               # 智能辅导接口
+│   │   │   ├── assessment.js          # 学习评估接口
+│   │   │   ├── code.js                # 代码辅助接口
+│   │   │   ├── documents.js           # 文档管理接口
+│   │   │   ├── patient.js             # 患者管理接口
+│   │   │   ├── talk.js                # 对话管理接口
+│   │   │   ├── learning.js            # 学习行为接口
+│   │   │   └── user.js                # 用户认证接口
+│   │   ├── components/
+│   │   │   ├── workspace/             # 工作区组件
+│   │   │   │   ├── ChatWorkspace.vue  # 对话工作区
+│   │   │   │   ├── LearningWorkspace.vue # 学习工作区
+│   │   │   │   ├── ThinkingPanel.vue  # 思考步骤折叠面板
+│   │   │   │   ├── PapersSidebar.vue  # 文献侧边栏
+│   │   │   │   ├── PatientWorkspace.vue # 患者工作区
+│   │   │   │   └── WorkspaceTabs.vue  # 工作区标签页
+│   │   │   ├── form/                  # 表单组件
+│   │   │   │   ├── LoginForm.vue      # 登录表单
+│   │   │   │   ├── RegisterForm.vue   # 注册表单
+│   │   │   │   └── EditForm.vue       # 编辑表单
+│   │   │   ├── PdfPreviewModal.vue    # PDF 预览弹窗
+│   │   │   ├── AvatarUpload.vue       # 头像上传
+│   │   │   └── LoadingModel.vue       # 模型加载动画
+│   │   ├── views/                     # 页面视图
+│   │   │   ├── login.vue              # 登录页
+│   │   │   ├── home.vue               # 主页布局
+│   │   │   ├── profile.vue            # 学习画像页
+│   │   │   ├── resources.vue          # 资源生成页
+│   │   │   ├── learning-path.vue      # 学习路径页
+│   │   │   ├── tutor.vue              # 智能辅导页
+│   │   │   ├── assessment.vue         # 学习评估页
+│   │   │   └── talk.vue               # 对话页
+│   │   ├── stores/                    # Pinia 状态管理
+│   │   │   ├── user.js                # 用户状态（Token/认证）
+│   │   │   └── theme.js               # 主题状态
+│   │   ├── utils/                     # 工具函数
+│   │   │   ├── request.js             # Axios 请求封装
+│   │   │   ├── imageCompress.js       # 图片压缩
+│   │   │   ├── referenceParser.js     # 文献引用解析
+│   │   │   └── pause.js               # 流式暂停控制
+│   │   └── router/index.js            # 路由配置
+│   └── package.json
+│
+├── backend/ai/MyServer/               # 后端服务层（Java Spring Boot）
+│   ├── src/main/java/com/it/
+│   │   ├── controller/                # REST 控制器
+│   │   │   ├── LoginController.java   # 登录注册
+│   │   │   ├── ProfileController.java # 学习画像
+│   │   │   ├── ResourceController.java # 资源生成
+│   │   │   ├── LearningPathController.java # 学习路径
+│   │   │   ├── TutorController.java   # 智能辅导
+│   │   │   ├── AssessmentController.java # 学习评估
+│   │   │   ├── CodeController.java    # 代码辅助
+│   │   │   ├── DocumentController.java # 文档管理
+│   │   │   ├── CourseController.java  # 课程管理
+│   │   │   ├── QuesController.java    # 题目管理
+│   │   │   ├── UploadController.java  # 文件上传
+│   │   │   ├── MonitorController.java # 系统监控
+│   │   │   └── InitialPageController.java # 首页数据
+│   │   ├── service/                   # 业务逻辑层
+│   │   │   ├── AIStreamingService.java    # AI 流式调用接口
+│   │   │   ├── impl/AIStreamingServiceImpl.java # WebClient 流式转发实现
+│   │   │   ├── impl/ConversationPersistenceService.java # 对话持久化
+│   │   │   └── OssDocumentService.java    # OSS 文档服务
+│   │   ├── cache/
+│   │   │   └── SSEEventCache.java     # SSE 事件缓存（断线续传）
+│   │   ├── config/                    # 配置类
+│   │   │   ├── SecurityConfig.java    # Spring Security 配置
+│   │   │   ├── WebClientConfig.java   # WebClient 流式调用配置
+│   │   │   ├── RedissonConfig.java    # Redisson 分布式限流
+│   │   │   └── OssConfig.java         # 阿里云 OSS 配置
+│   │   ├── pojo/                      # 实体类
+│   │   ├── po/uo/                     # 请求参数对象
+│   │   ├── po/vo/                     # 响应视图对象
+│   │   ├── mapper/                    # MyBatis-Plus Mapper
+│   │   └── utils/                     # JWT、OSS、IP 工具
+│   ├── src/main/resources/
+│   │   ├── application.yml            # 主配置
+│   │   ├── application-dev.yml        # 开发环境配置
+│   │   ├── application-prod.yml       # 生产环境配置
+│   │   └── db/schema_additions.sql    # 数据库增量脚本
+│   ├── learningo-agents.sql           # 完整数据库初始化脚本
+│   └── pom.xml
+│
+├── model/                             # 模型推理层（Python FastAPI）
+│   ├── app/
+│   │   ├── main.py                    # FastAPI 入口（所有 API 端点定义）
+│   │   ├── agents/
+│   │   │   ├── orchestrators/
+│   │   │   │   ├── clinical_graph.py  # LangGraph StateGraph 图定义
+│   │   │   │   ├── qwen_agent.py      # LearningAgent 主推理入口
+│   │   │   │   └── nodes/             # 图节点实现
+│   │   │   │       ├── intent_node.py     # 意图分类 + 难度评分
+│   │   │   │       ├── analysis_node.py   # 结构化需求分析
+│   │   │   │       ├── retrieve_node.py   # Hybrid RAG 证据检索
+│   │   │   │       ├── reason_node.py     # 多智能体协同推理 + 辩论仲裁
+│   │   │   │       ├── validate_node.py   # 质量校验 + 退火反思
+│   │   │   │       └── report_node.py     # 报告生成 + 学习激励
+│   │   │   ├── assistant.py           # LearningAssistant（RAG 检索封装）
+│   │   │   ├── core/
+│   │   │   │   ├── schema.py          # LearningState 状态模型（22 字段）
+│   │   │   │   ├── decorators.py      # 装饰器
+│   │   │   │   ├── exceptions.py      # 自定义异常
+│   │   │   │   └── result.py          # 结果封装
+│   │   │   ├── infra/
+│   │   │   │   ├── reranker.py        # 多模型 Rerank 容灾
+│   │   │   │   └── base_reranker.py   # Reranker 基类
+│   │   │   ├── services/
+│   │   │   │   ├── retrieval_service.py   # 证据检索服务
+│   │   │   │   ├── query_service.py       # 查询服务
+│   │   │   │   └── synthesis_service.py   # 意见综合服务
+│   │   │   ├── pipelines/
+│   │   │   │   └── rag_pipeline.py    # RAG 管道
+│   │   │   └── utils/
+│   │   │       ├── llm_helper.py      # LLM 调用辅助
+│   │   │       ├── json_parser.py     # JSON 解析
+│   │   │       ├── retry.py           # 重试机制
+│   │   │       └── text_utils.py      # 文本工具
+│   │   ├── rag/
+│   │   │   ├── retrievers.py          # HybridRetriever（向量 + BM25）
+│   │   │   ├── retrieve.py            # UnifiedSearchEngine 统一检索
+│   │   │   ├── qa_generator.py        # QA 对自建引擎
+│   │   │   └── data_loader.py         # PDF 文档加载
+│   │   ├── services/
+│   │   │   ├── vision_service.py      # 多模态影像识别服务
+│   │   │   └── pubmed_service.py      # PubMed 文献检索服务
+│   │   ├── config/
+│   │   │   ├── expert_config.yaml     # 8 专家智能体配置
+│   │   │   ├── rules_config.yaml      # 校验规则 + 退火策略
+│   │   │   ├── report_templates.yaml  # 5 种报告模板
+│   │   │   ├── prompts.yaml           # Prompt 模板库
+│   │   │   ├── limits_config.yaml     # 参数上限配置
+│   │   │   └── config_loader.py       # 配置加载器（单例管理）
+│   │   └── utils/
+│   │       ├── task_manager.py        # AsyncTaskManager 后台任务管理
+│   │       ├── context_summary.py     # ConversationSummaryService
+│   │       ├── naming_model.py        # 对话命名模型
+│   │       ├── token_aggregator.py    # Token 聚合
+│   │       └── error_codes.py         # 错误码定义
+│   ├── data/documents/                # 课程 PDF 文献库（12 篇脑卒中指南）
+│   ├── tests/                         # 测试用例
+│   ├── requirements.txt               # Python 依赖
+│   ├── start.bat                      # Windows 快速启动脚本
+│   └── start.sh                       # Linux 快速启动脚本
+│
+└── docs/                              # 项目文档
+    ├── API_SPEC.md                    # 接口规范文档
+    └── 多智能体个性化学习系统接口文档.md  # 中文接口文档
+```
+
 ---
 
 ## 全栈系统架构与技术矩阵
@@ -52,9 +220,9 @@
 
 | 架构层级 | 核心技术栈 | 核心设计职责 |
 | --- | --- | --- |
-| 前端交互层<br>(Frontend) | Vue 3.5 (Composition API) <br>• Vite 7.1 • Pinia 3.0 • SCSS <br>• Fetch / ReadableStream <br>• marked • DOMPurify • morphdom <br>• pdfjs-dist • vue-pdf-embed • NProgress | 以用户体验为核心，持续接收后端流式推送并实时打字机渲染。支持 Markdown 渲染、多模态内容卡片化展示、ThinkingPanel 思考步骤折叠展示、学习路径可视化、PDF 在线预览、图片压缩上传。 |
+| 前端交互层<br>(Frontend) | Vue 3.5 (Composition API) <br>• Vite 7.1 • Pinia 3.0 • SCSS <br>• Fetch / ReadableStream <br>• marked 17 • DOMPurify • morphdom <br>• pdfjs-dist • vue-pdf-embed • NProgress | 以用户体验为核心，持续接收后端流式推送并实时打字机渲染。支持 Markdown 渲染、多模态内容卡片化展示、ThinkingPanel 思考步骤折叠展示、学习路径可视化、PDF 在线预览、图片压缩上传。 |
 | 后端服务层<br>(Backend) | Java 21 • Spring Boot 3.3.13 <br>• Spring WebFlux • Spring Security <br>• Redis • Redisson 3.27 <br>• MySQL 8.0 • MyBatis-Plus 3.5.5 <br>• Aliyun OSS • Hutool • JWT | 采用响应式编程模型支持高并发吞吐。通过 JWT 实现身份认证与安全控制，利用 Redisson 分布式限流与并发信号量控制，通过 WebClient 对底层 Python 模型服务进行流式非阻塞调用与转发，SSEEventCache 支持断线续传。 |
-| 模型推理层<br>(Model) | Python 3.11+ • FastAPI 0.128 <br>• LangGraph 0.2.20 • LangChain 0.2.16 <br>• Qwen-Max/Plus/Turbo <br>• ChromaDB 0.5 • gte-rerank <br>• DashScope SDK • PyJWT <br>• qwen-vl-max（多模态视觉） | 统一入口加载大语言模型、混合检索引擎与多智能体推理模块。通过异步生成器持续输出标准事件格式（node_start, token, node_done, done），实现高效流式通信。JWT 双向认证保障服务间调用安全。 |
+| 模型推理层<br>(Model) | Python 3.11+ • FastAPI 0.128 <br>• LangGraph 0.2.20 • LangChain 0.2.16 <br>• Qwen-Max/Plus/Turbo <br>• ChromaDB 0.5 • gte-rerank <br>• DashScope SDK • PyJWT <br>• qwen-vl-max（多模态视觉） <br>• PubMed E-utilities（文献检索） | 统一入口加载大语言模型、混合检索引擎与多智能体推理模块。通过异步生成器持续输出标准事件格式（node_start, token, node_done, done），实现高效流式通信。JWT 双向认证保障服务间调用安全。集成多模态影像识别与 PubMed 文献检索扩展能力。 |
 
 ### 全链路流式数据管道 (SSE Pipeline)
 
@@ -260,138 +428,32 @@
 * **闭环优化**：评估结果自动触发学习路径调整和资源推送策略更新（`/model/evaluation/optimize`）
 * **学习行为采集**：支持提交学习行为数据（学习时长、资源使用、练习结果等）
 
----
+### 6. 多模态影像识别与辅助分析
 
-## 项目目录结构
+系统集成 **qwen-vl-max** 多模态视觉大模型，支持学生在对话中上传医学影像、课件截图、代码截图等图片，实现多模态辅助分析：
 
-```
-learning-multi-agent-system/
-├── backend/                         # 后端项目 (Spring Boot 3.3)
-│   └── ai/MyServer/
-│       ├── src/main/java/com/it/
-│       │   ├── controller/          # 控制层（14 个控制器）
-│       │   │   ├── ProfileController.java       # 画像对话（SSE 流式）
-│       │   │   ├── ResourceController.java      # 资源生成（SSE 流式）
-│       │   │   ├── LearningPathController.java  # 学习路径管理
-│       │   │   ├── TutorController.java         # 智能辅导（SSE 流式）
-│       │   │   ├── AssessmentController.java    # 学习评估（SSE 流式）
-│       │   │   ├── CodeController.java          # 代码执行
-│       │   │   ├── CourseController.java        # 课程管理
-│       │   │   ├── DocumentController.java      # 文档管理
-│       │   │   ├── LoginController.java         # 登录注册
-│       │   │   ├── QuesController.java          # 问题管理
-│       │   │   ├── UploadController.java        # 文件上传
-│       │   │   ├── MonitorController.java       # 系统监控
-│       │   │   ├── InitialPageController.java   # 首页数据
-│       │   │   └── ChangeKeyController.java     # 密码修改
-│       │   ├── service/             # 业务逻辑层
-│       │   │   ├── AIStreamingService.java      # AI 流式服务接口
-│       │   │   ├── impl/
-│       │   │   │   ├── AIStreamingServiceImpl.java  # 流式核心实现（WebClient 调用 Python 服务）
-│       │   │   │   └── ConversationPersistenceService.java  # 对话持久化
-│       │   │   └── OssDocumentService.java      # OSS 文档服务
-│       │   ├── mapper/              # MyBatis-Plus Mapper（14 个）
-│       │   ├── po/                  # 持久化对象
-│       │   │   ├── dto/             # 数据传输对象（UserDTO）
-│       │   │   ├── uo/              # 请求参数对象（15 个：ProfileConversationParam, ResourceGenerateParam, TutorChatParam 等）
-│       │   │   └── vo/              # 响应视图对象（11 个：AiAnalyzeVO, AiOpinionVO, InitialPageVO 等）
-│       │   ├── pojo/                # 实体类
-│       │   │   ├── StudentProfile.java           # 学生画像（含 dimensions JSON 字段）
-│       │   │   ├── LearningPath.java             # 学习路径
-│       │   │   ├── LearningPathStepEntity.java   # 学习步骤
-│       │   │   ├── LearningResource.java         # 学习资源
-│       │   │   ├── LearningBehaviorRecord.java   # 学习行为记录
-│       │   │   ├── EvalReport.java               # 评估报告
-│       │   │   ├── Talk.java                     # 对话记录
-│       │   │   └── ...
-│       │   ├── config/              # 配置类
-│       │   │   ├── SecurityConfig.java           # 安全配置（JWT + 路径权限）
-│       │   │   ├── WebClientConfig.java          # WebClient 配置（Python 服务地址）
-│       │   │   ├── RedissonConfig.java           # Redisson 配置（分布式限流）
-│       │   │   ├── JacksonConfig.java            # Jackson 序列化配置
-│       │   │   ├── JwtConfig.java                # JWT 配置
-│       │   │   ├── MybatisPlusConfig.java        # MyBatis-Plus 配置
-│       │   │   ├── OssConfig.java                # 阿里云 OSS 配置
-│       │   │   ├── TransactionConfig.java        # 事务配置
-│       │   │   └── WebConfig.java                # Web 跨域配置
-│       │   ├── cache/               # SSEEventCache（SSE 事件滑动窗口缓存 + Last-Event-ID 断线续传）
-│       │   ├── interceptor/         # JWT 拦截器（Tokeninterceptor 校验 + RefreshTokenInterceptor 自动续期）
-│       │   ├── handler/             # GlobalExceptionHandler（全局异常处理）
-│       │   └── utils/               # 工具类（JWT / AliOssUpload / IpUtil / ThreadLocalUtil）
-│       ├── src/main/resources/
-│       │   ├── application.yml           # 主配置（含限流/熔断/OSS/AI 服务配置）
-│       │   ├── application-dev.yml       # 开发环境配置
-│       │   ├── application-prod.yml      # 生产环境配置
-│       │   ├── db/schema_additions.sql   # 数据库增量建表脚本
-│       │   └── logback.xml               # 日志配置
-│       ├── learningo-agents.sql          # 完整数据库初始化脚本
-│       └── pom.xml
-│
-├── model/                           # 模型推理层 (Python FastAPI)
-│   ├── app/
-│   │   ├── main.py                  # FastAPI 服务入口（7 大模块路由 + 7 步资源初始化）
-│   │   ├── agents/                  # 多智能体核心模块
-│   │   │   ├── core/                # 核心定义
-│   │   │   │   ├── schema.py        # LearningState 状态模型（22 个字段）
-│   │   │   │   ├── decorators.py    # 装饰器
-│   │   │   │   ├── exceptions.py    # 异常定义
-│   │   │   │   └── result.py        # 结果封装
-│   │   │   ├── orchestrators/       # 编排层
-│   │   │   │   ├── clinical_graph.py    # LangGraph StateGraph 图构建（7 节点 + 条件路由）
-│   │   │   │   ├── qwen_agent.py        # LearningAgent 流式推理入口（事件翻译 + 流式输出）
-│   │   │   │   └── nodes/               # 图节点实现
-│   │   │   │       ├── base.py          # BaseNode 基类
-│   │   │   │       ├── intent_node.py   # 意图分类节点（7 类意图 + 难度评分）
-│   │   │   │       ├── analysis_node.py # 学习需求分析节点（结构化上下文 + 子问题生成）
-│   │   │   │       ├── retrieve_node.py # Hybrid RAG 检索节点（并行检索 + 证据截断）
-│   │   │   │       ├── reason_node.py   # 多智能体推理节点（动态编排 + 辩论仲裁 + 意见综合）
-│   │   │   │       ├── validate_node.py # 质量校验节点（规则引擎 + LLM 反思 + 退火策略）
-│   │   │   │       └── report_node.py   # 报告生成节点（模板驱动 + 流式输出 + 激励反馈）
-│   │   │   ├── pipelines/           # RAG 管道
-│   │   │   │   └── rag_pipeline.py  # RAGPipeline（查询生成 → 并行检索 → 证据合成）
-│   │   │   ├── services/            # 子服务
-│   │   │   │   ├── query_service.py     # 检索查询生成服务
-│   │   │   │   ├── retrieval_service.py # 证据检索服务（同步/异步并行检索）
-│   │   │   │   └── synthesis_service.py # 证据合成服务
-│   │   │   ├── schemas/             # 数据模型
-│   │   │   │   └── retrieval.py     # 检索相关模型
-│   │   │   ├── infra/               # 基础设施
-│   │   │   │   ├── base_reranker.py # Reranker 基类
-│   │   │   │   └── reranker.py      # Reranker 实现
-│   │   │   ├── utils/               # 工具函数
-│   │   │   │   ├── text_utils.py    # 文本截断工具
-│   │   │   │   ├── json_parser.py   # JSON 解析工具
-│   │   │   │   ├── llm_helper.py    # LLM 调用辅助
-│   │   │   │   └── retry.py         # 重试机制
-│   │   │   ├── bailian/             # 百炼平台集成
-│   │   │   │   └── health_risk_analyzer.py  # 健康风险分析
-│   │   │   ├── assistant.py         # LearningAssistant（RAG 检索 + 快速响应 + 报告生成）
-│   │   │   └── constants.py         # 共享常量（从 limits_config.yaml 读取）
-│   │   ├── config/                  # 配置文件
-│   │   │   ├── config_loader.py     # 配置加载器（6 个管理器单例）
-│   │   │   ├── expert_config.yaml   # 专家智能体配置（8 个专家 + 辩论 + 动态编排）
-│   │   │   ├── rules_config.yaml    # 校验规则配置（质量规则 + 退火策略 + 驳回分类）
-│   │   │   ├── prompts.yaml         # Prompt 模板库
-│   │   │   ├── report_templates.yaml # 报告模板（5 种模式：profile_build/resource_generate/tutor/assessment/learning_path）
-│   │   │   └── limits_config.yaml   # 参数限制配置（子问题数/证据长度/关键词等）
-│   │   ├── rag/                     # 检索增强生成模块
-│   │   │   ├── retrievers.py        # HybridRetriever + UnifiedSearchEngine + DashScopeEmbeddings + BGEReranker
-│   │   │   ├── data_loader.py       # PDF 文档加载与切片
-│   │   │   ├── qa_generator.py      # QA 对自动生成引擎（基于 qwen-turbo，批量合并 chunk 生成）
-│   │   │   └── retrieve.py          # 检索入口
-│   │   ├── services/                # 业务服务
-│   │   │   ├── vision_service.py    # 多模态视觉分析服务（qwen-vl-max，支持图片类型检测 + 流式输出）
-│   │   │   └── pubmed_service.py    # PubMed 文献检索服务
-│   │   └── utils/                   # 工具函数
-│   │       ├── context_summary.py   # 对话上下文摘要服务
-│   │       ├── error_codes.py       # 统一错误码与错误事件构建
-│   │       ├── naming_model.py      # 对话命名模型
-│   │       ├── task_manager.py      # AsyncTaskManager 异步任务管理器
-│   │       ├── token_aggregator.py  # Token 聚合器
-│   │       └── download_models.py   # 模型下载工具
-│   └── data/
-│       └── documents/               # 课程 PDF 文档库（脑卒中相关教学资料）
-```
+* **图片类型自动识别**：`VisionAnalysisService` 根据用户问题关键词自动判断图片类型（`image_report` 课件笔记类 / `image_drug` 代码编程类 / `image_general` 通用医学影像类），匹配不同的分析 Prompt 策略
+* **流式影像分析**：通过 DashScope `MultiModalConversation` API 流式输出分析结果，实时呈现影像解读过程
+* **多图联合分析**：支持单次请求上传多张图片进行联合分析，图片以 Base64 编码传输
+* **与对话流式融合**：影像分析结果无缝融入主对话流式管道，前端通过 `ThinkingPanel` 展示"正在分析图片..."进度
+
+### 7. PubMed 文献检索与循证扩展
+
+系统集成 **PubMed E-utilities API**，支持自动检索国际医学文献数据库，为学习资源生成提供循证医学证据扩展：
+
+* **智能检索**：`PubMedService` 封装 NCBI E-utilities API（esearch + efetch），支持关键词检索与摘要获取
+* **证据等级排序**：内置 8 级证据等级体系（Practice Guideline > Guideline > Meta-Analysis > Systematic Review > RCT > Clinical Trial > Review > Case Reports），自动按证据强度排序
+* **API Key 加速**：配置 PubMed API Key 提升请求速率限制（从 3 次/秒提升至 10 次/秒）
+* **与 RAG 互补**：PubMed 检索结果与本地 ChromaDB 知识库检索结果互补，扩展证据来源覆盖面
+
+### 8. 代码辅助开发
+
+系统提供面向医学生的代码辅助开发能力，支持医学数据分析编程、临床决策支持代码生成与医学 AI 模型实操：
+
+* **代码生成**：根据学习需求生成 Python/SQL 等语言的医学数据分析代码
+* **代码执行**：后端 `CodeController` 提供代码执行沙箱接口（`/api/code/execute`），支持代码运行与调试
+* **代码辅助**：`/api/code/assist` 接口提供代码补全、错误诊断与优化建议
+* **实操案例生成**：资源生成模块支持 `code-practice` 类型，自动生成含测试用例和注释的编程实践案例
 
 ---
 
@@ -502,6 +564,43 @@ FastAPI 服务启动时通过 `lifespan` 上下文管理器执行 7 步资源初
 | `/api/documents/upload` | POST | 文档上传（OSS） |
 | `/api/documents/match` | POST | 文献引用匹配 |
 
+### 前端页面路由映射
+
+| 路由路径 | 页面组件 | 功能说明 |
+| --- | --- | --- |
+| `/login` | `login.vue` | 用户登录/注册 |
+| `/profile` | `profile.vue` | 对话式学习画像构建（8 维度动态画像） |
+| `/resources` | `resources.vue` | 多智能体协同资源生成（7 种资源类型） |
+| `/learning-path` | `learning-path.vue` | 个性化学习路径规划与资源推送 |
+| `/tutor` | `tutor.vue` | 智能辅导（支持图片输入 + 多模态答疑） |
+| `/assessment` | `assessment.vue` | 学习效果评估与反馈 |
+
+> 所有页面均需登录后访问（路由守卫 `router.beforeEach` 校验 Token），未登录自动重定向至 `/login`。
+
+### 数据库表结构概览
+
+系统使用 MySQL 8.0 数据库（库名 `medai`），核心数据表如下：
+
+| 表名 | 说明 | 关键字段 |
+| --- | --- | --- |
+| `user` | 用户信息表 | id, username, password, major, grade, specialty |
+| `student_profile` | 学习画像表 | id, user_id, dimensions(JSON), update_time |
+| `talk` | 对话会话表 | id, user_id, title, create_time |
+| `cont` | 对话消息表 | id, talk_id, content, role(user/assistant), images(Base64 JSON) |
+| `learning_path` | 学习路径表 | id, user_id, course_name, goal, status, total_steps |
+| `learning_path_step` | 学习路径步骤表 | id, path_id, step_order, title, status, actual_hours |
+| `learning_resource` | 学习资源表 | id, title, type, url, content |
+| `step_resource_rel` | 步骤-资源关联表 | id, step_id, resource_id |
+| `learning_behavior_record` | 学习行为记录表 | id, user_id, path_id, step_id, behavior_type, behavior_data |
+| `eval_report` | 评估报告表 | id, user_id, path_id, report_content, create_time |
+| `patient` | 患者信息表 | id, name, history, notes, doctor_id |
+| `ai_opinion` | AI 分析意见表 | id, patient_id, risk_level, suggestions, analysis_details |
+| `health_data` | 健康数据表 | id, patient_id, data_content(JSON) |
+| `learning_material` | 学习资料表 | id, title, category, type, url, content |
+| `ques` | 题目表 | id, course_id, type, content, answer |
+
+> 完整建表脚本见 [learningo-agents.sql](backend/ai/MyServer/learningo-agents.sql)，增量脚本见 [schema_additions.sql](backend/ai/MyServer/src/main/resources/db/schema_additions.sql)。
+
 ---
 
 ## 安全与防幻觉机制
@@ -573,14 +672,27 @@ FastAPI 服务启动时通过 `lifespan` 上下文管理器执行 7 步资源初
 
 ### 环境变量
 
-```bash
-# 必需
-export DASHSCOPE_API_KEY="your-dashscope-api-key"
-export SECRET_KEY="your-jwt-secret-key"
+模型层环境变量配置文件为 `model/.env`，需配置以下变量：
 
-# 可选
-export MEDICAL_DOCS_DIR="/path/to/your/pdf/documents"  # 课程 PDF 文档目录
+```bash
+# 必需 - 阿里云 DashScope API Key（用于 Qwen 大模型、Embedding、Rerank、多模态服务）
+DASHSCOPE_API_KEY="sk-your-dashscope-api-key"
+
+# 必需 - JWT 密钥（需与 Java 后端 application-dev.yml 中的 shared-jwt-secret 保持一致）
+SECRET_KEY="your-jwt-secret-key"
+
+# 可选 - DeepSeek API Key（备用 LLM 服务）
+DEEPSEEK-API-KEY="sk-your-deepseek-api-key"
+
+# 可选 - 课程 PDF 文档目录（默认使用 model/data/documents/）
+MEDICAL_DOCS_DIR="/path/to/your/pdf/documents"
 ```
+
+后端服务环境变量通过 `application-dev.yml`（开发环境）或 `application-prod.yml`（生产环境）配置，主要包括：
+- 数据库连接（`aiserver.datasource.*`）
+- Redis 连接（`aiserver.redis.*`）
+- AI 服务地址与 JWT 共享密钥（`aiserver.ai-api.*`）
+- 阿里云 OSS 配置（`aiserver.alioss.*`）
 
 ### 第一步：初始化数据库
 
@@ -590,13 +702,29 @@ mysql -u root -p < backend/ai/MyServer/learningo-agents.sql
 
 ### 第二步：启动模型推理服务 (Model)
 
+**方式一：使用快速启动脚本（推荐）**
+
+```bash
+cd model
+
+# Windows
+start.bat
+
+# Linux / macOS
+chmod +x start.sh && ./start.sh
+```
+
+启动脚本会自动检测 Python 环境、虚拟环境、依赖包和 `.env` 配置文件，一键完成环境准备与服务启动。
+
+**方式二：手动启动**
+
 ```bash
 cd model
 pip install -r requirements.txt
 python -m app.main
 ```
 
-模型服务默认在 `http://localhost:8000` 启动，首次启动会自动加载 PDF 文档并构建向量库。
+模型服务默认在 `http://localhost:8000` 启动，首次启动会自动加载 `data/documents/` 目录下的 12 篇脑卒中 PDF 指南并构建 ChromaDB 向量库。启动完成后可访问 `http://localhost:8000/docs` 查看完整 API 文档。
 
 ### 第三步：启动后端服务 (Backend)
 
@@ -637,6 +765,7 @@ npm run dev
 | Redisson | 分布式锁与限流 | Apache 2.0 |
 | 阿里云 OSS | 对象存储服务 | 阿里云协议 |
 | 阿里云百炼平台 | 大模型 API 服务 | 阿里云协议 |
+| PubMed E-utilities | 国际医学文献检索 API（NCBI esearch + efetch） | NLM 公共 API |
 
 > **AI Coding 工具说明**：本项目开发过程中使用了 AI 辅助编程工具进行代码生成与优化，所有 AI 生成内容均经过人工审核与测试验证。
 

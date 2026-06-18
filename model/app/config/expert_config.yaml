@@ -22,14 +22,13 @@ experts:
     priority: 2
     applicable_intents:
       - "profile"
-      - "resource"
       - "assessment"
     min_difficulty: 0.2
 
   # 智能体3：需求分析智能体
   - role: "需求分析智能体"
-    instruction: "请结合脑卒中医学生画像分析学习需求，拆解生成任务，确定需要的脑卒中资源类型和难度级别。"
-    system_prompt: "你是专业的脑卒中学习需求分析师，擅长将脑卒中学习需求拆解为可执行的任务。"
+    instruction: "请分析脑卒中学习需求，拆解生成任务，确定需要的脑卒中资源类型（讲解文档/思维导图/案例集/练习题/代码实操）和难度级别。重点识别目标知识点、核心概念和需要覆盖的机制流程。"
+    system_prompt: "你是专业的脑卒中学习需求分析师，擅长将脑卒中学习需求拆解为可执行的内容生成任务。"
     priority: 3
     applicable_intents:
       - "resource"
@@ -150,7 +149,6 @@ dynamic_orchestration:
       - "特征抽取智能体"
       - "学习激励智能体"
     resource:
-      - "画像对话智能体"
       - "需求分析智能体"
       - "文档撰写智能体"
       - "题目生成智能体"

@@ -19,11 +19,15 @@ class ReportNode(BaseNode):
     async def run(self, state: LearningState) -> Dict:
         logger.info(f"[report] 开始执行报告生成节点")
         logger.info(f"[report] 报告模式: {state['report_mode']}")
+        logger.info(f"[report] 意图类型: {state.get('intent_type', 'N/A')}")
         logger.info(f"[report] 提案长度: {len(state['proposal']) if state['proposal'] else 0}")
         logger.info(f"[report] 批判长度: {len(state['critique']) if state['critique'] else 0}")
         logger.info(f"[report] 证据长度: {len(state['evidence']) if state['evidence'] else 0}")
         logger.info(f"[report] 校验状态: {state['validation_passed']}")
         logger.info(f"[report] 反思次数: {state['reflection_count']}")
+
+        report_mode = state.get('report_mode', 'emergency')
+        logger.info(f"[report] 使用模板: {report_mode}")
 
         if state['user_questions']:
             logger.info(f"[report] 存在用户问题，直接返回提案")
@@ -66,14 +70,33 @@ class ReportNode(BaseNode):
             motivational_text = f"\n\n💡 **学习激励**: {motivational_feedback}\n\n"
             logger.info(f"[report] 添加学习激励反馈到报告")
 
-        report_template = self.report_manager.get_template(state['report_mode'])
-        prompt_text = report_template.format(
-            context=context_str,
-            all_info=state['all_info'] or "无历史记录",
-            evidence=state['evidence'] or "未检索到相关证据",
-            proposal=truncate_text(state['proposal'], MAX_PROPOSAL_CHARS) or "无",
-            critique=truncate_text(state['critique'], MAX_CRITIQUE_CHARS) or "无批判意见",
-        )
+        report_template = self.report_manager.get_template(report_mode)
+
+        if not report_template:
+            logger.warning(f"[report] 模板为空: report_mode={report_mode}，使用 emergency 模板")
+            report_template = self.report_manager.get_template("emergency")
+
+        logger.info(f"[report] 模板内容前100字: {report_template[:100]}")
+
+        try:
+            prompt_text = report_template.format(
+                context=context_str,
+                all_info=state['all_info'] or "无历史记录",
+                evidence=state['evidence'] or "未检索到相关证据",
+                proposal=truncate_text(state['proposal'], MAX_PROPOSAL_CHARS) or "无",
+                critique=truncate_text(state['critique'], MAX_CRITIQUE_CHARS) or "无批判意见",
+            )
+        except KeyError as e:
+            logger.error(f"[report] 模板格式化失败！模板中包含非法占位符: {e}，report_mode={report_mode}")
+            logger.error(f"[report] 模板内容: {report_template[:500]}")
+            emergency_template = self.report_manager.get_template("emergency")
+            prompt_text = emergency_template.format(
+                context=context_str,
+                all_info=state['all_info'] or "无历史记录",
+                evidence=state['evidence'] or "未检索到相关证据",
+                proposal=truncate_text(state['proposal'], MAX_PROPOSAL_CHARS) or "无",
+                critique=truncate_text(state['critique'], MAX_CRITIQUE_CHARS) or "无批判意见",
+            )
 
         if warning_text:
             prompt_text = prompt_text.replace("### 个性化建议", f"### 质量警告{warning_text}### 个性化建议")
@@ -84,9 +107,19 @@ class ReportNode(BaseNode):
         logger.info(f"[report] Prompt长度: {len(prompt_text)}")
         logger.info(f"[report] 开始生成报告")
 
+        template_config = self.report_manager.get_template_config(report_mode)
+        role_text = template_config.get("role", "") if template_config else ""
+
+        human_content = prompt_text
+        if role_text:
+            human_content = f"{role_text}\n\n{prompt_text}"
+
+        logger.info(f"[report] role_text长度: {len(role_text) if role_text else 0}")
+        logger.info(f"[report] HumanMessage前100字: {human_content[:100]}")
+
         messages = [
             SystemMessage(content=self.report_manager.system_role),
-            HumanMessage(content=prompt_text),
+            HumanMessage(content=human_content),
         ]
         report = ""
         chunk_count = 0

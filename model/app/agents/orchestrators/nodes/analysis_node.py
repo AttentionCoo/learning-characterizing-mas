@@ -11,11 +11,92 @@ logger = logging.getLogger(__name__)
 
 class AnalysisNode(BaseNode):
 
+    INTENT_CONTEXT_TEMPLATES = {
+        "resource": json.dumps({
+            "目标知识点": "",
+            "资源类型": "",
+            "内容范围": "",
+            "难度级别": "",
+            "核心概念列表": [],
+            "需要覆盖的机制/流程": [],
+            "适用场景": "",
+            "个性化适配要点": {
+                "知识基础": "",
+                "认知偏好": "",
+                "目标水平": ""
+            }
+        }, ensure_ascii=False, indent=2),
+
+        "profile": json.dumps({
+            "基本信息": {"专业": "", "年级": "", "当前课程": ""},
+            "学习需求": "",
+            "主要问题": [],
+            "知识水平评估": {},
+            "认知风格": "",
+            "学习目标": [],
+            "易错点": [],
+            "学习节奏": {},
+            "资源偏好": []
+        }, ensure_ascii=False, indent=2),
+
+        "tutor": json.dumps({
+            "核心问题": "",
+            "相关概念": [],
+            "理解障碍": "",
+            "当前理解水平": "",
+            "期望解答方式": "",
+            "个性化适配要点": {
+                "知识基础": "",
+                "认知偏好": ""
+            }
+        }, ensure_ascii=False, indent=2),
+
+        "assessment": json.dumps({
+            "评估对象": "",
+            "评估维度": [],
+            "当前水平": "",
+            "薄弱环节": [],
+            "进步空间": [],
+            "个性化适配要点": {
+                "知识基础": "",
+                "学习目标": ""
+            }
+        }, ensure_ascii=False, indent=2),
+
+        "learning_path": json.dumps({
+            "学习目标": "",
+            "当前起点": "",
+            "目标水平": "",
+            "可用时间": "",
+            "关键里程碑": [],
+            "前置知识": [],
+            "个性化适配要点": {
+                "知识基础": "",
+                "学习节奏": "",
+                "资源偏好": ""
+            }
+        }, ensure_ascii=False, indent=2),
+    }
+
+    DEFAULT_CONTEXT_TEMPLATE = json.dumps({
+        "核心需求": "",
+        "关键信息": [],
+        "个性化适配要点": {}
+    }, ensure_ascii=False, indent=2)
+
+    INTENT_TASK_LABELS = {
+        "resource": "学习资源内容生成",
+        "profile": "学生画像构建与更新",
+        "tutor": "个性化问题辅导",
+        "assessment": "学习效果评估",
+        "learning_path": "学习路径规划",
+    }
+
     def __init__(self, llm):
         self.llm = llm
 
     async def run(self, state: LearningState) -> Dict:
-        analysis = await self._unified_analysis(state["case_text"], state["all_info"])
+        analysis = await self._unified_analysis(state)
         learning_questions = analysis.get("learning_questions", ["该学生当前最紧急的学习问题和辅导要点"])
 
         return {
@@ -26,27 +107,23 @@ class AnalysisNode(BaseNode):
             "user_questions": analysis.get("user_questions", []),
         }
 
-    async def _unified_analysis(self, case_text: str, all_info: str) -> Dict[str, Any]:
-        _PROFILE_KW = {"专业", "年级", "课程", "画像", "学习风格", "认知风格", "偏好"}
-        _RESOURCE_KW = {"资源", "文档", "题目", "思维导图", "视频", "代码", "练习", "生成"}
-        _TUTOR_KW = {"不懂", "为什么", "怎么", "如何", "解释", "区别", "原理", "方法", "辅导"}
-        _ASSESSMENT_KW = {"评估", "测试", "成绩", "效果", "掌握程度", "水平"}
-        _PATH_KW = {"路径", "规划", "计划", "安排", "进度", "顺序"}
+    async def _unified_analysis(self, state: LearningState) -> Dict[str, Any]:
+        intent_type = state.get('intent_type', 'profile')
+        case_text = state.get('case_text', '')
+        all_info = state.get('all_info', '')
 
-        if any(kw in case_text for kw in _PROFILE_KW):
-            intent_hint = "画像构建方向：重点生成知识基础、认知风格、学习目标、易错点、学习节奏、资源偏好类问题。"
-        elif any(kw in case_text for kw in _RESOURCE_KW):
-            intent_hint = "资源生成方向：重点生成资源类型、难度匹配、知识点覆盖、个性化适配类问题。"
-        elif any(kw in case_text for kw in _TUTOR_KW):
-            intent_hint = "辅导答疑方向：重点生成概念理解、解题思路、易错点提示类问题。"
-        elif any(kw in case_text for kw in _ASSESSMENT_KW):
-            intent_hint = "学习评估方向：重点生成知识掌握度、技能水平、学习投入度类问题。"
-        elif any(kw in case_text for kw in _PATH_KW):
-            intent_hint = "路径规划方向：重点生成学习阶段、时间安排、目标分解类问题。"
-        else:
-            intent_hint = "综合分析方向：按学习需求优先级生成最需分析的问题，优先覆盖核心需求。"
+        context_template = self.INTENT_CONTEXT_TEMPLATES.get(
+            intent_type,
+            self.DEFAULT_CONTEXT_TEMPLATE
+        )
 
-        prompt = f"""你是高等教育学习分析专家。请对以下学生信息完成三项任务，一次性输出。
+        task_label = self.INTENT_TASK_LABELS.get(intent_type, "学习需求分析")
+
+        intent_hint = self._get_intent_hint(intent_type, case_text)
+
+        prompt = f"""你是高等教育学习分析专家。请对以下学生信息完成分析任务，一次性输出。
+
+【任务类型：{task_label}】
 
 【学生输入】
 {case_text}
@@ -57,17 +134,7 @@ class AnalysisNode(BaseNode):
 请直接输出 JSON（不要用 markdown 代码块包裹）：
 
 {{
-    "structured_context": {{
-        "基本信息": {{"专业": "", "年级": "", "当前课程": ""}},
-        "学习需求": "",
-        "主要问题": [],
-        "知识水平评估": {{}},
-        "认知风格": "",
-        "学习目标": [],
-        "易错点": [],
-        "学习节奏": {{}},
-        "资源偏好": []
-    }},
+    "structured_context": {context_template},
     "complexity": "low/medium/high/critical",
     "key_risks": ["最紧迫的学习问题1", "最紧迫的学习问题2"],
     "learning_questions": [
@@ -81,7 +148,7 @@ class AnalysisNode(BaseNode):
 }}
 
 要求：
-- structured_context: 提取所有学习相关信息
+- structured_context: 严格按照上方JSON模板结构输出，不要添加模板中没有的字段
 - complexity: critical=学习困境严重
 - learning_questions: 【重要】{intent_hint} 问题必须用中文，每条30字以内，用于检索教育资料
 - user_questions: 若输入中学生明确提出了若干具体问题，请将每个问题原文提取为字符串数组；若无，则返回空数组。"""
@@ -100,6 +167,17 @@ class AnalysisNode(BaseNode):
             "learning_questions": ["该学生当前最紧急的学习问题和辅导要点"],
             "user_questions": [],
         }
+
+    @staticmethod
+    def _get_intent_hint(intent_type: str, case_text: str) -> str:
+        hints = {
+            "resource": "资源生成方向：重点生成资源类型、难度匹配、知识点覆盖、个性化适配类问题。",
+            "profile": "画像构建方向：重点生成知识基础、认知风格、学习目标、易错点、学习节奏、资源偏好类问题。",
+            "tutor": "辅导答疑方向：重点生成概念理解、解题思路、易错点提示类问题。",
+            "assessment": "学习评估方向：重点生成知识掌握度、技能水平、学习投入度类问题。",
+            "learning_path": "路径规划方向：重点生成学习阶段、时间安排、目标分解类问题。",
+        }
+        return hints.get(intent_type, "综合分析方向：按学习需求优先级生成最需分析的问题，优先覆盖核心需求。")
 
     def _parse_json(self, text: str, default=None):
         content = (text or "").strip()

@@ -62,6 +62,7 @@ class LearningGraphBuilder:
             "intent",
             self._route_intent,
             {
+                "non_stroke": "reject",
                 "irrelevant": "reject",
                 "knowledge": "knowledge_answer",
                 "profile": "analysis",
@@ -102,26 +103,29 @@ class LearningGraphBuilder:
 
     def _route_intent(self, state: LearningState) -> str:
         t = state['intent_type']
+        if t == "non_stroke":
+            return "non_stroke"
         valid_types = {"profile", "resource", "tutor", "assessment", "learning_path", "consultation", "knowledge"}
         if t in valid_types:
             return t
         return "irrelevant"
 
     async def _reject_node(self, state: LearningState) -> dict:
-        return {"report": "请提供教育学习相关的查询，此输入与学习无关。"}
+        return {"report": "您的问题与脑卒中学习不相关，本系统仅支持脑卒中（中风）相关的学习问答，包括脑卒中的病因、症状、诊断、治疗、康复、预防、护理、并发症等方面。请提出与脑卒中学习相关的问题。"}
 
     async def _knowledge_node(self, state: LearningState) -> dict:
         if not self.llm_critic:
             return {"report": "知识回答服务未就绪"}
 
-        knowledge_prompt = f"""你是高等教育个性化学习顾问。请基于教育理论和方法，直接回答以下学习相关通用问题。
+        knowledge_prompt = f"""你是脑卒中（中风）领域的专业学习顾问。请基于脑卒中医学知识和临床指南，直接回答以下脑卒中相关的通用问题。
 
 问题：{state['case_text']}
 
 回答要求：
 - 用中文，简洁专业
+- 内容必须围绕脑卒中（中风）相关
 - 禁止绝对性结论
-- 如果需要，引用权威教育理论或方法"""
+- 如果需要，引用权威脑卒中指南或研究"""
 
         messages = [
             SystemMessage(content=self.report_manager.system_role if self.report_manager else "你是一位专业的教育顾问。"),

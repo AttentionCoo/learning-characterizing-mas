@@ -125,6 +125,12 @@ class ReportTemplateManager:
         entry = self._templates.get(mode, {})
         return entry.get("name", mode)
 
+    def get_template_config(self, mode: str = "emergency") -> dict:
+        entry = self._templates.get(mode, {})
+        if not entry:
+            entry = self._templates.get("emergency", {})
+        return entry
+
     def list_modes(self) -> list:
         return list(self._templates.keys())
 

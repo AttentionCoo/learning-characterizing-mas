@@ -71,7 +71,11 @@ class LearningAgent:
         all_info: str = "",
         report_mode: str = "emergency",
         show_thinking: bool = True,
+        profile_summary: str = "",
     ) -> AsyncGenerator[Dict, None]:
+        if not profile_summary and all_info:
+            profile_summary = all_info
+
         initial_state: LearningState = {
             "case_text": case_text,
             "all_info": all_info,
@@ -96,6 +100,7 @@ class LearningAgent:
             "debate_history": [],
             "active_experts": [],
             "motivational_feedback": "",
+            "profile_summary": profile_summary,
         }
         streamed_nodes: set = set()
 

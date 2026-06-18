@@ -41,7 +41,7 @@ class ReasonNode(BaseNode):
         active_experts = self._resolve_active_experts(state)
         logger.info(f"[reason] 本轮参与专家: {active_experts}")
 
-        case_info = f"学生信息：{state['case_text']}\n上下文：{state['all_info']}\n参考证据：{state['evidence']}"
+        case_info = self._build_case_info(state)
 
         if state['validation_feedback']:
             correction_hint = self._build_correction_hint(state)
@@ -112,6 +112,10 @@ class ReasonNode(BaseNode):
             "prompt_template",
             "作为教学总监，请统筹以下各位智能体的意见，并给出最终综合提案(Proposal)和潜在问题批评(Critique)：\n{expert_opinions}\n请将输出分为两部分，用 \"### PROPOSAL ###\" 和 \"### CRITIQUE ###\" 隔开。"
         ).format(expert_opinions=synthesis_input)
+
+        intent_type = state.get('intent_type', 'profile')
+        mode_directive = self._get_synthesis_mode_directive(intent_type)
+        synthesis_prompt = f"{mode_directive}\n\n{synthesis_prompt}"
 
         logger.info(f"[reason] 开始调用LLM进行意见综合 (模型: {getattr(self.llm_synthesis, 'model_name', 'unknown')})")
 
@@ -186,6 +190,56 @@ class ReasonNode(BaseNode):
         logger.info(f"[reason] 退火策略: 驳回分类={category}, 修正提示长度={len(correction_prompt)}")
 
         return correction_prompt
+
+    def _build_case_info(self, state: LearningState) -> str:
+        """构建专家推理所需的案例信息，为非画像意图注入画像摘要"""
+        intent_type = state.get('intent_type', 'profile')
+
+        if intent_type == 'resource':
+            case_info = f"【学习需求】{state['case_text']}\n上下文：{state['all_info']}\n参考证据：{state['evidence']}"
+        elif intent_type == 'tutor':
+            case_info = f"【学生问题】{state['case_text']}\n上下文：{state['all_info']}\n参考证据：{state['evidence']}"
+        else:
+            case_info = f"学生信息：{state['case_text']}\n上下文：{state['all_info']}\n参考证据：{state['evidence']}"
+
+        if intent_type != 'profile':
+            profile_summary = state.get('profile_summary', '')
+            if profile_summary:
+                case_info += f"\n\n【学生画像摘要（仅供个性化适配参考）】\n{profile_summary}"
+                case_info += "\n⚠️ 注意：以上画像信息仅供调整内容深度和表达方式参考，不要在输出中分析画像。"
+
+        return case_info
+
+    @staticmethod
+    def _get_synthesis_mode_directive(intent_type: str) -> str:
+        """根据意图类型返回综合汇总的模式指令"""
+        directives = {
+            "resource": (
+                "【模式指令】当前为资源生成模式。\n"
+                "Proposal 必须是知识内容大纲，列出要讲解的核心概念、机制、案例和练习题结构。\n"
+                "禁止在 Proposal 中分析学生画像或学习状态。画像信息仅用于决定内容深度和案例选择。"
+            ),
+            "tutor": (
+                "【模式指令】当前为辅导答疑模式。\n"
+                "Proposal 必须是问题解答思路，列出核心概念解释、推理步骤和易错点提示。\n"
+                "禁止在 Proposal 中分析学生画像。画像信息仅用于调整讲解方式。"
+            ),
+            "assessment": (
+                "【模式指令】当前为学习评估模式。\n"
+                "Proposal 必须是评估结论和改进建议，基于证据量化各维度水平。\n"
+                "画像信息用于定位薄弱环节和个性化改进方向。"
+            ),
+            "learning_path": (
+                "【模式指令】当前为路径规划模式。\n"
+                "Proposal 必须是分阶段学习路径，列出每个阶段的学习内容、资源和达标标准。\n"
+                "画像信息用于确定起点难度和节奏安排。"
+            ),
+            "profile": (
+                "【模式指令】当前为画像构建模式。\n"
+                "Proposal 应基于学生画像维度进行结构化分析。"
+            ),
+        }
+        return directives.get(intent_type, directives["profile"])
 
     def _build_expert_opinions_text(self, roles: list, results: list, agent_weights: Dict) -> str:
         """构建带权重的专家意见文本"""
