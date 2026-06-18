@@ -1,5 +1,5 @@
 ﻿<script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { getResourcesAPI, getResourceDetailAPI, resourceStreamAPI } from '@/api/resources'
@@ -11,9 +11,7 @@ const resourceTypes = [
   { value: 'mindmap', label: '知识体系思维导图', icon: '🧠', color: '#8b5cf6' },
   { value: 'quiz', label: '练习题目', icon: '✏️', color: '#f59e0b' },
   { value: 'reading', label: '临床指南与文献', icon: '📖', color: '#10b981' },
-  { value: 'video_script', label: '教学视频脚本', icon: '🎬', color: '#ef4444' },
   { value: 'case_study', label: '脑卒中临床案例', icon: '🏥', color: '#f97316' },
-  { value: 'ppt', label: '课程PPT', icon: '📊', color: '#6366f1' },
   { value: 'plan', label: '资源设计方案', icon: '📋', color: '#14b8a6' },
 ]
 
@@ -37,6 +35,23 @@ const resourceDetail = ref(null)
 const resourceDetailLoading = ref(false)
 
 const showGenerator = ref(true)
+
+const resultContentRef = ref(null)
+const userScrolled = ref(false)
+
+function onResultScroll() {
+  const el = resultContentRef.value
+  if (!el) return
+  const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+  userScrolled.value = distFromBottom > 80
+}
+
+function scrollToBottom(force = false) {
+  const el = resultContentRef.value
+  if (!el) return
+  if (!force && userScrolled.value) return
+  el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+}
 
 const difficultyOptions = [
   { value: 'beginner', label: '入门' },
@@ -63,6 +78,7 @@ async function handleGenerate() {
   thinkingHint.value = '正在分析学习需求...'
   generatedContent.value = ''
   showGenerator.value = false
+  userScrolled.value = false
 
   let displayText = ''
   const charBuffer = []
@@ -77,6 +93,7 @@ async function handleGenerate() {
       const chars = charBuffer.splice(0, 2)
       displayText += chars.join('')
       generatedContent.value = displayText
+      nextTick(() => scrollToBottom())
       timerId = setTimeout(tick, delay)
     }
     timerId = setTimeout(tick, 0)
@@ -109,6 +126,7 @@ async function handleGenerate() {
     if (timerId !== null) { clearTimeout(timerId); timerId = null }
     generatedContent.value = result.data?.content || displayText
     if (result.data?.talkId) talkId.value = result.data.talkId
+    nextTick(() => scrollToBottom(true))
 
     await fetchResources()
   } catch (error) {
@@ -147,10 +165,12 @@ async function handleSelectResource(id) {
   selectedResource.value = id
   resourceDetailLoading.value = true
   showGenerator.value = false
+  userScrolled.value = false
   try {
     const res = await getResourceDetailAPI(id)
     resourceDetail.value = res.data
     generatedContent.value = res.data?.content || ''
+    nextTick(() => scrollToBottom(true))
   } catch {
     // ignore
   } finally {
@@ -257,7 +277,7 @@ onMounted(() => {
             <span>{{ thinkingHint }}</span>
           </div>
 
-          <div class="result-content markdown-body" v-html="renderMarkdown(generatedContent)"></div>
+          <div ref="resultContentRef" class="result-content markdown-body" @scroll="onResultScroll" v-html="renderMarkdown(generatedContent)"></div>
 
           <div v-if="isGenerating && !generatedContent" class="generating-overlay">
             <div class="gen-spinner"></div>
