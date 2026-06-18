@@ -180,7 +180,7 @@ function handleMouseLeave() {
           <transition name="fade-text">
             <div v-if="!sidebarCollapsed" class="user-info">
               <span class="user-name">{{ userStore.name || '用户' }}</span>
-              <span class="user-logout">退出登录</span>
+              <span class="user-logout" @click.stop="handleLogout">退出登录</span>
             </div>
           </transition>
         </div>
@@ -514,7 +514,12 @@ function handleMouseLeave() {
 .user-logout {
   font-size: 11px;
   color: var(--color-text-weak);
+  cursor: pointer;
   transition: color var(--transition-fast);
+
+  &:hover {
+    color: var(--color-red);
+  }
 
   .user-section:hover & {
     color: var(--color-red);
