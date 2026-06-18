@@ -62,6 +62,7 @@ public class AssessmentController {
         Long userId = ThreadLocalUtil.getCurrentUser().getId();
 
         StringBuilder questionBuilder = new StringBuilder("请为我生成学习效果评估报告：");
+        if (param.getMessage() != null && !param.getMessage().isBlank()) questionBuilder.append("\n补充说明：").append(param.getMessage());
         if (param.getAssessmentType() != null) questionBuilder.append("\n评估类型：").append(param.getAssessmentType());
         if (param.getCourseName() != null) questionBuilder.append("\n课程：").append(param.getCourseName());
         if (param.getTimeRange() != null) {
@@ -77,6 +78,7 @@ public class AssessmentController {
         Flux<String> chatFlux = streamingService
                 .streamChat(userId, talkId, questionBuilder.toString(), upstreamToken, null, "assessment")
                 .map(this::wrapChunkIfNeeded);
+        StringBuilder fullAnswer = new StringBuilder();
 
         Sinks.One<Void> doneSink = Sinks.one();
 
@@ -86,13 +88,20 @@ public class AssessmentController {
                         json("error", mapOf("talkId", finalTalkIdStr, "message", e.getMessage() == null ? "stream error" : e.getMessage())),
                         json("done", mapOf("talkId", finalTalkIdStr, "name", "异常结束"))
                 ))
+                .doOnNext(data -> appendContent(fullAnswer, data))
                 .map(data -> {
                     long seq = eventCache.addEvent(finalTalkIdStr, data);
                     return sseWithId(finalTalkIdStr + ":" + seq, resolveEventName(data), data);
                 });
 
         Flux<ServerSentEvent<String>> dataStream = initSSE.concatWith(chatSSE)
-                .doFinally(signal -> { doneSink.tryEmitEmpty(); eventCache.completeStream(finalTalkIdStr); });
+                .doFinally(signal -> {
+                    if (fullAnswer.length() > 0) {
+                        persistEvaluationReport(userId, param, fullAnswer.toString());
+                    }
+                    doneSink.tryEmitEmpty();
+                    eventCache.completeStream(finalTalkIdStr);
+                });
 
         Flux<ServerSentEvent<String>> heartbeatFlux = Flux.interval(Duration.ofSeconds(15))
                 .map(i -> ServerSentEvent.<String>builder().comment("heartbeat").build())
@@ -169,6 +178,7 @@ public class AssessmentController {
             m.put("reportId", r.getId());
             m.put("title", "学习评估报告");
             m.put("assessmentType", "comprehensive");
+            m.put("type", "comprehensive");
             m.put("score", r.getOverallScore());
             m.put("courseName", "");
             m.put("createTime", r.getCreateTime());
@@ -191,12 +201,15 @@ public class AssessmentController {
         data.put("reportId", report.getId());
         data.put("title", "学习评估报告");
         data.put("assessmentType", "comprehensive");
+        data.put("type", "comprehensive");
         data.put("score", report.getOverallScore());
         data.put("courseName", "");
         data.put("dimensions", report.getDimensions());
         data.put("strengths", report.getStrengths());
         data.put("weaknesses", report.getWeaknesses());
         data.put("suggestions", report.getSuggestions());
+        data.put("scores", buildScoreMap(report));
+        data.put("content", buildReportContent(report));
         data.put("createTime", report.getCreateTime());
         return Result.success(data);
     }
@@ -285,4 +298,113 @@ public class AssessmentController {
     private String json(String type, Map<String, Object> payload) { try { Map<String, Object> root = new HashMap<>(); root.put("type", type); if (payload != null && !payload.isEmpty()) root.putAll(payload); return objectMapper.writeValueAsString(root); } catch (Exception e) { return "{\"type\":\"error\",\"message\":\"json serialize error\"}"; } }
     private Map<String, Object> mapOf(Object k1, Object v1) { Map<String, Object> m = new HashMap<>(); m.put(String.valueOf(k1), v1); return m; }
     private Map<String, Object> mapOf(Object k1, Object v1, Object k2, Object v2) { Map<String, Object> m = new HashMap<>(); m.put(String.valueOf(k1), v1); m.put(String.valueOf(k2), v2); return m; }
+
+    private void persistEvaluationReport(Long userId, AssessmentGenerateParam param, String content) {
+        try {
+            int score = extractScore(content);
+            EvalReport report = new EvalReport();
+            report.setUserId(userId);
+            report.setPeriod("all");
+            report.setOverallScore(score);
+            report.setLevel(resolveLevel(score));
+            report.setDimensions(objectMapper.writeValueAsString(buildDimensions(score, param)));
+            report.setStrengths(objectMapper.writeValueAsString(extractBullets(content, "优势", List.of("学习目标明确", "具备持续学习基础"))));
+            report.setWeaknesses(objectMapper.writeValueAsString(extractBullets(content, "薄弱", List.of("部分知识点需要系统复盘"))));
+            report.setSuggestions(objectMapper.writeValueAsString(extractBullets(content, "建议", List.of("按学习路径持续练习并定期复盘"))));
+            report.setCreateTime(LocalDateTime.now());
+            evalReportMapper.insert(report);
+            log.info("学习评估报告已落库: userId={}, reportId={}, score={}", userId, report.getId(), score);
+        } catch (Exception e) {
+            log.error("学习评估报告落库失败", e);
+        }
+    }
+
+    private int extractScore(String content) {
+        if (content == null) return 75;
+        java.util.regex.Matcher matcher = java.util.regex.Pattern
+                .compile("(\\d{1,3})\\s*(分|/100)")
+                .matcher(content);
+        while (matcher.find()) {
+            int value = Integer.parseInt(matcher.group(1));
+            if (value >= 0 && value <= 100) return value;
+        }
+        return 75;
+    }
+
+    private Map<String, Object> buildDimensions(int score, AssessmentGenerateParam param) {
+        Map<String, Object> dimensions = new LinkedHashMap<>();
+        dimensions.put("知识掌握", Math.max(0, Math.min(100, score)));
+        dimensions.put("临床应用", Math.max(0, Math.min(100, score - 5)));
+        dimensions.put("学习进度", Math.max(0, Math.min(100, score + 3)));
+        dimensions.put("复盘质量", Math.max(0, Math.min(100, score - 8)));
+        if (param.getAssessmentType() != null && !param.getAssessmentType().isBlank()) {
+            dimensions.put("评估类型", param.getAssessmentType());
+        }
+        return dimensions;
+    }
+
+    private List<String> extractBullets(String content, String keyword, List<String> fallback) {
+        if (content == null || content.isBlank() || !content.contains(keyword)) return fallback;
+        List<String> bullets = Arrays.stream(content.split("\\R"))
+                .map(String::trim)
+                .filter(line -> line.matches("^[-*•0-9、.\\s]*.*"))
+                .filter(line -> line.contains(keyword) || line.matches("^[-*•]\\s+.*"))
+                .map(line -> line.replaceFirst("^[-*•0-9.、\\s]+", "").trim())
+                .filter(line -> !line.isBlank())
+                .limit(4)
+                .toList();
+        return bullets.isEmpty() ? fallback : bullets;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> buildScoreMap(EvalReport report) {
+        Map<String, Object> scores = new LinkedHashMap<>();
+        scores.put("综合", report.getOverallScore() == null ? 0 : report.getOverallScore());
+        try {
+            Map<String, Object> dimensions = report.getDimensions() != null
+                    ? objectMapper.readValue(report.getDimensions(), Map.class)
+                    : Map.of();
+            dimensions.forEach((key, value) -> {
+                if (value instanceof Number number) scores.put(key, number.intValue());
+            });
+        } catch (Exception ignored) {}
+        return scores;
+    }
+
+    private String buildReportContent(EvalReport report) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("# 学习评估报告\n\n");
+        sb.append("综合得分：").append(report.getOverallScore() == null ? 0 : report.getOverallScore()).append("分\n\n");
+        sb.append("等级：").append(report.getLevel()).append("\n\n");
+        appendJsonSection(sb, "优势", report.getStrengths());
+        appendJsonSection(sb, "薄弱点", report.getWeaknesses());
+        appendJsonSection(sb, "改进建议", report.getSuggestions());
+        return sb.toString();
+    }
+
+    private void appendJsonSection(StringBuilder sb, String title, String json) {
+        sb.append("## ").append(title).append("\n");
+        try {
+            List<?> list = json != null ? objectMapper.readValue(json, List.class) : List.of();
+            if (list.isEmpty()) {
+                sb.append("- 暂无\n\n");
+                return;
+            }
+            for (Object item : list) sb.append("- ").append(item).append("\n");
+            sb.append("\n");
+        } catch (Exception e) {
+            sb.append("- ").append(json == null ? "暂无" : json).append("\n\n");
+        }
+    }
+
+    private void appendContent(StringBuilder target, String data) {
+        if (data == null) return;
+        try {
+            JsonNode node = objectMapper.readTree(data);
+            String type = node.path("type").asText("");
+            if ("chunk".equals(type) || "result".equals(type)) {
+                target.append(node.path("content").asText(""));
+            }
+        } catch (Exception ignored) {}
+    }
 }

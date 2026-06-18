@@ -13,7 +13,7 @@ const isThinking = ref(false)
 const thinkingHint = ref('')
 const generatedContent = ref('')
 const talkId = ref(null)
-const expandedPhases = ref(new Set([0]))
+const expandedSteps = ref(new Set([0]))
 
 const courseName = ref('')
 const customGoal = ref('')
@@ -39,19 +39,16 @@ async function fetchLearningPath() {
   }
 }
 
-function togglePhase(index) {
-  const s = new Set(expandedPhases.value)
+function toggleStep(index) {
+  const s = new Set(expandedSteps.value)
   if (s.has(index)) s.delete(index)
   else s.add(index)
-  expandedPhases.value = s
+  expandedSteps.value = s
 }
 
-function getPhaseStatus(phase) {
-  if (!phase.tasks?.length) return 'pending'
-  const done = phase.tasks.filter(t => t.status === 'completed').length
-  if (done === phase.tasks.length) return 'completed'
-  if (done > 0) return 'in_progress'
-  return 'pending'
+function normalizeStatus(status) {
+  if (status === 'not_started') return 'pending'
+  return status || 'pending'
 }
 
 function getStatusIcon(status) {
@@ -91,8 +88,7 @@ async function handleGenerate() {
   try {
     const result = await learningPathStreamAPI(
       {
-        talkId: talkId.value,
-        message: customGoal.value || '请为我规划学习路径',
+        goalDescription: customGoal.value || '请为我规划学习路径',
         courseName: courseName.value,
       },
       (chunk) => {
@@ -108,6 +104,7 @@ async function handleGenerate() {
     if (result.data?.talkId) talkId.value = result.data.talkId
 
     await fetchLearningPath()
+    setTimeout(fetchLearningPath, 1200)
   } catch (error) {
     console.error('路径生成失败', error)
     generatedContent.value = '生成失败，请稍后重试。'
@@ -121,20 +118,19 @@ async function handleGenerate() {
 async function toggleTaskStatus(task) {
   const newStatus = task.status === 'completed' ? 'pending' : 'completed'
   try {
-    await updateTaskProgressAPI(task.taskId, { status: newStatus, progress: newStatus === 'completed' ? 100 : 0 })
+    await updateTaskProgressAPI(task.stepId, { status: newStatus === 'pending' ? 'not_started' : newStatus })
     task.status = newStatus
-    task.progress = newStatus === 'completed' ? 100 : 0
+    await fetchLearningPath()
   } catch {
     // ignore
   }
 }
 
 const overallProgress = computed(() => {
-  if (!learningPath.value?.phases?.length) return 0
-  const allTasks = learningPath.value.phases.flatMap(p => p.tasks || [])
-  if (!allTasks.length) return 0
-  const done = allTasks.filter(t => t.status === 'completed').length
-  return Math.round((done / allTasks.length) * 100)
+  const total = learningPath.value?.totalSteps || learningPath.value?.steps?.length || 0
+  if (!total) return 0
+  const completed = learningPath.value?.completedSteps ?? learningPath.value.steps.filter(t => t.status === 'completed').length
+  return Math.round((completed / total) * 100)
 })
 </script>
 
@@ -179,55 +175,57 @@ const overallProgress = computed(() => {
             </div>
             <div class="progress-info">
               <div class="progress-title">总体进度</div>
-              <div class="progress-sub">{{ learningPath.phases?.length || 0 }} 个阶段</div>
+              <div class="progress-sub">{{ learningPath.totalSteps || learningPath.steps?.length || 0 }} 个步骤</div>
             </div>
           </div>
 
           <div class="phases-timeline">
             <div
-              v-for="(phase, pIdx) in learningPath.phases"
+              v-for="(step, pIdx) in learningPath.steps"
               :key="pIdx"
               class="phase-card"
-              :class="{ expanded: expandedPhases.has(pIdx), [getPhaseStatus(phase)]: true }"
+              :class="{ expanded: expandedSteps.has(pIdx), [normalizeStatus(step.status)]: true }"
             >
-              <div class="phase-header" @click="togglePhase(pIdx)">
+              <div class="phase-header" @click="toggleStep(pIdx)">
                 <div class="phase-marker">
                   <div class="marker-dot"></div>
-                  <div v-if="pIdx < learningPath.phases.length - 1" class="marker-line"></div>
+                  <div v-if="pIdx < learningPath.steps.length - 1" class="marker-line"></div>
                 </div>
                 <div class="phase-info">
-                  <div class="phase-name">{{ phase.phaseName }}</div>
+                  <div class="phase-name">{{ step.title }}</div>
                   <div class="phase-meta">
-                    <span class="phase-duration">⏱ {{ phase.estimatedDuration || '—' }}</span>
-                    <span class="phase-status-badge" :class="getPhaseStatus(phase)">
-                      {{ getPhaseStatus(phase) === 'completed' ? '已完成' : getPhaseStatus(phase) === 'in_progress' ? '进行中' : '待开始' }}
+                    <span class="phase-duration">预计 {{ step.estimatedHours || '—' }} 小时</span>
+                    <span class="phase-status-badge" :class="normalizeStatus(step.status)">
+                      {{ normalizeStatus(step.status) === 'completed' ? '已完成' : normalizeStatus(step.status) === 'in_progress' ? '进行中' : '待开始' }}
                     </span>
                   </div>
                 </div>
                 <svg class="expand-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                  :style="{ transform: expandedPhases.has(pIdx) ? 'rotate(180deg)' : 'rotate(0)' }">
+                  :style="{ transform: expandedSteps.has(pIdx) ? 'rotate(180deg)' : 'rotate(0)' }">
                   <polyline points="6 9 12 15 18 9"/>
                 </svg>
               </div>
 
               <transition name="expand">
-                <div v-if="expandedPhases.has(pIdx)" class="phase-tasks">
+                <div v-if="expandedSteps.has(pIdx)" class="phase-tasks">
                   <div
-                    v-for="task in phase.tasks"
-                    :key="task.taskId"
+                    :key="step.stepId"
                     class="task-item"
-                    :class="{ completed: task.status === 'completed' }"
-                    @click="toggleTaskStatus(task)"
+                    :class="{ completed: step.status === 'completed' }"
+                    @click="toggleTaskStatus(step)"
                   >
                     <div class="task-check">
-                      <span v-if="task.status === 'completed'">✓</span>
-                      <span v-else>{{ getStatusIcon(task.status) }}</span>
+                      <span v-if="step.status === 'completed'">✓</span>
+                      <span v-else>{{ getStatusIcon(normalizeStatus(step.status)) }}</span>
                     </div>
                     <div class="task-content">
-                      <div class="task-name">{{ task.taskName }}</div>
-                      <div v-if="task.description" class="task-desc">{{ task.description }}</div>
-                      <div v-if="task.resources?.length" class="task-resources">
-                        <span v-for="r in task.resources" :key="r" class="task-resource-tag">{{ r }}</span>
+                      <div class="task-name">{{ step.title }}</div>
+                      <div v-if="step.description" class="task-desc">{{ step.description }}</div>
+                      <div v-if="step.knowledgePoints" class="task-resources">
+                        <span v-for="point in step.knowledgePoints.split(/[、,，]/).filter(Boolean)" :key="point" class="task-resource-tag">{{ point }}</span>
+                      </div>
+                      <div v-if="step.resources?.length" class="task-resources">
+                        <span v-for="resource in step.resources" :key="resource.resourceId" class="task-resource-tag">{{ resource.title }}</span>
                       </div>
                     </div>
                   </div>

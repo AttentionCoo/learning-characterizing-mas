@@ -116,6 +116,7 @@ async function handleGenerate() {
     if (result.data?.talkId) talkId.value = result.data.talkId
 
     await fetchReports()
+    setTimeout(fetchReports, 1200)
   } catch (error) {
     console.error('评估生成失败', error)
     generatedContent.value = '评估生成失败，请稍后重试。'

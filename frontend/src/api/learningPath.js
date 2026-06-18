@@ -1,6 +1,15 @@
 import request from '@/utils/request'
 
-export const getLearningPathAPI = () => request.get('/learning-path')
+export const getLearningPathsAPI = (params) => request.get('/learning-path', { params })
+
+export const getLearningPathDetailAPI = (pathId) => request.get(`/learning-path/${pathId}`)
+
+export async function getLearningPathAPI() {
+  const listRes = await getLearningPathsAPI()
+  const firstPath = listRes.data?.records?.[0]
+  if (!firstPath?.pathId) return { ...listRes, data: null }
+  return getLearningPathDetailAPI(firstPath.pathId)
+}
 
 export const updateTaskProgressAPI = (taskId, data) => request.put(`/learning-path/tasks/${taskId}/progress`, data)
 

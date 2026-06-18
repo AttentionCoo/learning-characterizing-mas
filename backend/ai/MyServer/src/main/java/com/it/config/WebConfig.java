@@ -6,7 +6,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
+import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+import java.nio.file.Path;
 
 @Configuration
 @RequiredArgsConstructor
@@ -23,6 +26,7 @@ public class WebConfig implements WebMvcConfigurer {
                         "/api/user/login",
                         "/api/user/register",
                         "/api/user/upload/**",
+                        "/uploads/**",
                         "/error"
                 )
                 .order(0);
@@ -34,8 +38,16 @@ public class WebConfig implements WebMvcConfigurer {
                         "/api/user/login",
                         "/api/user/register",
                         "/api/user/upload/**",
+                        "/uploads/**",
                         "/error"
                 )
                 .order(1);
+    }
+
+    @Override
+    public void addResourceHandlers(ResourceHandlerRegistry registry) {
+        String uploadPath = Path.of("uploads").toAbsolutePath().normalize().toUri().toString();
+        registry.addResourceHandler("/uploads/**")
+                .addResourceLocations(uploadPath);
     }
 }

@@ -1,8 +1,8 @@
 import request from '@/utils/request'
 
-export const getAssessmentReportsAPI = (params) => request.get('/assessment/reports', { params })
+export const getAssessmentReportsAPI = (params) => request.get('/evaluation/reports', { params })
 
-export const getAssessmentReportDetailAPI = (id) => request.get(`/assessment/reports/${id}`)
+export const getAssessmentReportDetailAPI = (id) => request.get(`/evaluation/reports/${id}`)
 
 export function assessmentStreamAPI(params, onChunk, onThinking) {
   const token = localStorage.getItem('Synapse_MD_USER')
@@ -72,7 +72,7 @@ export function assessmentStreamAPI(params, onChunk, onThinking) {
       }
     }
 
-    fetch('/api/assessment/generate', {
+    fetch('/api/evaluation/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: token, token },
       body: JSON.stringify(params),

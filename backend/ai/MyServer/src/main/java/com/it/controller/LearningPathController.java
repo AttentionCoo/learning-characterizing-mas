@@ -2,6 +2,7 @@ package com.it.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.it.cache.SSEEventCache;
 import com.it.mapper.LearningPathMapper;
@@ -93,6 +94,8 @@ public class LearningPathController {
                 .streamChat(userId, talkId, quesParam.getQuestion(), upstreamToken, null)
                 .map(this::wrapChunkIfNeeded);
 
+        StringBuilder fullAnswer = new StringBuilder();
+
         Sinks.One<Void> doneSink = Sinks.one();
 
         Flux<ServerSentEvent<String>> initSSE = initFlux.map(data -> sse(resolveEventName(data), data));
@@ -101,6 +104,7 @@ public class LearningPathController {
                         json("error", mapOf("talkId", finalTalkIdStr, "message", e.getMessage() == null ? "stream error" : e.getMessage())),
                         json("done", mapOf("talkId", finalTalkIdStr, "name", "异常结束"))
                 ))
+                .doOnNext(data -> appendContent(fullAnswer, data))
                 .map(data -> {
                     long seq = eventCache.addEvent(finalTalkIdStr, data);
                     return sseWithId(finalTalkIdStr + ":" + seq, resolveEventName(data), data);
@@ -109,6 +113,9 @@ public class LearningPathController {
         Flux<ServerSentEvent<String>> dataStream = initSSE
                 .concatWith(chatSSE)
                 .doFinally(signal -> {
+                    if (fullAnswer.length() > 0) {
+                        persistGeneratedPath(userId, param, fullAnswer.toString());
+                    }
                     doneSink.tryEmitEmpty();
                     eventCache.completeStream(finalTalkIdStr);
                 });
@@ -122,6 +129,100 @@ public class LearningPathController {
         ).delayElement(Duration.ofMillis(500)).flux();
 
         return Flux.merge(dataStream, heartbeatFlux).concatWith(closeFlux);
+    }
+
+    private void persistGeneratedPath(Long userId, PathGenerateParam param, String content) {
+        try {
+            String courseName = Optional.ofNullable(param.getCourseName())
+                    .filter(s -> !s.isBlank())
+                    .orElse("神经病学");
+            String goal = Optional.ofNullable(param.getGoalDescription())
+                    .filter(s -> !s.isBlank())
+                    .orElse("个性化学习路径");
+            LocalDateTime now = LocalDateTime.now();
+
+            LearningPath path = new LearningPath();
+            path.setUserId(userId);
+            path.setCourseName(courseName);
+            path.setGoalDescription(goal);
+            path.setCompletedSteps(0);
+            path.setEstimatedDays(30);
+            path.setStatus("active");
+            path.setCreateTime(now);
+            path.setUpdateTime(now);
+            if (param.getDeadline() != null && !param.getDeadline().isBlank()) {
+                try {
+                    path.setDeadline(LocalDate.parse(param.getDeadline()));
+                } catch (Exception ignored) {}
+            }
+
+            List<String> titles = extractStepTitles(content);
+            path.setTotalSteps(titles.size());
+            learningPathMapper.insert(path);
+
+            for (int i = 0; i < titles.size(); i++) {
+                LearningPathStepEntity step = new LearningPathStepEntity();
+                step.setPathId(path.getId());
+                step.setOrderIndex(i + 1);
+                step.setTitle(titles.get(i));
+                step.setDescription(extractNearbyDescription(content, titles.get(i)));
+                step.setKnowledgePoints(toJsonArray(param.getTargetKnowledge()));
+                step.setEstimatedHours(BigDecimal.valueOf(2));
+                step.setDifficulty("intermediate");
+                step.setStatus("not_started");
+                step.setPrerequisites("[]");
+                step.setCreateTime(now);
+                step.setUpdateTime(now);
+                learningPathStepMapper.insert(step);
+            }
+            log.info("学习路径已落库: userId={}, pathId={}, steps={}", userId, path.getId(), titles.size());
+        } catch (Exception e) {
+            log.error("学习路径落库失败", e);
+        }
+    }
+
+    private List<String> extractStepTitles(String content) {
+        if (content == null || content.isBlank()) return List.of("基础梳理", "专题突破", "案例训练", "综合复盘");
+        List<String> titles = Arrays.stream(content.split("\\R"))
+                .map(String::trim)
+                .filter(line -> line.matches("^(#{1,6}\\s*)?((第[一二三四五六七八九十0-9]+[阶段步章节])|([0-9]+[.、)]))\\s*.*"))
+                .map(line -> line.replaceFirst("^#{1,6}\\s*", ""))
+                .map(line -> line.replaceFirst("^(第[一二三四五六七八九十0-9]+[阶段步章节]|[0-9]+[.、)])\\s*", ""))
+                .map(line -> line.replaceAll("^[：:、\\-\\s]+", "").trim())
+                .filter(line -> !line.isBlank())
+                .limit(8)
+                .toList();
+        if (!titles.isEmpty()) return titles;
+        return List.of("基础知识梳理", "核心知识点突破", "临床案例训练", "学习效果复盘");
+    }
+
+    private String extractNearbyDescription(String content, String title) {
+        if (content == null || title == null) return "";
+        int idx = content.indexOf(title);
+        if (idx < 0) return "";
+        int start = Math.max(0, idx + title.length());
+        int end = Math.min(content.length(), start + 180);
+        return content.substring(start, end).replaceAll("[#*`>\\r\\n]+", " ").trim();
+    }
+
+    private String toJsonArray(List<String> values) {
+        if (values == null || values.isEmpty()) return "[]";
+        try {
+            return objectMapper.writeValueAsString(values);
+        } catch (Exception e) {
+            return "[]";
+        }
+    }
+
+    private void appendContent(StringBuilder target, String data) {
+        if (data == null) return;
+        try {
+            JsonNode node = objectMapper.readTree(data);
+            String type = node.path("type").asText("");
+            if ("chunk".equals(type) || "result".equals(type)) {
+                target.append(node.path("content").asText(""));
+            }
+        } catch (Exception ignored) {}
     }
 
     @GetMapping
@@ -209,7 +310,11 @@ public class LearningPathController {
 
     @PutMapping("/tasks/{taskId}/progress")
     public Result updateTaskProgress(@PathVariable Long taskId, @RequestBody StepProgressParam param) {
-        return updateStepProgress(null, taskId, param);
+        LearningPathStepEntity step = learningPathStepMapper.selectById(taskId);
+        if (step == null) {
+            return Result.error("步骤不存在");
+        }
+        return updateStepProgress(step.getPathId(), taskId, param);
     }
 
     @PostMapping("/{pathId}/adjust")

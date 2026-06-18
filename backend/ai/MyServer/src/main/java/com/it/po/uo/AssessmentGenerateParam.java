@@ -4,6 +4,7 @@ import lombok.Data;
 
 @Data
 public class AssessmentGenerateParam {
+    private String message;
     private String assessmentType;
     private TimeRange timeRange;
     private String courseName;

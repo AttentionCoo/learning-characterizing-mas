@@ -1,7 +1,7 @@
 <script setup>
 import { ref, watch } from 'vue'
 import AppAvatar from '@/components/AppAvatar.vue'
-import request from '@/utils/request'
+import { uploadAvatarAPI } from '@/api/user'
 
 // props: showTip 控制是否显示红色提示, initialAvatar 传入初始头像地址
 const props = defineProps({
@@ -53,9 +53,7 @@ const handleFileChange = async (e) => {
   formData.append('file', file)
 
   try {
-    const res = await request.post('/user/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    })
+    const res = await uploadAvatarAPI(file)
 
     if (res.code === 1) {
       avatarUrl.value = res.data // 阿里云 OSS 返回的图片地址
