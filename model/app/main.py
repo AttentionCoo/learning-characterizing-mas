@@ -178,6 +178,8 @@ class EvaluationOptimizeRequest(BaseModel):
     pathId: int
     triggerReason: str = "auto"
     evaluationData: Optional[Dict[str, Any]] = None
+    pathInfo: Optional[Dict[str, Any]] = None
+    steps: Optional[List[Dict[str, Any]]] = None
 
 
 class ProfileDimensionUpdateRequest(BaseModel):
@@ -1306,47 +1308,7 @@ async def get_evaluation_report(
     period: str = "all",
 ):
     """获取学习效果评估报告"""
-    llm_turbo = resources.get("llm_turbo")
-    if not llm_turbo:
-        raise HTTPException(status_code=503, detail="LLM service not ready")
-
-    try:
-        path_info = f"学习路径ID：{pathId}" if pathId else "所有学习路径"
-        prompt = f"""你是高等教育学习效果评估专家。请生成一份学习效果评估报告。
-
-{path_info}
-统计周期：{period}
-
-请直接输出 JSON（不要用 markdown 代码块包裹）：
-{{
-    "overallScore": 70,
-    "level": "good",
-    "period": "{period}",
-    "dimensions": {{
-        "knowledgeMastery": {{"score": 70, "level": "good", "details": {{"mastered": [], "partiallyMastered": [], "notMastered": []}}}},
-        "learningEfficiency": {{"score": 70, "level": "good", "details": {{"averageStudyTimePerDay": "1h", "resourceCompletionRate": 0.8, "quizAverageScore": 0.75}}}},
-        "skillApplication": {{"score": 70, "level": "good", "details": {{"codePracticePassRate": 0.8, "projectCompletionRate": 0.6}}}},
-        "learningConsistency": {{"score": 70, "level": "good", "details": {{"studyDaysThisWeek": 4, "averageSessionDuration": "45min", "breakPattern": "偶尔中断"}}}},
-        "progressAlignment": {{"score": 70, "level": "good", "details": {{"plannedProgress": 0.3, "actualProgress": 0.25, "deviation": "略慢于计划"}}}}
-    }},
-    "strengths": ["优势1"],
-    "weaknesses": ["不足1"],
-    "suggestions": ["建议1"],
-    "generateTime": "2026-06-10 17:00:00"
-}}"""
-
-        response = await llm_turbo.ainvoke([HumanMessage(content=prompt)])
-        content = getattr(response, "content", "")
-
-        result = _parse_json(content)
-        if not result:
-            result = {"overallScore": 0, "level": "moderate", "period": period, "dimensions": {}, "strengths": [], "weaknesses": [], "suggestions": [], "generateTime": ""}
-
-        return {"code": 1, "msg": "success", "data": result}
-
-    except Exception as e:
-        logger.error(f"[evaluation] 评估报告生成失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return {"code": 1, "msg": "success", "data": {"overallScore": 0, "level": "unknown", "period": period, "dimensions": {}, "strengths": [], "weaknesses": [], "suggestions": [], "generateTime": ""}}
 
 
 @app.post("/model/evaluation/quiz/{quiz_id}/submit")
@@ -1369,7 +1331,9 @@ async def optimize_learning(request: EvaluationOptimizeRequest):
         raise HTTPException(status_code=503, detail="LLM service not ready")
 
     try:
-        evaluation_str = json.dumps(request.evaluationData, ensure_ascii=False) if request.evaluationData else "使用系统最新数据"
+        evaluation_str = json.dumps(request.evaluationData, ensure_ascii=False) if request.evaluationData else "无评估数据"
+        path_info_str = json.dumps(request.pathInfo, ensure_ascii=False) if request.pathInfo else "无路径信息"
+        steps_str = json.dumps(request.steps, ensure_ascii=False) if request.steps else "无步骤信息"
 
         prompt = f"""你是高等教育学习方案优化专家。请根据以下信息优化学习方案。
 
@@ -1377,13 +1341,21 @@ async def optimize_learning(request: EvaluationOptimizeRequest):
 触发原因：{request.triggerReason}
 评估数据：{evaluation_str}
 
+学习路径信息：{path_info_str}
+
+学习步骤详情：{steps_str}
+
+请根据评估数据中的薄弱点和建议，结合学习步骤的实际完成情况，给出具体的优化方案。
+
 请直接输出 JSON（不要用 markdown 代码块包裹）：
 {{
     "pathId": {request.pathId},
     "optimizationApplied": true,
     "changes": [
         {{
-            "type": "insert_step/update_resource/adjust_difficulty",
+            "type": "adjust_difficulty",
+            "stepId": 0,
+            "newDifficulty": "beginner/intermediate/advanced",
             "description": "调整描述",
             "reason": "调整原因"
         }}
@@ -1391,7 +1363,14 @@ async def optimize_learning(request: EvaluationOptimizeRequest):
     "newEstimatedDays": 0,
     "profileUpdated": false,
     "profileChanges": {{}}
-}}"""
+}}
+
+注意：
+1. changes中的type可以是：adjust_difficulty（调整步骤难度）、insert_step（插入新步骤）、update_resource（更新资源推荐）
+2. 对于adjust_difficulty类型，必须包含stepId和newDifficulty字段
+3. 对于insert_step类型，必须包含description和reason字段
+4. 只有在确实需要优化时才设置optimizationApplied为true
+5. 请基于评估数据中的薄弱点来决定优化方向"""
 
         response = await llm_turbo.ainvoke([HumanMessage(content=prompt)])
         content = getattr(response, "content", "")

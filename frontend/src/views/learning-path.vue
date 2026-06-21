@@ -1,8 +1,9 @@
 ﻿<script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { getLearningPathAPI, updateTaskProgressAPI, learningPathStreamAPI } from '@/api/learningPath'
+import { submitBehaviorAPI } from '@/api/assessment'
 
 marked.setOptions({ gfm: true, breaks: true })
 
@@ -18,6 +19,58 @@ const expandedSteps = ref(new Set([0]))
 const courseName = ref('')
 const customGoal = ref('')
 
+const pageEnterTime = Date.now()
+const stepViewTimes = ref({})
+let behaviorFlushTimer = null
+const pendingBehaviors = ref([])
+
+function trackStepView(stepId) {
+  stepViewTimes.value[stepId] = Date.now()
+}
+
+function trackStepLeave(stepId) {
+  const enterTime = stepViewTimes.value[stepId]
+  if (!enterTime) return
+  const durationSec = Math.round((Date.now() - enterTime) / 1000)
+  delete stepViewTimes.value[stepId]
+  if (durationSec < 5) return
+  pendingBehaviors.value.push({
+    type: 'resource_view',
+    resourceId: stepId,
+    duration: durationSec,
+    timestamp: new Date().toISOString(),
+  })
+}
+
+async function flushBehaviors() {
+  if (!learningPath.value?.pathId) return
+  const behaviors = [...pendingBehaviors.value]
+  if (behaviors.length === 0) return
+  pendingBehaviors.value = []
+
+  const totalDuration = Math.round((Date.now() - pageEnterTime) / 1000)
+  behaviors.push({
+    type: 'page_stay',
+    duration: totalDuration,
+    timestamp: new Date().toISOString(),
+  })
+
+  try {
+    await submitBehaviorAPI({
+      pathId: learningPath.value.pathId,
+      stepId: null,
+      behaviors,
+    })
+  } catch {
+    // ignore
+  }
+}
+
+function startBehaviorFlush() {
+  if (behaviorFlushTimer) return
+  behaviorFlushTimer = setInterval(flushBehaviors, 60000)
+}
+
 function renderMarkdown(text) {
   if (!text) return ''
   return DOMPurify.sanitize(marked.parse(text))
@@ -25,6 +78,12 @@ function renderMarkdown(text) {
 
 onMounted(() => {
   fetchLearningPath()
+  startBehaviorFlush()
+})
+
+onUnmounted(() => {
+  if (behaviorFlushTimer) { clearInterval(behaviorFlushTimer); behaviorFlushTimer = null }
+  flushBehaviors()
 })
 
 async function fetchLearningPath() {
@@ -41,8 +100,14 @@ async function fetchLearningPath() {
 
 function toggleStep(index) {
   const s = new Set(expandedSteps.value)
-  if (s.has(index)) s.delete(index)
-  else s.add(index)
+  const step = learningPath.value?.steps?.[index]
+  if (s.has(index)) {
+    s.delete(index)
+    if (step?.stepId) trackStepLeave(step.stepId)
+  } else {
+    s.add(index)
+    if (step?.stepId) trackStepView(step.stepId)
+  }
   expandedSteps.value = s
 }
 
@@ -120,6 +185,15 @@ async function toggleTaskStatus(task) {
   try {
     await updateTaskProgressAPI(task.stepId, { status: newStatus === 'pending' ? 'not_started' : newStatus })
     task.status = newStatus
+
+    if (newStatus === 'completed' && learningPath.value?.pathId) {
+      pendingBehaviors.value.push({
+        type: 'step_complete',
+        resourceId: task.stepId,
+        timestamp: new Date().toISOString(),
+      })
+    }
+
     await fetchLearningPath()
   } catch {
     // ignore

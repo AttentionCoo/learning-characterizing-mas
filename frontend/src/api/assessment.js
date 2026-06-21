@@ -4,6 +4,12 @@ export const getAssessmentReportsAPI = (params) => request.get('/evaluation/repo
 
 export const getAssessmentReportDetailAPI = (id) => request.get(`/evaluation/reports/${id}`)
 
+export const getAssessmentReportAPI = (params) => request.get('/evaluation/report', { params })
+
+export const submitBehaviorAPI = (data) => request.post('/evaluation/behavior', data)
+
+export const optimizeLearningPathAPI = (data) => request.post('/evaluation/optimize', data)
+
 export function assessmentStreamAPI(params, onChunk, onThinking) {
   const token = localStorage.getItem('Synapse_MD_USER')
     ? JSON.parse(localStorage.getItem('Synapse_MD_USER')).token

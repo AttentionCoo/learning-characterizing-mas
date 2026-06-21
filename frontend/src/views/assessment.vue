@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import { getAssessmentReportsAPI, getAssessmentReportDetailAPI, assessmentStreamAPI } from '@/api/assessment'
+import { getAssessmentReportsAPI, getAssessmentReportDetailAPI, assessmentStreamAPI, getAssessmentReportAPI, optimizeLearningPathAPI } from '@/api/assessment'
 
 marked.setOptions({ gfm: true, breaks: true })
 
@@ -24,6 +24,10 @@ const assessmentType = ref('comprehensive')
 const courseName = ref('')
 const customMessage = ref('')
 
+const isOptimizing = ref(false)
+const optimizeResult = ref(null)
+const currentReportData = ref(null)
+
 const assessmentTypes = [
   { value: 'comprehensive', label: '综合评估', icon: '📊', desc: '全面评估脑卒中学习效果' },
   { value: 'knowledge', label: '知识掌握', icon: '📚', desc: '评估脑卒中知识点掌握程度' },
@@ -38,7 +42,17 @@ function renderMarkdown(text) {
 
 onMounted(() => {
   fetchReports()
+  fetchCurrentReport()
 })
+
+async function fetchCurrentReport() {
+  try {
+    const res = await getAssessmentReportAPI()
+    if (res.data) currentReportData.value = res.data
+  } catch {
+    // ignore
+  }
+}
 
 async function fetchReports() {
   reportsLoading.value = true
@@ -117,6 +131,7 @@ async function handleGenerate() {
 
     await fetchReports()
     setTimeout(fetchReports, 1200)
+    await fetchCurrentReport()
   } catch (error) {
     console.error('评估生成失败', error)
     generatedContent.value = '评估生成失败，请稍后重试。'
@@ -129,6 +144,33 @@ async function handleGenerate() {
 
 function getTypeInfo(type) {
   return assessmentTypes.find(t => t.value === type) || { label: type, icon: '📋', desc: '' }
+}
+
+async function handleOptimize() {
+  if (isOptimizing.value) return
+  isOptimizing.value = true
+  optimizeResult.value = null
+
+  try {
+    const evalData = reportDetail.value || currentReportData.value
+    const res = await optimizeLearningPathAPI({
+      pathId: evalData?.pathId || null,
+      triggerReason: 'evaluation_score_low',
+      evaluationData: evalData ? {
+        overallScore: evalData.overallScore || evalData.score,
+        level: evalData.level,
+        dimensions: evalData.dimensions,
+        weaknesses: evalData.weaknesses,
+        suggestions: evalData.suggestions,
+      } : null,
+    })
+    optimizeResult.value = res.data
+  } catch (error) {
+    console.error('优化失败', error)
+    optimizeResult.value = { optimizationApplied: false, changes: [], reason: '优化服务暂时不可用' }
+  } finally {
+    isOptimizing.value = false
+  }
 }
 
 function getScoreColor(score) {
@@ -216,6 +258,34 @@ function getScoreColor(score) {
           </div>
 
           <div v-if="generatedContent" class="result-content markdown-body" v-html="renderMarkdown(generatedContent)"></div>
+
+          <div v-if="reportDetail || currentReportData" class="optimize-section">
+            <button class="optimize-btn" :disabled="isOptimizing" @click="handleOptimize">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 20V10"/>
+                <path d="M18 20V4"/>
+                <path d="M6 20v-4"/>
+              </svg>
+              {{ isOptimizing ? '优化中...' : '基于评估优化学习路径' }}
+            </button>
+
+            <div v-if="optimizeResult" class="optimize-result">
+              <div v-if="optimizeResult.optimizationApplied" class="optimize-success">
+                <div class="optimize-badge success">已优化</div>
+                <div class="optimize-changes">
+                  <div v-for="(change, idx) in optimizeResult.changes" :key="idx" class="change-item">
+                    <span class="change-type">{{ change.type === 'adjust_difficulty' ? '调整难度' : change.type === 'insert_step' ? '新增步骤' : '更新资源' }}</span>
+                    <span class="change-desc">{{ change.description }}</span>
+                    <span v-if="change.reason" class="change-reason">{{ change.reason }}</span>
+                  </div>
+                </div>
+              </div>
+              <div v-else class="optimize-skip">
+                <div class="optimize-badge skip">无需调整</div>
+                <span>{{ optimizeResult.reason || '当前学习路径无需优化' }}</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -593,6 +663,90 @@ function getScoreColor(score) {
 
 .report-score {
   font-weight: 700;
+}
+
+.optimize-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border-light);
+}
+
+.optimize-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border: 2px solid var(--color-primary);
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--color-primary);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+
+  &:hover:not(:disabled) { background: rgba(17, 150, 127, 0.08); transform: translateY(-1px); }
+  &:disabled { opacity: 0.5; cursor: not-allowed; }
+}
+
+.optimize-result {
+  margin-top: 12px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: var(--color-bg-base);
+  border: 1px solid var(--color-border-light);
+}
+
+.optimize-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 8px;
+
+  &.success { background: rgba(16, 185, 129, 0.1); color: #10b981; }
+  &.skip { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
+}
+
+.optimize-changes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.change-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.change-type {
+  padding: 1px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+}
+
+.change-desc {
+  font-weight: 600;
+  color: var(--color-text-strong);
+}
+
+.change-reason {
+  font-size: 12px;
+  color: var(--color-text-medium);
+}
+
+.optimize-skip {
+  font-size: 13px;
+  color: var(--color-text-medium);
 }
 
 @media (max-width: 1024px) {
