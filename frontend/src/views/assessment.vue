@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { getAssessmentReportsAPI, getAssessmentReportDetailAPI, assessmentStreamAPI, getAssessmentReportAPI, optimizeLearningPathAPI } from '@/api/assessment'
+import { getLearningPathsAPI } from '@/api/learningPath'
 
 marked.setOptions({ gfm: true, breaks: true })
 
@@ -27,6 +28,7 @@ const customMessage = ref('')
 const isOptimizing = ref(false)
 const optimizeResult = ref(null)
 const currentReportData = ref(null)
+const learningPathId = ref(null)
 
 const assessmentTypes = [
   { value: 'comprehensive', label: '综合评估', icon: '📊', desc: '全面评估脑卒中学习效果' },
@@ -43,7 +45,18 @@ function renderMarkdown(text) {
 onMounted(() => {
   fetchReports()
   fetchCurrentReport()
+  fetchLearningPathId()
 })
+
+async function fetchLearningPathId() {
+  try {
+    const res = await getLearningPathsAPI()
+    const firstPath = res.data?.records?.[0]
+    if (firstPath?.pathId) learningPathId.value = firstPath.pathId
+  } catch {
+    // ignore
+  }
+}
 
 async function fetchCurrentReport() {
   try {
@@ -152,12 +165,19 @@ async function handleOptimize() {
   optimizeResult.value = null
 
   try {
+    const pathId = learningPathId.value
+    if (!pathId) {
+      optimizeResult.value = { optimizationApplied: false, changes: [], reason: '暂无学习路径，请先生成学习路径后再优化' }
+      isOptimizing.value = false
+      return
+    }
+
     const evalData = reportDetail.value || currentReportData.value
     const res = await optimizeLearningPathAPI({
-      pathId: evalData?.pathId || null,
-      triggerReason: 'evaluation_score_low',
+      pathId: pathId,
+      triggerReason: 'evaluation_optimize',
       evaluationData: evalData ? {
-        overallScore: evalData.overallScore || evalData.score,
+        overallScore: evalData.overallScore ?? evalData.score ?? 0,
         level: evalData.level,
         dimensions: evalData.dimensions,
         weaknesses: evalData.weaknesses,

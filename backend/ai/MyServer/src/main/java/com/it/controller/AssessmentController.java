@@ -376,7 +376,26 @@ public class AssessmentController {
         Long userId = ThreadLocalUtil.getCurrentUser().getId();
 
         if (param.getPathId() == null) {
-            return Result.error("缺少学习路径ID");
+            LearningPath firstPath = learningPathMapper.selectOne(
+                    new LambdaQueryWrapper<LearningPath>()
+                            .eq(LearningPath::getUserId, userId)
+                            .eq(LearningPath::getStatus, "active")
+                            .orderByDesc(LearningPath::getUpdateTime)
+                            .last("LIMIT 1")
+            );
+            if (firstPath == null) {
+                firstPath = learningPathMapper.selectOne(
+                        new LambdaQueryWrapper<LearningPath>()
+                                .eq(LearningPath::getUserId, userId)
+                                .orderByDesc(LearningPath::getUpdateTime)
+                                .last("LIMIT 1")
+                );
+            }
+            if (firstPath != null) {
+                param.setPathId(firstPath.getId());
+            } else {
+                return Result.error("暂无学习路径，请先生成学习路径后再优化");
+            }
         }
 
         LearningPath path = learningPathMapper.selectById(param.getPathId());
@@ -486,15 +505,21 @@ public class AssessmentController {
             try {
                 if ("adjust_difficulty".equals(type)) {
                     Object stepIdObj = change.get("stepId");
-                    if (stepIdObj instanceof Number stepIdNum) {
-                        LearningPathStepEntity step = learningPathStepMapper.selectById(stepIdNum.longValue());
+                    Long stepIdLong = null;
+                    if (stepIdObj instanceof Number num) {
+                        stepIdLong = num.longValue();
+                    } else if (stepIdObj instanceof String str) {
+                        stepIdLong = Long.parseLong(str);
+                    }
+                    if (stepIdLong != null) {
+                        LearningPathStepEntity step = learningPathStepMapper.selectById(stepIdLong);
                         if (step != null && step.getPathId().equals(pathId)) {
                             String newDifficulty = (String) change.get("newDifficulty");
                             if (newDifficulty != null) {
                                 step.setDifficulty(newDifficulty);
                                 step.setUpdateTime(LocalDateTime.now());
                                 learningPathStepMapper.updateById(step);
-                                log.info("优化-调整难度: stepId={}, newDifficulty={}", stepIdNum, newDifficulty);
+                                log.info("优化-调整难度: stepId={}, newDifficulty={}", stepIdLong, newDifficulty);
                             }
                         }
                     }
