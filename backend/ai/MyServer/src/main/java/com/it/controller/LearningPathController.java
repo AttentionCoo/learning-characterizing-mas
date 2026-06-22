@@ -135,7 +135,7 @@ public class LearningPathController {
         try {
             String courseName = Optional.ofNullable(param.getCourseName())
                     .filter(s -> !s.isBlank())
-                    .orElse("神经病学");
+                    .orElse("脑卒中诊疗");
             String goal = Optional.ofNullable(param.getGoalDescription())
                     .filter(s -> !s.isBlank())
                     .orElse("个性化学习路径");

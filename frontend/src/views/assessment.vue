@@ -1,5 +1,5 @@
 ﻿<script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { getAssessmentReportsAPI, getAssessmentReportDetailAPI, assessmentStreamAPI, getAssessmentReportAPI, optimizeLearningPathAPI } from '@/api/assessment'
@@ -29,6 +29,23 @@ const isOptimizing = ref(false)
 const optimizeResult = ref(null)
 const currentReportData = ref(null)
 const learningPathId = ref(null)
+
+const resultContentRef = ref(null)
+const userScrolled = ref(false)
+
+function onResultScroll() {
+  const el = resultContentRef.value
+  if (!el) return
+  const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+  userScrolled.value = distFromBottom > 80
+}
+
+function scrollToBottom(force = false) {
+  const el = resultContentRef.value
+  if (!el) return
+  if (!force && userScrolled.value) return
+  el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+}
 
 const assessmentTypes = [
   { value: 'comprehensive', label: '综合评估', icon: '📊', desc: '全面评估脑卒中学习效果' },
@@ -103,6 +120,7 @@ async function handleGenerate() {
   generatedContent.value = ''
   reportDetail.value = null
   selectedReportId.value = null
+  userScrolled.value = false
 
   let displayText = ''
   const charBuffer = []
@@ -117,6 +135,7 @@ async function handleGenerate() {
       const chars = charBuffer.splice(0, 2)
       displayText += chars.join('')
       generatedContent.value = displayText
+      nextTick(() => scrollToBottom())
       timerId = setTimeout(tick, delay)
     }
     timerId = setTimeout(tick, 0)
@@ -141,6 +160,7 @@ async function handleGenerate() {
     if (timerId !== null) { clearTimeout(timerId); timerId = null }
     generatedContent.value = result.data?.content || displayText
     if (result.data?.talkId) talkId.value = result.data.talkId
+    nextTick(() => scrollToBottom(true))
 
     await fetchReports()
     setTimeout(fetchReports, 1200)
@@ -233,7 +253,7 @@ function getScoreColor(score) {
           <div class="form-row">
             <div class="form-field">
               <label>课程名称 <span class="hint">可选</span></label>
-              <input v-model="courseName" placeholder="如：神经病学" />
+              <input v-model="courseName" placeholder="如：脑卒中诊疗" />
             </div>
             <div class="form-field">
               <label>补充说明 <span class="hint">可选</span></label>
@@ -277,7 +297,7 @@ function getScoreColor(score) {
             </div>
           </div>
 
-          <div v-if="generatedContent" class="result-content markdown-body" v-html="renderMarkdown(generatedContent)"></div>
+          <div ref="resultContentRef" v-if="generatedContent" class="result-content markdown-body" @scroll="onResultScroll" v-html="renderMarkdown(generatedContent)"></div>
 
           <div v-if="reportDetail || currentReportData" class="optimize-section">
             <button class="optimize-btn" :disabled="isOptimizing" @click="handleOptimize">
@@ -581,6 +601,9 @@ function getScoreColor(score) {
 
 .result-content {
   line-height: 1.7;
+  max-height: 60vh;
+  overflow-y: auto;
+  scroll-behavior: smooth;
 }
 
 .reports-sidebar {

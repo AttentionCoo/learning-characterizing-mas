@@ -316,7 +316,7 @@ const overallProgress = computed(() => {
           <div class="card-body">
             <div class="form-field">
               <label>课程名称 <span class="hint">可选</span></label>
-              <input v-model="courseName" placeholder="如：神经病学" />
+              <input v-model="courseName" placeholder="如：脑卒中诊疗" />
             </div>
             <div class="form-field">
               <label>学习目标</label>

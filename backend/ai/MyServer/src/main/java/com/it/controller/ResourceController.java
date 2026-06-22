@@ -29,6 +29,7 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiConsumer;
 
 @Slf4j
 @RestController
@@ -84,14 +85,25 @@ public class ResourceController {
         questionBuilder.append("2. 提供详细的知识点讲解（每个知识点200-300字）\n");
         questionBuilder.append("3. 包含典型案例和实践应用\n");
         questionBuilder.append("4. 给出自测检查点和拓展阅读材料\n");
-        questionBuilder.append("5. 使用通俗易懂的语言，适合医学生学习\n");
+        questionBuilder.append("5. 使用通俗易懂的语言，适合学习者理解\n");
 
         QuesParam quesParam = new QuesParam();
         quesParam.setTalkId(param.getTalkId());
         quesParam.setQuestion(questionBuilder.toString());
         quesParam.setImages(param.getImages());
 
-        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId);
+        String resourceType = param.getResourceTypes() != null && !param.getResourceTypes().isEmpty()
+                ? param.getResourceTypes().get(0) : "document";
+        String courseName = param.getCourseName() != null ? param.getCourseName() : "";
+        String knowledgePoints = param.getKnowledgePoints() != null
+                ? String.join(",", param.getKnowledgePoints()) : null;
+        String difficulty = param.getDifficulty();
+
+        BiConsumer<String, Long> persistCallback = (fullAnswer, talkId) ->
+                persistResource(userId, buildTitle(courseName, "学习资源"), resourceType,
+                        courseName, knowledgePoints, difficulty, fullAnswer, talkId);
+
+        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId, persistCallback);
     }
 
     @GetMapping
@@ -215,6 +227,7 @@ public class ResourceController {
         appendListIfNotNull(questionBuilder, "知识点", (List<String>) body.get("knowledgePoints"));
         appendIfNotNull(questionBuilder, "难度", body.get("difficulty"));
         appendIfNotNull(questionBuilder, "风格", body.get("style"));
+        appendIfNotNull(questionBuilder, "补充说明", body.get("message"));
         if (Boolean.TRUE.equals(body.get("profileAware"))) {
             questionBuilder.append("\n请结合我的学习画像进行个性化生成");
         }
@@ -223,7 +236,17 @@ public class ResourceController {
         quesParam.setTalkId((String) body.get("talkId"));
         quesParam.setQuestion(questionBuilder.toString());
         quesParam.setImages((List<String>) body.get("images"));
-        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId);
+
+        String courseName = body.get("courseName") != null ? body.get("courseName").toString() : "";
+        String knowledgePoints = body.get("knowledgePoints") != null
+                ? String.join(",", (List<String>) body.get("knowledgePoints")) : null;
+        String difficulty = body.get("difficulty") != null ? body.get("difficulty").toString() : null;
+
+        BiConsumer<String, Long> persistCallback = (fullAnswer, talkId) ->
+                persistResource(userId, buildTitle(courseName, "课程讲解文档"), "document",
+                        courseName, knowledgePoints, difficulty, fullAnswer, talkId);
+
+        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId, persistCallback);
     }
 
     @PostMapping(value = "/generate/mindmap", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -248,11 +271,21 @@ public class ResourceController {
         appendListIfNotNull(questionBuilder, "知识点", (List<String>) body.get("knowledgePoints"));
         appendIfNotNull(questionBuilder, "格式", body.get("format"));
         appendIfNotNull(questionBuilder, "展开层级", body.get("depth"));
+        appendIfNotNull(questionBuilder, "补充说明", body.get("message"));
 
         QuesParam quesParam = new QuesParam();
         quesParam.setTalkId((String) body.get("talkId"));
         quesParam.setQuestion(questionBuilder.toString());
-        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId);
+
+        String courseName = body.get("courseName") != null ? body.get("courseName").toString() : "";
+        String knowledgePoints = body.get("knowledgePoints") != null
+                ? String.join(",", (List<String>) body.get("knowledgePoints")) : null;
+
+        BiConsumer<String, Long> persistCallback = (fullAnswer, talkId) ->
+                persistResource(userId, buildTitle(courseName, "知识体系思维导图"), "mindmap",
+                        courseName, knowledgePoints, null, fullAnswer, talkId);
+
+        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId, persistCallback);
     }
 
     @PostMapping(value = "/generate/quiz", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -279,11 +312,22 @@ public class ResourceController {
         appendListIfNotNull(questionBuilder, "题目类型", (List<String>) body.get("quizTypes"));
         appendIfNotNull(questionBuilder, "题目数量", body.get("count"));
         appendIfNotNull(questionBuilder, "是否包含答案", body.get("includeAnswer"));
+        appendIfNotNull(questionBuilder, "补充说明", body.get("message"));
 
         QuesParam quesParam = new QuesParam();
         quesParam.setTalkId((String) body.get("talkId"));
         quesParam.setQuestion(questionBuilder.toString());
-        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId);
+
+        String courseName = body.get("courseName") != null ? body.get("courseName").toString() : "";
+        String knowledgePoints = body.get("knowledgePoints") != null
+                ? String.join(",", (List<String>) body.get("knowledgePoints")) : null;
+        String difficulty = body.get("difficulty") != null ? body.get("difficulty").toString() : null;
+
+        BiConsumer<String, Long> persistCallback = (fullAnswer, talkId) ->
+                persistResource(userId, buildTitle(courseName, "练习题目"), "quiz",
+                        courseName, knowledgePoints, difficulty, fullAnswer, talkId);
+
+        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId, persistCallback);
     }
 
     @PostMapping(value = "/generate/reading", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -309,11 +353,21 @@ public class ResourceController {
         appendIfNotNull(questionBuilder, "阅读类型", body.get("readingType"));
         appendIfNotNull(questionBuilder, "语言", body.get("language"));
         appendIfNotNull(questionBuilder, "数量", body.get("count"));
+        appendIfNotNull(questionBuilder, "补充说明", body.get("message"));
 
         QuesParam quesParam = new QuesParam();
         quesParam.setTalkId((String) body.get("talkId"));
         quesParam.setQuestion(questionBuilder.toString());
-        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId);
+
+        String courseName = body.get("courseName") != null ? body.get("courseName").toString() : "";
+        String knowledgePoints = body.get("knowledgePoints") != null
+                ? String.join(",", (List<String>) body.get("knowledgePoints")) : null;
+
+        BiConsumer<String, Long> persistCallback = (fullAnswer, talkId) ->
+                persistResource(userId, buildTitle(courseName, "拓展阅读材料"), "reading",
+                        courseName, knowledgePoints, null, fullAnswer, talkId);
+
+        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId, persistCallback);
     }
 
     @PostMapping(value = "/generate/video-script", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -339,11 +393,21 @@ public class ResourceController {
         appendIfNotNull(questionBuilder, "风格", body.get("style"));
         appendIfNotNull(questionBuilder, "包含旁白", body.get("includeNarration"));
         appendIfNotNull(questionBuilder, "包含画面描述", body.get("includeVisual"));
+        appendIfNotNull(questionBuilder, "补充说明", body.get("message"));
 
         QuesParam quesParam = new QuesParam();
         quesParam.setTalkId((String) body.get("talkId"));
         quesParam.setQuestion(questionBuilder.toString());
-        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId);
+
+        String courseName = body.get("courseName") != null ? body.get("courseName").toString() : "";
+        String knowledgePoints = body.get("knowledgePoints") != null
+                ? String.join(",", (List<String>) body.get("knowledgePoints")) : null;
+
+        BiConsumer<String, Long> persistCallback = (fullAnswer, talkId) ->
+                persistResource(userId, buildTitle(courseName, "教学视频脚本"), "video_script",
+                        courseName, knowledgePoints, null, fullAnswer, talkId);
+
+        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId, persistCallback);
     }
 
     @PostMapping(value = "/generate/code-practice", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -371,15 +435,107 @@ public class ResourceController {
         appendIfNotNull(questionBuilder, "类型", body.get("projectType"));
         appendIfNotNull(questionBuilder, "包含测试", body.get("includeTest"));
         appendIfNotNull(questionBuilder, "包含说明", body.get("includeExplanation"));
+        appendIfNotNull(questionBuilder, "补充说明", body.get("message"));
 
         QuesParam quesParam = new QuesParam();
         quesParam.setTalkId((String) body.get("talkId"));
         quesParam.setQuestion(questionBuilder.toString());
-        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId);
+
+        String courseName = body.get("courseName") != null ? body.get("courseName").toString() : "";
+        String knowledgePoints = body.get("knowledgePoints") != null
+                ? String.join(",", (List<String>) body.get("knowledgePoints")) : null;
+        String difficulty = body.get("difficulty") != null ? body.get("difficulty").toString() : null;
+
+        BiConsumer<String, Long> persistCallback = (fullAnswer, talkId) ->
+                persistResource(userId, buildTitle(courseName, "代码实操案例"), "code_practice",
+                        courseName, knowledgePoints, difficulty, fullAnswer, talkId);
+
+        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId, persistCallback);
+    }
+
+    @PostMapping(value = "/generate/case-study", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @SuppressWarnings("unchecked")
+    public Flux<ServerSentEvent<String>> generateCaseStudy(
+            @RequestBody Map<String, Object> body,
+            @RequestHeader(value = "token", required = false) String token,
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestHeader(value = "Last-Event-ID", required = false) String lastEventId,
+            HttpServletResponse response
+    ) {
+        response.setHeader("X-Accel-Buffering", "no");
+        response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        if (ThreadLocalUtil.getCurrentUser() == null) {
+            return Flux.just(sse("error", json("error", mapOf("message", "未登录"))));
+        }
+        String upstreamToken = resolveToken(token, authorization);
+        Long userId = ThreadLocalUtil.getCurrentUser().getId();
+
+        StringBuilder questionBuilder = new StringBuilder("请生成临床案例分析：");
+        appendIfNotNull(questionBuilder, "课程", body.get("courseName"));
+        appendListIfNotNull(questionBuilder, "知识点", (List<String>) body.get("knowledgePoints"));
+        appendIfNotNull(questionBuilder, "难度", body.get("difficulty"));
+        appendIfNotNull(questionBuilder, "补充说明", body.get("message"));
+        questionBuilder.append("\n请包含：完整病例描述、诊断思路分析、治疗方案选择和要点总结。");
+
+        QuesParam quesParam = new QuesParam();
+        quesParam.setTalkId((String) body.get("talkId"));
+        quesParam.setQuestion(questionBuilder.toString());
+
+        String courseName = body.get("courseName") != null ? body.get("courseName").toString() : "";
+        String knowledgePoints = body.get("knowledgePoints") != null
+                ? String.join(",", (List<String>) body.get("knowledgePoints")) : null;
+        String difficulty = body.get("difficulty") != null ? body.get("difficulty").toString() : null;
+
+        BiConsumer<String, Long> persistCallback = (fullAnswer, talkId) ->
+                persistResource(userId, buildTitle(courseName, "临床案例"), "case_study",
+                        courseName, knowledgePoints, difficulty, fullAnswer, talkId);
+
+        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId, persistCallback);
+    }
+
+    @PostMapping(value = "/generate/plan", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @SuppressWarnings("unchecked")
+    public Flux<ServerSentEvent<String>> generatePlan(
+            @RequestBody Map<String, Object> body,
+            @RequestHeader(value = "token", required = false) String token,
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestHeader(value = "Last-Event-ID", required = false) String lastEventId,
+            HttpServletResponse response
+    ) {
+        response.setHeader("X-Accel-Buffering", "no");
+        response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        if (ThreadLocalUtil.getCurrentUser() == null) {
+            return Flux.just(sse("error", json("error", mapOf("message", "未登录"))));
+        }
+        String upstreamToken = resolveToken(token, authorization);
+        Long userId = ThreadLocalUtil.getCurrentUser().getId();
+
+        StringBuilder questionBuilder = new StringBuilder("请生成资源学习方案：");
+        appendIfNotNull(questionBuilder, "课程", body.get("courseName"));
+        appendListIfNotNull(questionBuilder, "知识点", (List<String>) body.get("knowledgePoints"));
+        appendIfNotNull(questionBuilder, "难度", body.get("difficulty"));
+        appendIfNotNull(questionBuilder, "补充说明", body.get("message"));
+        questionBuilder.append("\n请包含：学习路径规划、阶段时间安排、推荐学习资源和自评检查点。");
+
+        QuesParam quesParam = new QuesParam();
+        quesParam.setTalkId((String) body.get("talkId"));
+        quesParam.setQuestion(questionBuilder.toString());
+
+        String courseName = body.get("courseName") != null ? body.get("courseName").toString() : "";
+        String knowledgePoints = body.get("knowledgePoints") != null
+                ? String.join(",", (List<String>) body.get("knowledgePoints")) : null;
+        String difficulty = body.get("difficulty") != null ? body.get("difficulty").toString() : null;
+
+        BiConsumer<String, Long> persistCallback = (fullAnswer, talkId) ->
+                persistResource(userId, buildTitle(courseName, "资源设计方案"), "plan",
+                        courseName, knowledgePoints, difficulty, fullAnswer, talkId);
+
+        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId, persistCallback);
     }
 
     private Flux<ServerSentEvent<String>> buildSSEStream(Long userId, QuesParam quesParam,
-                                                          String upstreamToken, String lastEventId) {
+                                                          String upstreamToken, String lastEventId,
+                                                          BiConsumer<String, Long> persistCallback) {
         String talkIdStr = quesParam.getTalkId();
         Long talkId = null;
         if (talkIdStr != null && !talkIdStr.isBlank()) {
@@ -418,6 +574,8 @@ public class ResourceController {
         );
         eventCache.registerStream(finalTalkIdStr);
 
+        StringBuilder fullAnswer = new StringBuilder();
+
         Flux<String> chatFlux = streamingService
                 .streamChat(userId, finalTalkId, quesParam.getQuestion(), upstreamToken, quesParam.getImages(), "resource_generate")
                 .map(this::wrapChunkIfNeeded);
@@ -430,6 +588,7 @@ public class ResourceController {
                         json("error", mapOf("talkId", finalTalkIdStr, "message", e.getMessage() == null ? "stream error" : e.getMessage())),
                         json("done", mapOf("talkId", finalTalkIdStr, "name", "异常结束"))
                 ))
+                .doOnNext(data -> appendContent(fullAnswer, data))
                 .map(data -> {
                     long seq = eventCache.addEvent(finalTalkIdStr, data);
                     return sseWithId(finalTalkIdStr + ":" + seq, resolveEventName(data), data);
@@ -438,6 +597,13 @@ public class ResourceController {
         Flux<ServerSentEvent<String>> dataStream = initSSE
                 .concatWith(chatSSE)
                 .doFinally(signal -> {
+                    if (persistCallback != null && fullAnswer.length() > 0) {
+                        try {
+                            persistCallback.accept(fullAnswer.toString(), finalTalkId);
+                        } catch (Exception e) {
+                            log.error("资源持久化失败: talkId={}", finalTalkId, e);
+                        }
+                    }
                     doneSink.tryEmitEmpty();
                     eventCache.completeStream(finalTalkIdStr);
                 });
@@ -519,5 +685,50 @@ public class ResourceController {
     }
     private void appendListIfNotNull(StringBuilder sb, String label, List<String> list) {
         if (list != null && !list.isEmpty()) sb.append("\n").append(label).append("：").append(String.join("、", list));
+    }
+
+    private void appendContent(StringBuilder sb, String data) {
+        if (data == null || data.isBlank()) return;
+        try {
+            var node = objectMapper.readTree(data);
+            String type = node.path("type").asText("");
+            if ("chunk".equals(type) || "result".equals(type)) {
+                String content = node.path("content").asText("");
+                if (!content.isEmpty()) sb.append(content);
+            }
+        } catch (Exception e) {
+            sb.append(data);
+        }
+    }
+
+    private void persistResource(Long userId, String title, String type, String courseName,
+                                  String knowledgePoints, String difficulty, String content, Long talkId) {
+        try {
+            LearningResource resource = new LearningResource();
+            resource.setUserId(userId);
+            resource.setTitle(title);
+            resource.setType(type);
+            resource.setCourseName(courseName != null && !courseName.isBlank() ? courseName : null);
+            if (knowledgePoints != null && !knowledgePoints.isBlank()) {
+                String jsonArr = objectMapper.writeValueAsString(List.of(knowledgePoints.split(",")));
+                resource.setKnowledgePoints(jsonArr);
+            }
+            resource.setDifficulty(difficulty);
+            resource.setContent(content);
+            resource.setTalkId(talkId);
+            resource.setCreateTime(LocalDateTime.now());
+            resource.setUpdateTime(LocalDateTime.now());
+            learningResourceMapper.insert(resource);
+            log.info("资源持久化成功: resourceId={}, talkId={}, type={}", resource.getId(), talkId, type);
+        } catch (Exception e) {
+            log.error("资源持久化失败: talkId={}, type={}", talkId, type, e);
+        }
+    }
+
+    private String buildTitle(String courseName, String suffix) {
+        if (courseName != null && !courseName.isBlank()) {
+            return courseName + " - " + suffix;
+        }
+        return suffix;
     }
 }

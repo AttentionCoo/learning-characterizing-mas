@@ -11,12 +11,12 @@ const resourceTypes = [
   { value: 'mindmap', label: '知识体系思维导图', icon: '🧠', color: '#8b5cf6' },
   { value: 'quiz', label: '练习题目', icon: '✏️', color: '#f59e0b' },
   { value: 'reading', label: '临床指南与文献', icon: '📖', color: '#10b981' },
-  { value: 'case_study', label: '脑卒中临床案例', icon: '🏥', color: '#f97316' },
+  { value: 'case_study', label: '临床案例', icon: '🏥', color: '#f97316' },
   { value: 'plan', label: '资源设计方案', icon: '📋', color: '#14b8a6' },
 ]
 
 const selectedTypes = ref([])
-const courseName = ref('神经病学')
+const courseName = ref('')
 const knowledgePoints = ref('')
 const difficulty = ref('intermediate')
 const customMessage = ref('')
@@ -70,6 +70,15 @@ function renderMarkdown(text) {
   return DOMPurify.sanitize(marked.parse(text))
 }
 
+const typeEndpointMap = {
+  document: '/api/resources/generate/document',
+  mindmap: '/api/resources/generate/mindmap',
+  quiz: '/api/resources/generate/quiz',
+  reading: '/api/resources/generate/reading',
+  case_study: '/api/resources/generate/case-study',
+  plan: '/api/resources/generate/plan',
+}
+
 async function handleGenerate() {
   if (!selectedTypes.value.length || isGenerating.value) return
 
@@ -80,7 +89,7 @@ async function handleGenerate() {
   showGenerator.value = false
   userScrolled.value = false
 
-  let displayText = ''
+  let allContent = ''
   const charBuffer = []
   let timerId = null
 
@@ -91,61 +100,68 @@ async function handleGenerate() {
       const pending = charBuffer.length
       const delay = pending > 200 ? 2 : pending > 50 ? 8 : 25
       const chars = charBuffer.splice(0, 2)
-      displayText += chars.join('')
-      generatedContent.value = displayText
+      allContent += chars.join('')
+      generatedContent.value = allContent
       nextTick(() => scrollToBottom())
       timerId = setTimeout(tick, delay)
     }
     timerId = setTimeout(tick, 0)
   }
 
-  try {
-    const points = knowledgePoints.value.split(/[,，、\n]/).map(s => s.trim()).filter(Boolean)
-    const result = await resourceStreamAPI(
-      {
-        talkId: talkId.value,
-        message: customMessage.value || `请为我生成${courseName.value}相关的学习资料`,
-        resourceTypes: selectedTypes.value,
-        courseName: courseName.value,
-        knowledgePoints: points,
-        difficulty: difficulty.value,
-      },
-      (chunk) => {
-        if (isThinking.value) {
-          isThinking.value = false
-          thinkingHint.value = ''
-        }
-        charBuffer.push(...Array.from(chunk))
-        startTypewriter()
-      },
-      (thinking) => {
-        thinkingHint.value = thinking.title || 'AI 协同生成中...'
-      },
-    )
+  const points = knowledgePoints.value.split(/[,，、\n]/).map(s => s.trim()).filter(Boolean)
 
-    if (timerId !== null) { clearTimeout(timerId); timerId = null }
-    generatedContent.value = result.data?.content || displayText
-    if (result.data?.talkId) talkId.value = result.data.talkId
-    nextTick(() => scrollToBottom(true))
+  for (let i = 0; i < selectedTypes.value.length; i++) {
+    const type = selectedTypes.value[i]
+    const endpoint = typeEndpointMap[type]
+    const typeLabel = resourceTypes.find(t => t.value === type)?.label || type
 
-    await fetchResources()
-  } catch (error) {
-    console.error('资源生成失败', error)
-    const errorMsg = error?.message || error?.msg || '未知错误'
-    if (errorMsg.includes('未登录') || errorMsg.includes('401') || errorMsg.includes('403')) {
-      generatedContent.value = '⚠️ 登录已过期，请重新登录后重试。'
-    } else if (errorMsg.includes('网络') || errorMsg.includes('fetch') || errorMsg.includes('Failed')) {
-      generatedContent.value = '❌ 网络连接失败，请检查后端服务是否启动。'
-    } else if (errorMsg.includes('timeout') || errorMsg.includes('Timeout')) {
-      generatedContent.value = '⏰ 请求超时，请稍后重试。'
-    } else {
-      generatedContent.value = `❌ 生成失败：${errorMsg}`
+    if (i > 0) {
+      allContent += '\n\n---\n\n'
+      generatedContent.value = allContent
     }
-  } finally {
-    isGenerating.value = false
-    isThinking.value = false
-    thinkingHint.value = ''
+
+    thinkingHint.value = `正在生成 ${typeLabel} (${i + 1}/${selectedTypes.value.length})...`
+    isThinking.value = true
+
+    try {
+      const result = await resourceStreamAPI(
+        endpoint,
+        {
+          talkId: talkId.value,
+          courseName: courseName.value,
+          knowledgePoints: points,
+          difficulty: difficulty.value,
+          message: customMessage.value || `请为我生成${courseName.value || '脑卒中'}相关的学习资料`,
+        },
+        (chunk) => {
+          if (isThinking.value) { isThinking.value = false; thinkingHint.value = '' }
+          charBuffer.push(...Array.from(chunk))
+          startTypewriter()
+        },
+        (thinking) => { thinkingHint.value = thinking.title || `AI 生成 ${typeLabel} 中...` },
+      )
+
+      if (timerId !== null) { clearTimeout(timerId); timerId = null }
+      allContent += charBuffer.splice(0).join('')
+      generatedContent.value = allContent
+      if (result.data?.talkId) talkId.value = result.data.talkId
+    } catch (error) {
+      if (timerId !== null) { clearTimeout(timerId); timerId = null }
+      charBuffer.length = 0
+      console.error(`${typeLabel}生成失败`, error)
+      allContent += `\n\n❌ ${typeLabel}生成失败，请稍后重试。\n`
+      generatedContent.value = allContent
+    }
   }
+
+  isGenerating.value = false
+  isThinking.value = false
+  thinkingHint.value = ''
+
+  nextTick(() => scrollToBottom(true))
+
+  await new Promise(r => setTimeout(r, 800))
+  await fetchResources()
 }
 
 async function fetchResources() {
@@ -208,7 +224,10 @@ onMounted(() => {
       <div class="generator-area">
         <div v-if="showGenerator" class="generator-form">
           <div class="form-section">
-            <div class="section-label">选择资源类型 <span class="required">*</span></div>
+            <div class="section-label">
+              选择资源类型 <span class="required">*</span>
+              <button v-if="selectedTypes.length" class="clear-types-btn" @click="selectedTypes = []">清除全部</button>
+            </div>
             <div class="type-grid">
               <button
                 v-for="rt in resourceTypes"
@@ -220,6 +239,7 @@ onMounted(() => {
               >
                 <span class="chip-icon">{{ rt.icon }}</span>
                 <span class="chip-label">{{ rt.label }}</span>
+                <span v-if="selectedTypes.includes(rt.value)" class="chip-remove" @click.stop="toggleType(rt.value)">✕</span>
               </button>
             </div>
           </div>
@@ -227,7 +247,7 @@ onMounted(() => {
           <div class="form-row">
             <div class="form-field">
               <label>课程名称</label>
-              <input v-model="courseName" placeholder="如：神经病学" />
+              <input v-model="courseName" placeholder="如：脑卒中诊疗" />
             </div>
             <div class="form-field">
               <label>难度级别</label>
@@ -429,6 +449,44 @@ onMounted(() => {
 
 .chip-icon { font-size: 18px; line-height: 1; }
 .chip-label { font-size: 13px; font-weight: 600; color: var(--color-text-strong); }
+
+.chip-remove {
+  margin-left: auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--chip-color) 20%, transparent);
+  color: var(--chip-color);
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transition: all var(--transition-fast);
+
+  &:hover {
+    background: var(--chip-color);
+    color: #fff;
+  }
+}
+
+.clear-types-btn {
+  margin-left: auto;
+  padding: 2px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-text-weak);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+
+  &:hover {
+    border-color: var(--color-red, #ef4444);
+    color: var(--color-red, #ef4444);
+  }
+}
 
 .form-row {
   display: grid;

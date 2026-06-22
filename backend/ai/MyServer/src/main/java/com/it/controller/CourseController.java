@@ -22,9 +22,9 @@ public class CourseController {
         List<Map<String, Object>> courses = new ArrayList<>();
         Map<String, Object> course = new HashMap<>();
         course.put("courseId", 1);
-        course.put("name", "神经病学");
+        course.put("name", "脑卒中诊疗");
         course.put("category", "临床医学");
-        course.put("description", "涵盖神经内科常见疾病的诊断与治疗");
+        course.put("description", "涵盖脑卒中的诊断、治疗与预防");
         course.put("knowledgePointCount", 45);
         course.put("totalEstimatedHours", 60);
         courses.add(course);
@@ -39,11 +39,11 @@ public class CourseController {
     public Result getKnowledgeTree(@PathVariable Long courseId) {
         Map<String, Object> tree = new HashMap<>();
         tree.put("courseId", courseId);
-        tree.put("name", "神经病学");
+        tree.put("name", "脑卒中诊疗");
 
         Map<String, Object> rootNode = new HashMap<>();
         rootNode.put("id", "root");
-        rootNode.put("name", "神经病学");
+        rootNode.put("name", "脑卒中诊疗");
         rootNode.put("children", List.of(
                 Map.of("id", "ch1", "name", "神经解剖学", "children", List.of(
                         Map.of("id", "k1", "name", "脑的血液供应", "difficulty", "intermediate"),

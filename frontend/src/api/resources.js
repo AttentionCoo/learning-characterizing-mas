@@ -12,7 +12,7 @@ export const getResourceConversationsAPI = () => request.get('/resources/convers
 
 export const getResourceConversationHistoryAPI = (talkId) => request.get(`/resources/conversation/${talkId}`)
 
-export function resourceStreamAPI(params, onChunk, onThinking) {
+export function resourceStreamAPI(url, params, onChunk, onThinking) {
   const token = localStorage.getItem('Synapse_MD_USER')
     ? JSON.parse(localStorage.getItem('Synapse_MD_USER')).token
     : ''
@@ -86,7 +86,7 @@ export function resourceStreamAPI(params, onChunk, onThinking) {
       safeReject(new Error('请求超时，请稍后重试'))
     }, 120000)
 
-    fetch('/api/resources/generate', {
+    fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: token, token },
       body: JSON.stringify(params),

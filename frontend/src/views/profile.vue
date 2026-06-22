@@ -568,7 +568,7 @@ function formatTime(timeStr) {
                 </div>
                 <div v-if="dim.masteredTopics !== undefined" class="edit-row">
                   <label>已掌握</label>
-                  <input v-model="editForm.masteredTopics" placeholder="用顿号分隔，如：脑血管解剖、神经病学" />
+                  <input v-model="editForm.masteredTopics" placeholder="用顿号分隔，如：脑血管解剖、脑卒中诊疗" />
                 </div>
                 <div v-if="dim.weakTopics !== undefined" class="edit-row">
                   <label>待加强</label>
