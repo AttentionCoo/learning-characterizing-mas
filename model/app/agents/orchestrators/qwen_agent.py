@@ -26,6 +26,33 @@ _NODE_LABELS: Dict[str, str] = {
     "knowledge_answer": "正在回答学习问题...",
 }
 
+_NODE_PROGRESS_LABELS: Dict[str, str] = {
+    "analysis": "正在分析学习需求",
+    "retrieve": "正在检索教育参考资料",
+    "reason": "正在进行多智能体推理",
+    "validate": "正在进行质量校验",
+    "generate_report": "正在生成报告",
+}
+
+_REPORT_MODE_TO_INTENT: Dict[str, str] = {
+    "resource_generate": "resource",
+    "document_generate": "resource",
+    "mindmap_generate": "resource",
+    "quiz_generate": "resource",
+    "reading_generate": "resource",
+    "case_study_generate": "resource",
+    "plan_generate": "resource",
+    "assessment_generate": "assessment",
+    "assessment_comprehensive": "assessment",
+    "assessment_knowledge": "assessment",
+    "assessment_skill": "assessment",
+    "assessment_progress": "assessment",
+    "profile_build": "profile",
+    "tutor": "tutor",
+    "learning_path_generate": "learning_path",
+    "emergency": "profile",
+}
+
 
 class LearningAgent:
 
@@ -76,11 +103,13 @@ class LearningAgent:
         if not profile_summary and all_info:
             profile_summary = all_info
 
+        preset_intent = _REPORT_MODE_TO_INTENT.get(report_mode, "")
+
         initial_state: LearningState = {
             "case_text": case_text,
             "all_info": all_info,
             "report_mode": report_mode,
-            "intent_type": "",
+            "intent_type": preset_intent,
             "context": {},
             "learning_questions": [],
             "key_risks": [],
@@ -103,6 +132,7 @@ class LearningAgent:
             "profile_summary": profile_summary,
         }
         streamed_nodes: set = set()
+        llm_call_counts: Dict[str, int] = {}
 
         try:
             import uuid
@@ -120,7 +150,7 @@ class LearningAgent:
                         event["metadata"]["langgraph_node"]
                     )
 
-                translated = self._translate_event(event, show_thinking, streamed_nodes)
+                translated = self._translate_event(event, show_thinking, streamed_nodes, llm_call_counts)
                 if translated:
                     yield translated
 
@@ -133,6 +163,7 @@ class LearningAgent:
         event: dict,
         show_thinking: bool,
         streamed_nodes: set,
+        llm_call_counts: Dict[str, int],
     ) -> Dict:
         evt = event.get("event", "")
         name = event.get("name", "")
@@ -142,6 +173,7 @@ class LearningAgent:
         logger.info(f"[event] 事件类型: {evt}, 节点名称: {name}, langgraph_node: {langgraph_node}")
 
         if evt == "on_chain_start" and name in _NODE_LABELS and show_thinking:
+            llm_call_counts.pop(name, None)
             return {"type": "node_start", "node": name, "label": _NODE_LABELS[name]}
 
         if evt == "on_chain_end" and name in _NODE_LABELS:
@@ -172,6 +204,18 @@ class LearningAgent:
             content = getattr(chunk, "content", "") if chunk else ""
             if content:
                 return {"type": "token", "content": content}
+
+        if evt == "on_chat_model_start" and langgraph_node and langgraph_node not in self._STREAMING_NODES:
+            if show_thinking and langgraph_node in _NODE_PROGRESS_LABELS:
+                llm_call_counts[langgraph_node] = llm_call_counts.get(langgraph_node, 0) + 1
+                count = llm_call_counts[langgraph_node]
+                base_label = _NODE_PROGRESS_LABELS[langgraph_node]
+                progress_label = f"{base_label}...（思考中 #{count}）"
+                logger.info(f"[event] 节点 {langgraph_node} LLM调用 #{count}")
+                return {"type": "thinking", "thinking": {"title": progress_label}}
+
+        if evt == "on_retriever_start" and langgraph_node == "retrieve" and show_thinking:
+            return {"type": "thinking", "thinking": {"title": "正在检索教育参考资料...（向量检索中）"}}
 
         return None
 

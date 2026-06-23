@@ -110,6 +110,15 @@ class IntentNode(BaseNode):
 
     async def run(self, state: LearningState) -> Dict:
         case_text = state["case_text"]
+        preset_intent = state.get("intent_type", "")
+
+        if preset_intent:
+            logger.info(f"[intent] 意图已由 report_mode 预设为: {preset_intent}，跳过 LLM 分类")
+            has_stroke = self._has_stroke_keyword(case_text)
+            has_learning = self._has_learning_keyword(case_text)
+            if not has_stroke and not has_learning:
+                logger.info(f"[intent] 关键词预检未通过，但意图已预设，保留预设意图")
+            return {"intent_type": preset_intent}
 
         has_stroke = self._has_stroke_keyword(case_text)
         has_learning = self._has_learning_keyword(case_text)

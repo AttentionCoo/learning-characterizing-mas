@@ -86,7 +86,7 @@ export function resourceStreamAPI(url, params, onChunk, onThinking) {
     const timeoutId = setTimeout(() => {
       controller.abort()
       safeReject(new Error('请求超时，请稍后重试'))
-    }, 120000)
+    }, 300000)
 
     fetch(url, {
       method: 'POST',

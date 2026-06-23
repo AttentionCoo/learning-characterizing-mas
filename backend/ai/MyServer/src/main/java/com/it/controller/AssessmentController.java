@@ -93,7 +93,8 @@ public class AssessmentController {
         eventCache.registerStream(finalTalkIdStr);
 
         Flux<String> chatFlux = streamingService
-                .streamChat(userId, talkId, questionBuilder.toString(), upstreamToken, null, "assessment")
+                .streamChat(userId, talkId, questionBuilder.toString(), upstreamToken, null,
+                        param.getAssessmentType() != null ? "assessment_" + param.getAssessmentType() : "assessment_comprehensive")
                 .map(this::wrapChunkIfNeeded);
         StringBuilder fullAnswer = new StringBuilder();
 

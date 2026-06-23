@@ -44,6 +44,10 @@ export function tutorStreamAPI(params, onChunk, onThinking) {
         const type = data.type
         if (data.talkId) realTalkId = data.talkId
         if (type === 'init') return
+        if (type === 'node_start' && onThinking) {
+          onThinking({ step: '', title: data.label || '', content: '' })
+          return
+        }
         if (type === 'thinking' && onThinking) {
           const src = data.thinking || data
           onThinking({ step: src.step || '', title: src.title || '', content: src.content || '' })
@@ -71,12 +75,20 @@ export function tutorStreamAPI(params, onChunk, onThinking) {
       }
     }
 
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => {
+      controller.abort()
+      safeReject(new Error('请求超时，请稍后重试'))
+    }, 300000)
+
     fetch('/api/tutor/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: token, token },
       body: JSON.stringify(params),
+      signal: controller.signal,
     })
       .then((res) => {
+        clearTimeout(timeoutId)
         if (!res.ok) throw new Error(`请求失败: ${res.status}`)
         if (!res.body) throw new Error('ReadableStream不存在')
         const reader = res.body.getReader()
@@ -109,10 +121,24 @@ export function tutorStreamAPI(params, onChunk, onThinking) {
               }
               read()
             })
-            .catch(safeReject)
+            .catch((err) => {
+              clearTimeout(timeoutId)
+              if (err.name === 'AbortError') {
+                safeReject(new Error('请求被取消或超时'))
+              } else {
+                safeReject(err)
+              }
+            })
         }
         read()
       })
-      .catch(safeReject)
+      .catch((err) => {
+        clearTimeout(timeoutId)
+        if (err.name === 'AbortError') {
+          safeReject(new Error('请求被取消或超时'))
+        } else {
+          safeReject(err)
+        }
+      })
   })
 }

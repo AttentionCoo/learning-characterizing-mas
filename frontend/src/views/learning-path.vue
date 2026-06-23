@@ -331,7 +331,7 @@ const overallProgress = computed(() => {
           </div>
         </div>
 
-        <div v-if="generatedContent" class="sidebar-card">
+        <div v-if="generatedContent" class="sidebar-card ai-advice-card">
           <div class="card-title">AI 建议</div>
           <div class="card-body">
             <div class="markdown-body compact" v-html="renderMarkdown(generatedContent)"></div>
@@ -631,6 +631,20 @@ const overallProgress = computed(() => {
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-xl);
   overflow: hidden;
+  flex-shrink: 0;
+}
+
+.ai-advice-card {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+
+  .card-body {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+  }
 }
 
 .card-title {

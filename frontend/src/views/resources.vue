@@ -310,12 +310,12 @@ onMounted(() => {
             <span class="result-title">{{ resourceDetail?.title || '生成结果' }}</span>
           </div>
 
-          <div v-if="isThinking" class="thinking-bar">
+          <div v-if="isThinking && !generatedContent" class="thinking-bar">
             <div class="thinking-dots"><span></span><span></span><span></span></div>
             <span>{{ thinkingHint }}</span>
           </div>
 
-          <div v-else-if="isGenerating && currentStage" class="stage-bar">
+          <div v-else-if="isGenerating && currentStage && !generatedContent" class="stage-bar">
             <div class="stage-pulse"></div>
             <span>{{ currentStage }}</span>
           </div>
