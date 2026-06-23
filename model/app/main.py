@@ -108,25 +108,6 @@ class SingleReadingRequest(BaseModel):
     count: int = 5
 
 
-class SingleVideoScriptRequest(BaseModel):
-    courseName: str
-    knowledgePoints: List[str] = Field(default_factory=list)
-    duration: str = "5min"
-    style: str = "animation"
-    includeNarration: bool = True
-    includeVisual: bool = True
-
-
-class SingleCodePracticeRequest(BaseModel):
-    courseName: str
-    knowledgePoints: List[str] = Field(default_factory=list)
-    language: str = "python"
-    projectType: str = "notebook"
-    difficulty: str = "intermediate"
-    includeTest: bool = True
-    includeExplanation: bool = True
-
-
 class TutorAskRequest(BaseModel):
     talkId: Optional[str] = None
     question: str
@@ -848,7 +829,7 @@ async def generate_document(request: SingleDocumentRequest):
     task_mgr.create_task(task_id, "document_generate", {"talkId": talk_id})
     asyncio.create_task(_run_agent_background(
         task_id=task_id, agent=agent, case_text=combined_message, all_info="",
-        report_mode="resource_generate", task_mgr=task_mgr,
+        report_mode="document_generate", task_mgr=task_mgr,
     ))
 
     init_event = {"type": "init", "taskId": task_id, "talkId": talk_id, "newTalk": True}
@@ -870,7 +851,7 @@ async def generate_mindmap(request: SingleMindmapRequest):
     task_mgr.create_task(task_id, "mindmap_generate", {"talkId": talk_id})
     asyncio.create_task(_run_agent_background(
         task_id=task_id, agent=agent, case_text=combined_message, all_info="",
-        report_mode="resource_generate", task_mgr=task_mgr,
+        report_mode="mindmap_generate", task_mgr=task_mgr,
     ))
 
     init_event = {"type": "init", "taskId": task_id, "talkId": talk_id, "newTalk": True}
@@ -892,7 +873,7 @@ async def generate_quiz(request: SingleQuizRequest):
     task_mgr.create_task(task_id, "quiz_generate", {"talkId": talk_id})
     asyncio.create_task(_run_agent_background(
         task_id=task_id, agent=agent, case_text=combined_message, all_info="",
-        report_mode="resource_generate", task_mgr=task_mgr,
+        report_mode="quiz_generate", task_mgr=task_mgr,
     ))
 
     init_event = {"type": "init", "taskId": task_id, "talkId": talk_id, "newTalk": True}
@@ -914,51 +895,7 @@ async def generate_reading(request: SingleReadingRequest):
     task_mgr.create_task(task_id, "reading_generate", {"talkId": talk_id})
     asyncio.create_task(_run_agent_background(
         task_id=task_id, agent=agent, case_text=combined_message, all_info="",
-        report_mode="resource_generate", task_mgr=task_mgr,
-    ))
-
-    init_event = {"type": "init", "taskId": task_id, "talkId": talk_id, "newTalk": True}
-    return EventSourceResponse(_stream_task_events(task_id, task_mgr, init_event), ping=15)
-
-
-@app.post("/model/resources/generate/video-script")
-async def generate_video_script(request: SingleVideoScriptRequest):
-    """生成教学视频/动画脚本（SSE 流式 + 后台持久化）"""
-    agent = resources.get("model")
-    if not agent:
-        raise HTTPException(status_code=503, detail="Model service not ready")
-
-    task_mgr = resources["task_manager"]
-    task_id = uuid.uuid4().hex
-    talk_id = str(uuid.uuid4().int % 100000)
-    combined_message = f"请生成教学视频/动画脚本。\n课程：{request.courseName}\n知识点：{', '.join(request.knowledgePoints)}\n预期时长：{request.duration}\n风格：{request.style}\n{'包含旁白脚本' if request.includeNarration else '不包含旁白脚本'}\n{'包含画面描述' if request.includeVisual else '不包含画面描述'}"
-
-    task_mgr.create_task(task_id, "video_script_generate", {"talkId": talk_id})
-    asyncio.create_task(_run_agent_background(
-        task_id=task_id, agent=agent, case_text=combined_message, all_info="",
-        report_mode="resource_generate", task_mgr=task_mgr,
-    ))
-
-    init_event = {"type": "init", "taskId": task_id, "talkId": talk_id, "newTalk": True}
-    return EventSourceResponse(_stream_task_events(task_id, task_mgr, init_event), ping=15)
-
-
-@app.post("/model/resources/generate/code-practice")
-async def generate_code_practice(request: SingleCodePracticeRequest):
-    """生成代码实操案例（SSE 流式 + 后台持久化）"""
-    agent = resources.get("model")
-    if not agent:
-        raise HTTPException(status_code=503, detail="Model service not ready")
-
-    task_mgr = resources["task_manager"]
-    task_id = uuid.uuid4().hex
-    talk_id = str(uuid.uuid4().int % 100000)
-    combined_message = f"请生成代码实操案例。\n课程：{request.courseName}\n知识点：{', '.join(request.knowledgePoints)}\n编程语言：{request.language}\n项目类型：{request.projectType}\n难度：{request.difficulty}\n{'包含测试用例' if request.includeTest else '不包含测试用例'}\n{'包含代码注释说明' if request.includeExplanation else '不包含代码注释说明'}"
-
-    task_mgr.create_task(task_id, "code_practice_generate", {"talkId": talk_id})
-    asyncio.create_task(_run_agent_background(
-        task_id=task_id, agent=agent, case_text=combined_message, all_info="",
-        report_mode="resource_generate", task_mgr=task_mgr,
+        report_mode="reading_generate", task_mgr=task_mgr,
     ))
 
     init_event = {"type": "init", "taskId": task_id, "talkId": talk_id, "newTalk": True}

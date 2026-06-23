@@ -103,7 +103,7 @@ public class ResourceController {
                 persistResource(userId, buildTitle(courseName, "学习资源"), resourceType,
                         courseName, knowledgePoints, difficulty, fullAnswer, talkId);
 
-        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId, persistCallback);
+        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId, persistCallback, "resource_generate");
     }
 
     @GetMapping
@@ -246,7 +246,7 @@ public class ResourceController {
                 persistResource(userId, buildTitle(courseName, "课程讲解文档"), "document",
                         courseName, knowledgePoints, difficulty, fullAnswer, talkId);
 
-        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId, persistCallback);
+        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId, persistCallback, "document_generate");
     }
 
     @PostMapping(value = "/generate/mindmap", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -285,7 +285,7 @@ public class ResourceController {
                 persistResource(userId, buildTitle(courseName, "知识体系思维导图"), "mindmap",
                         courseName, knowledgePoints, null, fullAnswer, talkId);
 
-        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId, persistCallback);
+        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId, persistCallback, "mindmap_generate");
     }
 
     @PostMapping(value = "/generate/quiz", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -327,7 +327,7 @@ public class ResourceController {
                 persistResource(userId, buildTitle(courseName, "练习题目"), "quiz",
                         courseName, knowledgePoints, difficulty, fullAnswer, talkId);
 
-        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId, persistCallback);
+        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId, persistCallback, "quiz_generate");
     }
 
     @PostMapping(value = "/generate/reading", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -367,90 +367,7 @@ public class ResourceController {
                 persistResource(userId, buildTitle(courseName, "拓展阅读材料"), "reading",
                         courseName, knowledgePoints, null, fullAnswer, talkId);
 
-        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId, persistCallback);
-    }
-
-    @PostMapping(value = "/generate/video-script", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<ServerSentEvent<String>> generateVideoScript(
-            @RequestBody Map<String, Object> body,
-            @RequestHeader(value = "token", required = false) String token,
-            @RequestHeader(value = "Authorization", required = false) String authorization,
-            @RequestHeader(value = "Last-Event-ID", required = false) String lastEventId,
-            HttpServletResponse response
-    ) {
-        response.setHeader("X-Accel-Buffering", "no");
-        response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-        if (ThreadLocalUtil.getCurrentUser() == null) {
-            return Flux.just(sse("error", json("error", mapOf("message", "未登录"))));
-        }
-        String upstreamToken = resolveToken(token, authorization);
-        Long userId = ThreadLocalUtil.getCurrentUser().getId();
-
-        StringBuilder questionBuilder = new StringBuilder("请生成教学视频/动画脚本：");
-        appendIfNotNull(questionBuilder, "课程", body.get("courseName"));
-        appendListIfNotNull(questionBuilder, "知识点", (List<String>) body.get("knowledgePoints"));
-        appendIfNotNull(questionBuilder, "时长", body.get("duration"));
-        appendIfNotNull(questionBuilder, "风格", body.get("style"));
-        appendIfNotNull(questionBuilder, "包含旁白", body.get("includeNarration"));
-        appendIfNotNull(questionBuilder, "包含画面描述", body.get("includeVisual"));
-        appendIfNotNull(questionBuilder, "补充说明", body.get("message"));
-
-        QuesParam quesParam = new QuesParam();
-        quesParam.setTalkId((String) body.get("talkId"));
-        quesParam.setQuestion(questionBuilder.toString());
-
-        String courseName = body.get("courseName") != null ? body.get("courseName").toString() : "";
-        String knowledgePoints = body.get("knowledgePoints") != null
-                ? String.join(",", (List<String>) body.get("knowledgePoints")) : null;
-
-        BiConsumer<String, Long> persistCallback = (fullAnswer, talkId) ->
-                persistResource(userId, buildTitle(courseName, "教学视频脚本"), "video_script",
-                        courseName, knowledgePoints, null, fullAnswer, talkId);
-
-        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId, persistCallback);
-    }
-
-    @PostMapping(value = "/generate/code-practice", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    @SuppressWarnings("unchecked")
-    public Flux<ServerSentEvent<String>> generateCodePractice(
-            @RequestBody Map<String, Object> body,
-            @RequestHeader(value = "token", required = false) String token,
-            @RequestHeader(value = "Authorization", required = false) String authorization,
-            @RequestHeader(value = "Last-Event-ID", required = false) String lastEventId,
-            HttpServletResponse response
-    ) {
-        response.setHeader("X-Accel-Buffering", "no");
-        response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-        if (ThreadLocalUtil.getCurrentUser() == null) {
-            return Flux.just(sse("error", json("error", mapOf("message", "未登录"))));
-        }
-        String upstreamToken = resolveToken(token, authorization);
-        Long userId = ThreadLocalUtil.getCurrentUser().getId();
-
-        StringBuilder questionBuilder = new StringBuilder("请生成代码实操案例：");
-        appendIfNotNull(questionBuilder, "课程", body.get("courseName"));
-        appendListIfNotNull(questionBuilder, "知识点", (List<String>) body.get("knowledgePoints"));
-        appendIfNotNull(questionBuilder, "编程语言", body.get("language"));
-        appendIfNotNull(questionBuilder, "难度", body.get("difficulty"));
-        appendIfNotNull(questionBuilder, "类型", body.get("projectType"));
-        appendIfNotNull(questionBuilder, "包含测试", body.get("includeTest"));
-        appendIfNotNull(questionBuilder, "包含说明", body.get("includeExplanation"));
-        appendIfNotNull(questionBuilder, "补充说明", body.get("message"));
-
-        QuesParam quesParam = new QuesParam();
-        quesParam.setTalkId((String) body.get("talkId"));
-        quesParam.setQuestion(questionBuilder.toString());
-
-        String courseName = body.get("courseName") != null ? body.get("courseName").toString() : "";
-        String knowledgePoints = body.get("knowledgePoints") != null
-                ? String.join(",", (List<String>) body.get("knowledgePoints")) : null;
-        String difficulty = body.get("difficulty") != null ? body.get("difficulty").toString() : null;
-
-        BiConsumer<String, Long> persistCallback = (fullAnswer, talkId) ->
-                persistResource(userId, buildTitle(courseName, "代码实操案例"), "code_practice",
-                        courseName, knowledgePoints, difficulty, fullAnswer, talkId);
-
-        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId, persistCallback);
+        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId, persistCallback, "reading_generate");
     }
 
     @PostMapping(value = "/generate/case-study", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -490,7 +407,7 @@ public class ResourceController {
                 persistResource(userId, buildTitle(courseName, "临床案例"), "case_study",
                         courseName, knowledgePoints, difficulty, fullAnswer, talkId);
 
-        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId, persistCallback);
+        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId, persistCallback, "case_study_generate");
     }
 
     @PostMapping(value = "/generate/plan", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -530,12 +447,13 @@ public class ResourceController {
                 persistResource(userId, buildTitle(courseName, "资源设计方案"), "plan",
                         courseName, knowledgePoints, difficulty, fullAnswer, talkId);
 
-        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId, persistCallback);
+        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId, persistCallback, "plan_generate");
     }
 
     private Flux<ServerSentEvent<String>> buildSSEStream(Long userId, QuesParam quesParam,
                                                           String upstreamToken, String lastEventId,
-                                                          BiConsumer<String, Long> persistCallback) {
+                                                          BiConsumer<String, Long> persistCallback,
+                                                          String reportMode) {
         String talkIdStr = quesParam.getTalkId();
         Long talkId = null;
         if (talkIdStr != null && !talkIdStr.isBlank()) {
@@ -577,7 +495,7 @@ public class ResourceController {
         StringBuilder fullAnswer = new StringBuilder();
 
         Flux<String> chatFlux = streamingService
-                .streamChat(userId, finalTalkId, quesParam.getQuestion(), upstreamToken, quesParam.getImages(), "resource_generate")
+                .streamChat(userId, finalTalkId, quesParam.getQuestion(), upstreamToken, quesParam.getImages(), reportMode != null ? reportMode : "resource_generate")
                 .map(this::wrapChunkIfNeeded);
 
         Sinks.One<Void> doneSink = Sinks.one();
