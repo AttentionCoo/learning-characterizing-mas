@@ -20,6 +20,7 @@ const draftMessage = ref('')
 const isStreaming = ref(false)
 const isThinking = ref(false)
 const thinkingHint = ref('')
+const currentStage = ref('')
 const talkId = ref(null)
 const chatContainerRef = ref(null)
 const inputRef = ref(null)
@@ -142,7 +143,11 @@ async function handleSend() {
         charBuffer.push(...Array.from(chunk))
         startTypewriter()
       },
-      (thinking) => { thinkingHint.value = thinking.title || 'AI 思考中...' },
+      (thinking) => {
+        const title = thinking.title || 'AI 思考中...'
+        thinkingHint.value = title
+        currentStage.value = title
+      },
     )
 
     if (timerId !== null) { clearTimeout(timerId); timerId = null }
@@ -158,6 +163,7 @@ async function handleSend() {
     isStreaming.value = false
     isThinking.value = false
     thinkingHint.value = ''
+    currentStage.value = ''
   }
 
   await nextTick()
@@ -264,6 +270,10 @@ const quickQuestions = [
               </div>
               <div v-else-if="msg.role === 'assistant'" class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
               <div v-else class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
+              <div v-if="msg.role === 'assistant' && idx === chatMessages.length - 1 && isStreaming && !isThinking && currentStage" class="stage-bar">
+                <span class="stage-dot"></span>
+                <span class="stage-text">{{ currentStage }}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -515,6 +525,35 @@ const quickQuestions = [
   font-weight: 500;
   color: #6366f1;
   letter-spacing: 0.01em;
+}
+
+.stage-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 4px 12px;
+  background: rgba(99, 102, 241, 0.06);
+  border-radius: 12px;
+}
+
+.stage-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.stage-text {
+  font-size: 12px;
+  font-weight: 500;
+  color: #6366f1;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.2); }
 }
 
 @keyframes bounce {

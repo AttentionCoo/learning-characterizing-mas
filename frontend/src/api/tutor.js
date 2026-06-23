@@ -44,12 +44,9 @@ export function tutorStreamAPI(params, onChunk, onThinking) {
         const type = data.type
         if (data.talkId) realTalkId = data.talkId
         if (type === 'init') return
-        if (type === 'node_start' && onThinking) {
-          onThinking({ step: '', title: data.label || '', content: '' })
-          return
-        }
         if (type === 'thinking' && onThinking) {
-          onThinking({ step: data.step || '', title: data.title || '', content: data.content || '' })
+          const src = data.thinking || data
+          onThinking({ step: src.step || '', title: src.title || '', content: src.content || '' })
           return
         }
         if (type === 'chunk') {
