@@ -108,6 +108,13 @@ class SingleReadingRequest(BaseModel):
     count: int = 5
 
 
+class SingleAssessmentRequest(BaseModel):
+    courseName: str
+    knowledgePoints: List[str] = Field(default_factory=list)
+    difficulty: str = "intermediate"
+    assessmentType: str = "comprehensive"
+
+
 class TutorAskRequest(BaseModel):
     talkId: Optional[str] = None
     question: str
@@ -896,6 +903,28 @@ async def generate_reading(request: SingleReadingRequest):
     asyncio.create_task(_run_agent_background(
         task_id=task_id, agent=agent, case_text=combined_message, all_info="",
         report_mode="reading_generate", task_mgr=task_mgr,
+    ))
+
+    init_event = {"type": "init", "taskId": task_id, "talkId": talk_id, "newTalk": True}
+    return EventSourceResponse(_stream_task_events(task_id, task_mgr, init_event), ping=15)
+
+
+@app.post("/model/resources/generate/assessment")
+async def generate_assessment(request: SingleAssessmentRequest):
+    """生成学习评估报告（SSE 流式 + 后台持久化）"""
+    agent = resources.get("model")
+    if not agent:
+        raise HTTPException(status_code=503, detail="Model service not ready")
+
+    task_mgr = resources["task_manager"]
+    task_id = uuid.uuid4().hex
+    talk_id = str(uuid.uuid4().int % 100000)
+    combined_message = f"请生成学习评估报告。\n课程：{request.courseName}\n知识点：{', '.join(request.knowledgePoints)}\n难度：{request.difficulty}\n评估类型：{request.assessmentType}"
+
+    task_mgr.create_task(task_id, "assessment_generate", {"talkId": talk_id})
+    asyncio.create_task(_run_agent_background(
+        task_id=task_id, agent=agent, case_text=combined_message, all_info="",
+        report_mode="assessment_generate", task_mgr=task_mgr,
     ))
 
     init_event = {"type": "init", "taskId": task_id, "talkId": talk_id, "newTalk": True}

@@ -450,6 +450,46 @@ public class ResourceController {
         return buildSSEStream(userId, quesParam, upstreamToken, lastEventId, persistCallback, "plan_generate");
     }
 
+    @PostMapping(value = "/generate/assessment", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @SuppressWarnings("unchecked")
+    public Flux<ServerSentEvent<String>> generateAssessment(
+            @RequestBody Map<String, Object> body,
+            @RequestHeader(value = "token", required = false) String token,
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestHeader(value = "Last-Event-ID", required = false) String lastEventId,
+            HttpServletResponse response
+    ) {
+        response.setHeader("X-Accel-Buffering", "no");
+        response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        if (ThreadLocalUtil.getCurrentUser() == null) {
+            return Flux.just(sse("error", json("error", mapOf("message", "未登录"))));
+        }
+        String upstreamToken = resolveToken(token, authorization);
+        Long userId = ThreadLocalUtil.getCurrentUser().getId();
+
+        StringBuilder questionBuilder = new StringBuilder("请生成学习评估报告：");
+        appendIfNotNull(questionBuilder, "课程", body.get("courseName"));
+        appendListIfNotNull(questionBuilder, "知识点", (List<String>) body.get("knowledgePoints"));
+        appendIfNotNull(questionBuilder, "难度", body.get("difficulty"));
+        appendIfNotNull(questionBuilder, "补充说明", body.get("message"));
+        questionBuilder.append("\n请包含：综合评估、各维度分析、优势分析、薄弱环节和改进建议。");
+
+        QuesParam quesParam = new QuesParam();
+        quesParam.setTalkId((String) body.get("talkId"));
+        quesParam.setQuestion(questionBuilder.toString());
+
+        String courseName = body.get("courseName") != null ? body.get("courseName").toString() : "";
+        String knowledgePoints = body.get("knowledgePoints") != null
+                ? String.join(",", (List<String>) body.get("knowledgePoints")) : null;
+        String difficulty = body.get("difficulty") != null ? body.get("difficulty").toString() : null;
+
+        BiConsumer<String, Long> persistCallback = (fullAnswer, talkId) ->
+                persistResource(userId, buildTitle(courseName, "学习评估报告"), "assessment",
+                        courseName, knowledgePoints, difficulty, fullAnswer, talkId);
+
+        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId, persistCallback, "assessment_generate");
+    }
+
     private Flux<ServerSentEvent<String>> buildSSEStream(Long userId, QuesParam quesParam,
                                                           String upstreamToken, String lastEventId,
                                                           BiConsumer<String, Long> persistCallback,

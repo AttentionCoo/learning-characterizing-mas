@@ -13,6 +13,7 @@ const resourceTypes = [
   { value: 'reading', label: '临床指南与文献', icon: '📖', color: '#10b981' },
   { value: 'case_study', label: '临床案例', icon: '🏥', color: '#f97316' },
   { value: 'plan', label: '资源设计方案', icon: '📋', color: '#14b8a6' },
+  { value: 'assessment', label: '学习评估报告', icon: '📊', color: '#ef4444' },
 ]
 
 const selectedTypes = ref([])
@@ -23,6 +24,7 @@ const customMessage = ref('')
 const isGenerating = ref(false)
 const isThinking = ref(false)
 const thinkingHint = ref('')
+const currentStage = ref('')
 const generatedContent = ref('')
 const talkId = ref(null)
 
@@ -77,6 +79,7 @@ const typeEndpointMap = {
   reading: '/api/resources/generate/reading',
   case_study: '/api/resources/generate/case-study',
   plan: '/api/resources/generate/plan',
+  assessment: '/api/resources/generate/assessment',
 }
 
 async function handleGenerate() {
@@ -85,6 +88,7 @@ async function handleGenerate() {
   isGenerating.value = true
   isThinking.value = true
   thinkingHint.value = '正在分析学习需求...'
+  currentStage.value = '正在分析学习需求...'
   generatedContent.value = ''
   showGenerator.value = false
   userScrolled.value = false
@@ -121,6 +125,7 @@ async function handleGenerate() {
     }
 
     thinkingHint.value = `正在生成 ${typeLabel} (${i + 1}/${selectedTypes.value.length})...`
+    currentStage.value = `正在生成 ${typeLabel} (${i + 1}/${selectedTypes.value.length})...`
     isThinking.value = true
 
     try {
@@ -134,29 +139,42 @@ async function handleGenerate() {
           message: customMessage.value || `请为我生成${courseName.value || '脑卒中'}相关的学习资料`,
         },
         (chunk) => {
-          if (isThinking.value) { isThinking.value = false; thinkingHint.value = '' }
+          if (!isGenerating.value) return
+          if (isThinking.value) { isThinking.value = false }
           charBuffer.push(...Array.from(chunk))
           startTypewriter()
         },
-        (thinking) => { thinkingHint.value = thinking.title || `AI 生成 ${typeLabel} 中...` },
+        (thinking) => {
+          if (!isGenerating.value) return
+          const stageText = thinking.title || `AI 生成 ${typeLabel} 中...`
+          thinkingHint.value = stageText
+          currentStage.value = stageText
+        },
       )
 
       if (timerId !== null) { clearTimeout(timerId); timerId = null }
       allContent += charBuffer.splice(0).join('')
       generatedContent.value = allContent
       if (result.data?.talkId) talkId.value = result.data.talkId
+      isThinking.value = false
+      thinkingHint.value = ''
+      currentStage.value = ''
     } catch (error) {
       if (timerId !== null) { clearTimeout(timerId); timerId = null }
       charBuffer.length = 0
       console.error(`${typeLabel}生成失败`, error)
       allContent += `\n\n❌ ${typeLabel}生成失败，请稍后重试。\n`
       generatedContent.value = allContent
+      isThinking.value = false
+      thinkingHint.value = ''
+      currentStage.value = ''
     }
   }
 
   isGenerating.value = false
   isThinking.value = false
   thinkingHint.value = ''
+  currentStage.value = ''
 
   nextTick(() => scrollToBottom(true))
 
@@ -297,12 +315,17 @@ onMounted(() => {
             <span>{{ thinkingHint }}</span>
           </div>
 
+          <div v-else-if="isGenerating && currentStage" class="stage-bar">
+            <div class="stage-pulse"></div>
+            <span>{{ currentStage }}</span>
+          </div>
+
           <div ref="resultContentRef" class="result-content markdown-body" @scroll="onResultScroll" v-html="renderMarkdown(generatedContent)"></div>
 
           <div v-if="isGenerating && !generatedContent" class="generating-overlay">
             <div class="gen-spinner"></div>
             <div class="gen-text">多智能体协同生成中...</div>
-            <div class="gen-sub">{{ thinkingHint || '请稍候' }}</div>
+            <div class="gen-sub">{{ currentStage || thinkingHint || '请稍候' }}</div>
           </div>
         </div>
       </div>
@@ -642,6 +665,32 @@ onMounted(() => {
 @keyframes bounce {
   0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
   40% { transform: scale(1); opacity: 1; }
+}
+
+.stage-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 24px;
+  background: rgba(17, 150, 127, 0.06);
+  border-bottom: 1px solid rgba(17, 150, 127, 0.1);
+  font-size: 13px;
+  color: var(--color-primary-dark);
+  flex-shrink: 0;
+}
+
+.stage-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  animation: pulse 1.5s infinite ease-in-out;
+  flex-shrink: 0;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.7); }
 }
 
 .result-content {

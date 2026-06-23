@@ -35,6 +35,7 @@ export function resourceStreamAPI(url, params, onChunk, onThinking) {
     }
 
     function handleMessageBlock(block) {
+      if (finished) return
       if (!block.trim()) return
       const lines = block.split(/\r?\n/)
       const dataLines = []
@@ -55,7 +56,8 @@ export function resourceStreamAPI(url, params, onChunk, onThinking) {
           return
         }
         if (type === 'thinking' && onThinking) {
-          onThinking({ step: data.step || '', title: data.title || '', content: data.content || '' })
+          const thinkingData = data.thinking || data
+          onThinking({ step: thinkingData.step || '', title: thinkingData.title || '', content: thinkingData.content || '' })
           return
         }
         if (type === 'chunk') {
