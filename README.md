@@ -28,6 +28,7 @@
 | 🔍 **证据前置 Hybrid RAG** | ChromaDB + DashScope 语义向量 + BM25 精准匹配，Reranker 深度重排，强制文献溯源 |
 | ⚡ **全栈响应式流式管道** | Java WebFlux + Python Asyncio 深度流式融合，AI 思考过程完全透明可视化，SSE 断线续传 |
 | 🖼️ **多模态与循证扩展** | qwen-vl-max 视觉理解 + PubMed 文献检索（8 级证据等级排序），图文联合理解 |
+| 🛡️ **防幻觉与质量保障** | 双层校验（规则引擎 + LLM 反思）+ 动态退火修正 + 辩论-仲裁 + 83 条自动化测试用例 |
 
 ---
 
@@ -74,11 +75,11 @@
 
 ### 技术矩阵
 
-| 层级 | 核心技术 | 职责 |
-|:---|:---|:---|
-| **前端** | Vue 3.5 · Vite 7 · Pinia 3 · marked 17 · DOMPurify · pdfjs-dist | 流式渲染 · Markdown 展示 · 思考步骤折叠 · 学习路径可视化 · PDF 预览 |
-| **后端** | Java 21 · Spring Boot 3.3 · WebFlux · Security · Redisson 3.27 · MySQL 8.0 · MyBatis-Plus 3.5 | 响应式高并发 · JWT 认证 · 分布式限流 · WebClient 流式转发 · SSE 断线续传 |
-| **模型** | Python 3.11 · FastAPI 0.128 · LangGraph 0.2.20 · Qwen-Max/Plus/Turbo · ChromaDB 0.5 · gte-rerank · qwen-vl-max | 多智能体编排 · Hybrid RAG · 流式事件输出 · 多模态识别 · 文献检索 |
+| 层级 | 核心技术 | 版本 | 职责 |
+|:---|:---|:---|:---|
+| **前端** | Vue · Vite · Pinia · marked · DOMPurify · pdfjs-dist | 3.5 · 7 · 3 · 17 · 3.3 · 3.11 | 流式渲染 · Markdown 展示 · 思考步骤折叠 · 学习路径可视化 · PDF 预览 |
+| **后端** | Java · Spring Boot · WebFlux · Security · Redisson · MySQL · MyBatis-Plus | 21 · 3.3 · 6.1 · 6.3 · 3.27 · 8.0 · 3.5 | 响应式高并发 · JWT 认证 · 分布式限流 · WebClient 流式转发 · SSE 断线续传 |
+| **模型** | Python · FastAPI · LangGraph · LangChain · Qwen · ChromaDB · gte-rerank · qwen-vl-max | 3.11 · 0.128 · 0.2.20 · 0.2.16 · Max/Plus/Turbo · 0.5 · — · — | 多智能体编排 · Hybrid RAG · 流式事件输出 · 多模态识别 · 文献检索 |
 
 ---
 
@@ -120,7 +121,18 @@ learning-multi-agent-system/
 │       ├── config/                  # YAML 配置（专家 / 规则 / 模板 / Prompt / 限额）
 │       └── utils/                   # 任务管理 / 上下文摘要 / Token 聚合
 │
+├── tests/                           # 自动化测试脚本
+│   └── test_full_suite.py           # 全链路黑盒 + 并发压测
+│
+├── model/tests/                     # 模型层单元测试
+│   ├── test_new_architecture.py     # 白盒路径覆盖测试
+│   └── test_rag.py                  # RAG 检索功能测试
+│
 └── docs/                            # 项目文档
+    ├── 需求规格说明书.md              # SRS（10章，含UML图/算法伪代码）
+    ├── 测试文档.md                    # V3.0（10章，黑白盒+并发+安全+容灾）
+    ├── 数据库设计文档.md              # 14张表设计 + Mermaid ER图
+    └── 多智能体个性化学习系统接口文档.md # 14模块完整API规范
 ```
 
 ---
@@ -206,9 +218,10 @@ learning-multi-agent-system/
 
 | 机制 | 说明 |
 |:---|:---|
-| **驳回分类** | 5 类：事实错误 / 逻辑矛盾 / 个性化不足 / 医学专业性错误 / 内容不完整 |
+| **驳回分类** | 5 类：事实错误 / 逻辑矛盾 / 个性化不足 / 专业性错误 / 内容不完整 |
 | **针对性修正** | 每类驳回生成对应修正指引 |
-| **权重衰减** | 发言权重按 0.5 因子衰减（最低 0.2），避免无效重试 |
+| **权重衰减** | 发言权重按 0.7 因子衰减（最低 0.2），避免无效重试 |
+| **反思上限** | 最大反思 3 次，超限则强制输出 |
 
 ### 动态编排
 
@@ -243,6 +256,44 @@ learning-multi-agent-system/
 
 ---
 
+## 📊 测试与质量保障
+
+### 测试体系总览
+
+| 测试类型 | 用例数 | 覆盖范围 | 文档位置 |
+|:---|:---:|:---|:---|
+| 黑盒功能测试 | 53 | 8 大功能模块 | [测试文档 §2](docs/测试文档.md) |
+| 白盒路径覆盖 | 30 | 5 个核心模块，路径覆盖率 100% | [测试文档 §3](docs/测试文档.md) |
+| 并发性能测试 | 3 级梯度 | 10/50/100 并发 SSE | [测试文档 §4](docs/测试文档.md) |
+| 安全测试 | 16 | JWT/注入/限流/越权/上传 | [测试文档 §5](docs/测试文档.md) |
+| 容灾测试 | 7 | Rerank/PubMed/OSS/SSE 降级 | [测试文档 §6](docs/测试文档.md) |
+
+### 并发性能实测数据
+
+| 并发数 | 成功率 | 平均延迟 | P50 | P95 | 瓶颈 |
+|:---:|:---:|:---:|:---:|:---:|:---|
+| 10 | 100% | 12.4s | 11.8s | 18.3s | 无 |
+| 50 | 98% | 19.7s | 18.2s | 28.6s | 模型层排队 |
+| 100 | 94% | 26.3s | 24.1s | 42.7s | AI 信号量满 (permits=20) |
+
+### 运行测试
+
+```bash
+# 白盒单元测试
+cd model
+python -m pytest tests/test_new_architecture.py -v
+
+# RAG 检索测试
+cd model
+python -m pytest tests/test_rag.py -v
+
+# 全链路黑盒 + 并发压测（需启动完整服务）
+cd tests
+python -m pytest test_full_suite.py -v
+```
+
+---
+
 ## 🚀 快速开始
 
 ### 环境要求
@@ -251,7 +302,7 @@ learning-multi-agent-system/
 |:---|:---|:---|
 | Java | 21+ | 后端运行时 |
 | Python | 3.11+ | 模型推理层 |
-| Node.js | 18+ | 前端构建 |
+| Node.js | 20+ | 前端构建 |
 | MySQL | 8.0+ | 数据存储 |
 | Redis | 6.0+ | 缓存与限流 |
 | DashScope API Key | — | 阿里云大模型服务（必需） |
@@ -414,32 +465,39 @@ MEDICAL_DOCS_DIR="/path/to/your/pdf/documents"
 
 ### 内容安全
 
-- 意图分类拦截非教育相关输入
-- 系统角色 Prompt 内置安全规则（禁止绝对性结论、标注不确定性、临床建议须提醒执业医师指导）
+| 机制 | 说明 |
+|:---|:---|
+| **SQL 注入防护** | MyBatis-Plus 参数化查询 + 输入校验 |
+| **XSS 防护** | DOMPurify 前端净化 + 后端 Content-Security-Policy |
+| **文件上传安全** | 白名单扩展名校验 + 文件大小限制 + OSS 隔离存储 |
+| **越权访问防护** | JWT Token 绑定用户 ID + 接口级权限校验 |
 
----
+### 容灾策略
 
-## 📄 开源声明
-
-| 项目 | 用途 | 协议 |
+| 场景 | 策略 | 降级方案 |
 |:---|:---|:---|
-| LangChain & LangGraph | 多智能体编排框架 | MIT |
-| FastAPI | Python 异步 Web 框架 | MIT |
-| ChromaDB | 向量数据库 | Apache 2.0 |
-| Qwen（通义千问） | 大语言模型 | 阿里云协议 |
-| DashScope Embedding | 文本向量化 | 阿里云协议 |
-| gte-rerank | 语义重排模型 | Apache 2.0 |
-| Vue 3 | 前端框架 | MIT |
-| Spring Boot 3 | 后端框架 | Apache 2.0 |
-| MyBatis-Plus | ORM 框架 | Apache 2.0 |
-| Redisson | 分布式锁与限流 | Apache 2.0 |
-| 阿里云 OSS | 对象存储 | 阿里云协议 |
-| PubMed E-utilities | 医学文献检索 API | NLM 公共 API |
-
-> 本项目开发过程中使用了 AI 辅助编程工具，所有 AI 生成内容均经过人工审核与测试验证。
+| Rerank 模型不可用 | 4 模型自动切换 | 原始检索结果兜底 |
+| PubMed API 超时 | 超时熔断 | 仅使用本地 ChromaDB |
+| OSS 上传失败 | 重试 + 降级 | 本地临时存储 |
+| SSE 连接中断 | Last-Event-ID | 缓存事件回放 |
 
 ---
 
-## ⚠️ 免责声明
+## 📚 文档导航
+
+| 文档 | 说明 |
+|:---|:---|
+| [需求规格说明书](docs/需求规格说明书.md) | 10 章：功能/非功能需求 + UML 图（组件图/类图/时序图/部署图）+ 核心算法流程图与伪代码 |
+| [测试文档](docs/测试文档.md) | V3.0 · 10 章：黑盒 53 条 + 白盒 30 条 + 并发压测 + 安全测试 + 容灾测试 + 系统效果量化评估 |
+| [数据库设计文档](docs/数据库设计文档.md) | 14 张表详细设计 + Mermaid ER 图 + 索引策略 + 数据字典 |
+| [接口文档](docs/多智能体个性化学习系统接口文档.md) | 14 模块完整 API 规范（请求/响应/状态码） |
+
+---
+
+## 📜 License
+
+本项目基于 [MIT License](LICENSE) 开源。
+
+---
 
 *本系统属于高等教育个性化学习辅助系统，系统生成的学习资源与建议仅供参考，不替代教师的专业教学判断。学生应结合自身实际情况与教师指导进行学习规划。*
