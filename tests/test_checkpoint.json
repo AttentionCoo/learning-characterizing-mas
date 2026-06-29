@@ -1,0 +1,82 @@
+{
+  "AUTH::AUTH-01": {
+    "module": "AUTH",
+    "case_id": "AUTH-01",
+    "status": "PASS",
+    "elapsed_ms": 505.5,
+    "detail": "user=test_5042ae2d",
+    "timestamp": "2026-06-29T19:13:00.480250"
+  },
+  "TestAuth.test_register_new_user": {
+    "module": "AUTH",
+    "case_id": "AUTH-01",
+    "status": "PASS",
+    "elapsed_ms": 505.5,
+    "detail": "user=test_5042ae2d",
+    "timestamp": "2026-06-29T19:13:00.480250"
+  },
+  "AUTH::AUTH-02": {
+    "module": "AUTH",
+    "case_id": "AUTH-02",
+    "status": "PASS",
+    "elapsed_ms": 172.3,
+    "detail": "",
+    "timestamp": "2026-06-29T19:13:00.884006"
+  },
+  "TestAuth.test_register_duplicate": {
+    "module": "AUTH",
+    "case_id": "AUTH-02",
+    "status": "PASS",
+    "elapsed_ms": 172.3,
+    "detail": "",
+    "timestamp": "2026-06-29T19:13:00.884006"
+  },
+  "AUTH::AUTH-03": {
+    "module": "AUTH",
+    "case_id": "AUTH-03",
+    "status": "PASS",
+    "elapsed_ms": 155.2,
+    "detail": "",
+    "timestamp": "2026-06-29T19:13:01.244961"
+  },
+  "TestAuth.test_login_success": {
+    "module": "AUTH",
+    "case_id": "AUTH-03",
+    "status": "PASS",
+    "elapsed_ms": 155.2,
+    "detail": "",
+    "timestamp": "2026-06-29T19:13:01.244961"
+  },
+  "AUTH::AUTH-04": {
+    "module": "AUTH",
+    "case_id": "AUTH-04",
+    "status": "PASS",
+    "elapsed_ms": 152.3,
+    "detail": "",
+    "timestamp": "2026-06-29T19:13:01.577348"
+  },
+  "TestAuth.test_login_wrong_password": {
+    "module": "AUTH",
+    "case_id": "AUTH-04",
+    "status": "PASS",
+    "elapsed_ms": 152.3,
+    "detail": "",
+    "timestamp": "2026-06-29T19:13:01.577348"
+  },
+  "AUTH::AUTH-05": {
+    "module": "AUTH",
+    "case_id": "AUTH-05",
+    "status": "FAIL",
+    "elapsed_ms": 69.0,
+    "detail": "未拦截无token访问, code=1, status=200",
+    "timestamp": "2026-06-29T19:13:01.649780"
+  },
+  "TestAuth.test_access_without_token": {
+    "module": "AUTH",
+    "case_id": "AUTH-05",
+    "status": "FAIL",
+    "elapsed_ms": 69.0,
+    "detail": "未拦截无token访问, code=1, status=200",
+    "timestamp": "2026-06-29T19:13:01.649780"
+  }
+}
