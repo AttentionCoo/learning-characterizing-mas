@@ -629,3 +629,5 @@ reject    knowledge    analysis
 | `compile()` | `graph.compile(checkpointer=...)` | `app/agents/orchestrators/clinical_graph.py` |
 | `astream_events()` | `self.graph.astream_events(initial_state, ...)` | `app/agents/orchestrators/qwen_agent.py` |
 | 反思循环 | `validate → reason → validate` 环路 | `app/agents/orchestrators/clinical_graph.py` |
+| 共享记忆 | `SharedMemorySystem`（物理层+逻辑层+元记忆过滤） | `app/agents/core/shared_memory.py` |
+| 共享记忆配置 | `SharedMemoryConfigManager` | `app/config/shared_memory_config.yaml` |

@@ -26,6 +26,7 @@
 |:---|:---|
 | 🧠 **三群协同多智能体架构** | 基于 LangGraph StateGraph 构建 8 个专家智能体，YAML 配置驱动，支持动态编排与辩论-仲裁机制 |
 | 🔍 **证据前置 Hybrid RAG** | ChromaDB + DashScope 语义向量 + BM25 精准匹配，Reranker 深度重排，强制文献溯源 |
+| 💾 **共享记忆系统** | 物理层（ChromaDB 向量存储）+ 逻辑层（信任加权投票共识）+ 元记忆过滤（四维信息熵计算），跨会话保留高价值洞察 |
 | ⚡ **全栈响应式流式管道** | Java WebFlux + Python Asyncio 深度流式融合，AI 思考过程完全透明可视化，SSE 断线续传 |
 | 🖼️ **多模态与循证扩展** | qwen-vl-max 视觉理解 + PubMed 文献检索（8 级证据等级排序），图文联合理解 |
 | 🛡️ **防幻觉与质量保障** | 双层校验（规则引擎 + LLM 反思）+ 动态退火修正 + 辩论-仲裁 + 83 条自动化测试用例 |
@@ -112,13 +113,13 @@ learning-multi-agent-system/
 │       ├── main.py                  # FastAPI 入口 & API 路由
 │       ├── agents/                  # 多智能体核心
 │       │   ├── orchestrators/       # LangGraph 图定义 & 6 个节点实现
-│       │   ├── core/                # 状态模型 / 异常 / 结果封装
+│       │   ├── core/                # 状态模型 / 共享记忆 / 异常 / 结果封装
 │       │   ├── infra/               # Reranker 容灾
 │       │   ├── services/            # 检索 / 查询 / 综合服务
 │       │   └── utils/               # LLM / JSON / 重试 / 文本工具
 │       ├── rag/                     # Hybrid RAG（向量 + BM25 / QA 生成 / 文档加载）
 │       ├── services/                # 多模态影像 & PubMed 文献检索
-│       ├── config/                  # YAML 配置（专家 / 规则 / 模板 / Prompt / 限额）
+│       ├── config/                  # YAML 配置（专家 / 规则 / 模板 / Prompt / 限额 / 共享记忆）
 │       └── utils/                   # 任务管理 / 上下文摘要 / Token 聚合
 │
 ├── tests/                           # 自动化测试脚本
@@ -132,6 +133,7 @@ learning-multi-agent-system/
     ├── 需求规格说明书.md              # SRS（10章，含UML图/算法伪代码）
     ├── 测试文档.md                    # V3.0（10章，黑白盒+并发+安全+容灾）
     ├── 数据库设计文档.md              # 14张表设计 + Mermaid ER图
+    ├── 共享记忆系统优势总结.md         # 物理层+逻辑层+元记忆过滤优势分析
     └── 多智能体个性化学习系统接口文档.md # 14模块完整API规范
 ```
 
@@ -236,6 +238,28 @@ learning-multi-agent-system/
 | `learning_path` | 4 | 画像对话 + 需求分析 + 质量审核 + 学习激励 |
 
 > 仲裁智能体在辩论启用且难度 ≥ 0.6 时自动加入。
+
+### 共享记忆系统
+
+多智能体间通过共享记忆系统实现跨会话知识保留与冲突消解：
+
+```
+┌──────────────┐  ┌──────────────┐  ┌──────────────────┐
+│  物理层       │  │  逻辑层       │  │  元记忆过滤       │
+│  向量库存储    │  │  信任加权投票  │  │  信息熵计算       │
+│              │  │              │  │                  │
+│ SharedMemory │  │ Consensus    │  │ MetaMemory      │
+│ Store        │  │ Engine       │  │ Filter          │
+└──────────────┘  └──────────────┘  └──────────────────┘
+```
+
+| 层次 | 核心类 | 说明 |
+|:---|:---|:---|
+| **物理层** | `SharedMemoryStore` | ChromaDB 向量存储，语义级检索，三级降级容错 |
+| **逻辑层** | `ConsensusEngine` + `AgentReputationStore` | 信誉加权投票共识，跨会话信誉持久化 |
+| **元记忆过滤** | `MetaMemoryFilter` | 四维熵值评分（Shannon 熵 · 关键词密度 · Token 密度 · 长度），低熵高价值信息才持久化 |
+
+数据流闭环：`retrieve_node` 读取共享记忆 → `reason_node` 共识投票 + 熵值过滤写入 → `validate_node` 信誉反馈更新
 
 ---
 
@@ -383,6 +407,7 @@ MEDICAL_DOCS_DIR="/path/to/your/pdf/documents"
 | `report_templates.yaml` | 5 种报告模板（画像 / 资源 / 辅导 / 评估 / 路径） |
 | `prompts.yaml` | 各场景 Prompt 模板库 |
 | `limits_config.yaml` | 参数上限与关键词配置 |
+| `shared_memory_config.yaml` | 共享记忆系统配置（熵值阈值 · 共识参数 · 持久化策略） |
 
 ### 后端配置
 

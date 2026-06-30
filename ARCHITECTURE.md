@@ -18,12 +18,14 @@ model/
 │   │   ├── report_templates.yaml          - 报告模板
 │   │   ├── expert_config.yaml             - 专家配置
 │   │   ├── limits_config.yaml             - 参数限制配置
-│   │   └── rules_config.yaml              - 规则配置
+│   │   ├── rules_config.yaml              - 规则配置
+│   │   └── shared_memory_config.yaml      - 共享记忆系统配置
 │   ├── agents/                          ← ③ 核心智能体层（重点）
 │   │   ├── assistant.py                   - LearningAssistant（快速通道）
 │   │   ├── constants.py                   - 共享常量
 │   │   ├── core/                          - 核心基础设施
 │   │   │   ├── schema.py                  - LearningState / LearningContext 数据模型
+│   │   │   ├── shared_memory.py           - 共享记忆系统（物理层+逻辑层+元记忆过滤）
 │   │   │   ├── result.py                  - Result / RetrievalResult 统一结果封装
 │   │   │   ├── exceptions.py              - 自定义异常体系
 │   │   │   └── decorators.py              - retry / timeit 装饰器
@@ -188,6 +190,9 @@ class LearningState(TypedDict):
     active_experts: List[str]    # 本轮参与的专家列表
     motivational_feedback: str   # 学习激励反馈
     profile_summary: str         # 学生画像摘要
+    shared_memory_hits: List[Dict]  # 共享记忆检索命中
+    memory_entropy_scores: Dict     # 各专家建议的熵值评分
+    consensus_result: Dict          # 信任加权投票共识结果
 ```
 
 ### 状态字段与节点读写关系
@@ -217,6 +222,9 @@ class LearningState(TypedDict):
 | `reflection_count` | int | validate | clinical_graph(路由决策) | 反思次数 |
 | `agent_weights` | Dict | validate | reason | 退火后的专家权重 |
 | `rejection_categories` | List[str] | validate | reason | 驳回原因分类 |
+| `shared_memory_hits` | List[Dict] | retrieve | reason | 共享记忆检索命中结果 |
+| `memory_entropy_scores` | Dict | reason | — | 各专家建议的熵值评分 |
+| `consensus_result` | Dict | reason | — | 信任加权投票共识结果 |
 | `report` | str | report/knowledge/reject | — | 最终输出报告 |
 
 ### 为什么用 TypedDict 而不是 BaseModel？
@@ -687,3 +695,137 @@ return graph.compile(checkpointer=self.checkpointer)
 | **退火策略** | `ValidateNode._apply_annealing()` | 驳回时衰减专家权重，逐步"冷静" |
 | **辩论-仲裁** | `ReasonNode._run_debate()` | 多专家辩论 + 仲裁智能体裁决 |
 | **反思循环** | `validate → reason → validate` | 质检不通过时退回重做，最多 N 次 |
+| **共享记忆** | `SharedMemorySystem` | 物理层存储 + 逻辑层共识 + 元记忆过滤，跨会话保留高价值洞察 |
+
+---
+
+# 第六章：共享记忆系统
+
+> 系统公式：**共享记忆系统 = 存储介质（物理层） + 交换协议（网络层） + 共识对齐（逻辑层）**
+
+## 6.1 系统总览
+
+共享记忆系统解决了多智能体系统中"记忆不可信、不可控"的核心问题。三大核心机制协同工作：
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    SharedMemorySystem                        │
+│                                                              │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │
+│  │  物理层       │  │  逻辑层       │  │  元记忆过滤       │  │
+│  │  向量库存储    │  │  信任加权投票  │  │  信息熵计算       │  │
+│  │              │  │              │  │                  │  │
+│  │ SharedMemory │  │ Consensus    │  │ MetaMemory      │  │
+│  │ Store        │  │ Engine       │  │ Filter          │  │
+│  └──────────────┘  └──────────────┘  └──────────────────┘  │
+│         │                  │                   │             │
+│         ▼                  ▼                   ▼             │
+│   ChromaDB 持久化    信誉加权共识       四维熵值评分          │
+│   语义级检索         冲突检测消解       垃圾记忆拦截          │
+│   三级降级容错       跨会话信誉积累     领域关键词库          │
+└─────────────────────────────────────────────────────────────┘
+```
+
+| 层次 | 机制 | 核心类 | 解决的问题 |
+|------|------|--------|-----------|
+| 物理层 | 向量库持久化存储 | `SharedMemoryStore` | 高价值信息跨会话保留 |
+| 逻辑层 | 信任加权投票共识 | `ConsensusEngine` + `AgentReputationStore` | 多智能体意见冲突消解 |
+| 元记忆过滤 | 信息熵计算 | `MetaMemoryFilter` | 垃圾记忆拦截，防止存储资源浪费 |
+
+## 6.2 物理层 — 共享记忆存储
+
+**文件**：`app/agents/core/shared_memory.py` — `SharedMemoryStore`
+
+基于 ChromaDB 向量数据库，复用项目已有的 `DashScopeEmbeddings`（text-embedding-v2）。
+
+核心能力：
+- **语义级检索**：向量余弦相似度检索，语义相近内容自动关联
+- **优雅降级**：向量存储失败 → 纯文档存储；向量检索失败 → 关键词检索
+- **自动熵值过滤前置**：每条记忆写入前自动经过 `MetaMemoryFilter` 过滤
+- **零侵入集成**：复用已有 `DashScopeEmbeddings` 和 ChromaDB 基础设施
+
+## 6.3 逻辑层 — 信任加权投票共识
+
+**文件**：`app/agents/core/shared_memory.py` — `ConsensusEngine` + `AgentReputationStore`
+
+当不同 Agent 对同一事件产生矛盾记忆时，不靠少数服从多数，而是依据历史决策正确率建立动态权重矩阵。
+
+核心能力：
+- **信誉加权投票**：`combined_weight = reputation_weight × session_weight`
+- **跨会话信誉持久化**：JSON 文件持久化，线程安全
+- **精细化信誉更新**：校验通过全员 +1，校验失败仅最低权重 1/3 专家 -1
+- **与退火机制融合**：`session_weight` 来自退火衰减，`reputation_weight` 来自跨会话积累
+- **增强权重矩阵**：`get_consensus_enhanced_weights()` 可供任意节点调用
+
+## 6.4 元记忆过滤 — 信息熵计算
+
+**文件**：`app/agents/core/shared_memory.py` — `MetaMemoryFilter`
+
+Agent 在写入前计算信息的"熵值"，只有低熵（高价值、强关联）的信息才被持久化。
+
+四维熵值评分模型：
+
+| 维度 | 权重 | 含义 | 作用 |
+|------|------|------|------|
+| Shannon 熵 | 0.2 | 字符分布均匀度 | 过滤乱码/重复字符 |
+| 关键词密度 | 0.3 | 领域术语命中 | 过滤无关闲聊 |
+| Token 密度 | 0.3 | 唯一 token 占比 | 过滤空洞废话 |
+| 长度得分 | 0.2 | 信息充实度 | 过滤过短无意义文本 |
+
+核心能力：
+- **领域关键词库**：内置 45 个医学+教育领域关键词
+- **极短文本惩罚**：Token 数 < 5 时施加惩罚系数
+- **批量过滤**：`filter_batch()` 支持批量处理
+- **可解释性**：每次过滤返回四维得分明细
+
+## 6.5 全链路数据流
+
+```
+用户提问
+  → [retrieve_node] 证据检索 + 共享记忆检索（物理层读取）
+  → [reason_node]  专家推理 → 冲突检测 → 共识投票（逻辑层）
+                  → 熵值计算 → 高价值洞察存储（元记忆过滤 + 物理层写入）
+  → [validate_node] 校验 → 信誉更新（逻辑层反馈）
+  → [context_summary] 摘要更新 → 答案熵值计算（元记忆过滤辅助）
+```
+
+闭环优势：
+- 记忆通过信誉反馈不断优化质量
+- 高信誉 Agent 的洞察更容易被持久化和检索
+- 低信誉 Agent 的噪音自动被过滤，不会污染共享记忆
+
+## 6.6 配置
+
+所有参数通过 `shared_memory_config.yaml` 配置：
+
+```yaml
+store:
+  persist_dir: "chroma_db_shared_memory"
+  meta_filter:
+    entropy_threshold: 0.85
+    keyword_weight: 0.3
+    density_weight: 0.3
+    shannon_weight: 0.2
+    length_weight: 0.2
+    min_length: 20
+
+consensus:
+  conflict_threshold: 0.4
+  min_agreement_ratio: 0.6
+  reputation_file: "data/agent_reputation.json"
+
+persistence:
+  auto_store_high_value: true
+  min_confidence: 0.7
+  max_memories_per_session: 10
+```
+
+## 6.7 与同类方案对比
+
+| 对比维度 | 无共享记忆 | 简单共享缓存 | 本方案 |
+|---------|----------|------------|--------|
+| 存储质量 | 无跨会话记忆 | 无差别存储 | 仅存储低熵高价值信息 |
+| 冲突处理 | 无 | 后写覆盖 | 信誉加权投票 |
+| 噪音过滤 | 无 | 无 | 四维熵值模型 |
+| 降级容错 | N/A | 单点故障 | 三级降级 |
+| 信誉积累 | 无 | 无 | 跨会话持久化 |
