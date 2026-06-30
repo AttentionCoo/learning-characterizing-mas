@@ -1,6 +1,6 @@
 import logging
 import asyncio
-from typing import Dict
+from typing import Dict, Optional
 from app.agents.core.schema import LearningState
 from app.agents.orchestrators.nodes.base import BaseNode
 from app.agents.constants import MAX_EVIDENCE_CHARS
@@ -11,11 +11,53 @@ logger = logging.getLogger(__name__)
 
 class RetrieveNode(BaseNode):
 
-    def __init__(self, learning_assistant):
+    def __init__(self, learning_assistant, shared_memory_system=None):
         self.learning_assistant = learning_assistant
+        self.shared_memory_system = shared_memory_system
 
     async def run(self, state: LearningState) -> Dict:
         evidence = await self.learning_assistant.afast_parallel_retrieve(
             state["learning_questions"]
         )
-        return {"evidence": truncate_text(evidence, MAX_EVIDENCE_CHARS)}
+
+        shared_memory_hits = []
+        if self.shared_memory_system:
+            shared_memory_hits = self._retrieve_shared_memory(state)
+            if shared_memory_hits:
+                memory_evidence = self._format_shared_memory_evidence(shared_memory_hits)
+                if memory_evidence:
+                    evidence = f"{evidence}\n\n--- 共享记忆 ---\n{memory_evidence}" if evidence else memory_evidence
+                    logger.info(f"[retrieve] 融合共享记忆 | 命中={len(shared_memory_hits)} 条")
+
+        result = {"evidence": truncate_text(evidence, MAX_EVIDENCE_CHARS)}
+        if shared_memory_hits:
+            result["shared_memory_hits"] = shared_memory_hits
+        return result
+
+    def _retrieve_shared_memory(self, state: LearningState) -> list:
+        try:
+            query = state.get("case_text", "")
+            intent_type = state.get("intent_type", "")
+            if not query:
+                return []
+            memories = self.shared_memory_system.retrieve_relevant(
+                query=query,
+                top_k=3,
+                intent_type=intent_type,
+            )
+            return memories
+        except Exception as e:
+            logger.warning(f"[retrieve] 共享记忆检索失败: {e}")
+            return []
+
+    @staticmethod
+    def _format_shared_memory_evidence(memories: list) -> str:
+        if not memories:
+            return ""
+        parts = []
+        for mem in memories:
+            source = mem.get("source_agent", "unknown")
+            content = mem.get("content", "")
+            relevance = mem.get("relevance", 0.0)
+            parts.append(f"[{source} | 相关度={relevance:.2f}] {content}")
+        return "\n".join(parts)

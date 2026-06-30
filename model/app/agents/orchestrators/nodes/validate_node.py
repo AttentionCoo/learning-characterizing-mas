@@ -10,8 +10,9 @@ logger = logging.getLogger(__name__)
 
 class ValidateNode(BaseNode):
 
-    def __init__(self, llm, validation_config=None):
+    def __init__(self, llm, validation_config=None, shared_memory_system=None):
         self.llm = llm
+        self.shared_memory_system = shared_memory_system
         self.validation_manager = validation_config or get_validation_manager()
         self.contraindication_rules = self.validation_manager.get_contraindication_rules()
         self.max_reflection_count = self.validation_manager.get_max_reflection_count()
@@ -20,6 +21,7 @@ class ValidateNode(BaseNode):
         self.annealing_enabled = self.validation_manager.is_annealing_enabled()
         self.weight_decay_factor = self.validation_manager.get_weight_decay_factor()
         logger.info(f"[validate] 已加载校验配置")
+        logger.info(f"[validate] 共享记忆信誉更新: {'启用' if self.shared_memory_system else '禁用'}")
         logger.info(f"  - 质量规则: {len(self.contraindication_rules)} 个类别")
         logger.info(f"  - 最大反思次数: {self.max_reflection_count}")
         logger.info(f"  - 规则引擎: {'启用' if self.enable_rule_engine else '禁用'}")
@@ -34,15 +36,32 @@ class ValidateNode(BaseNode):
             rule_feedback = await self._rule_engine_check(state)
             if rule_feedback:
                 logger.warning(f"[validate] 规则引擎检查失败: {rule_feedback}")
+                self._update_reputation(state, passed=False)
                 return self._fail_state(state, rule_feedback)
             logger.info(f"[validate] 规则引擎检查通过")
 
         if self.enable_llm_reflection:
             logger.info(f"[validate] 开始LLM反思检查")
-            return await self._llm_reflection_check(state)
+            result = await self._llm_reflection_check(state)
+            if result.get("validation_passed"):
+                self._update_reputation(state, passed=True)
+            else:
+                self._update_reputation(state, passed=False)
+            return result
         else:
             logger.info("[validate] LLM反思已禁用，默认通过")
+            self._update_reputation(state, passed=True)
             return {"validation_passed": True, "validation_feedback": ""}
+
+    def _update_reputation(self, state: LearningState, passed: bool):
+        if not self.shared_memory_system:
+            return
+        active_experts = state.get("active_experts", [])
+        agent_weights = state.get("agent_weights", {})
+        if active_experts:
+            self.shared_memory_system.update_reputation(
+                active_experts, passed, agent_weights
+            )
 
     async def _rule_engine_check(self, state: LearningState) -> str:
         rule_feedback = []

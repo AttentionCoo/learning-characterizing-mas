@@ -29,3 +29,9 @@ memory/
 
 # 本地文档（不入库）
 流式输出架构改进方案.md
+
+# ChromaDB 运行时数据
+chroma_db_shared_memory/
+
+# 共享记忆运行时数据
+model/data/agent_reputation.json

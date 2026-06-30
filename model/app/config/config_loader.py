@@ -508,3 +508,76 @@ def get_limits_manager() -> LimitsConfigManager:
     if _limits_manager is None:
         _limits_manager = LimitsConfigManager()
     return _limits_manager
+
+
+class SharedMemoryConfigManager:
+    """共享记忆系统配置管理器"""
+
+    def __init__(self, config_file: str = "shared_memory_config.yaml"):
+        self._data = _load_yaml(config_file)
+        if not self._data:
+            logger.warning("⚠️ 共享记忆配置为空，使用默认配置")
+            self._data = self._get_default_config()
+
+    def _get_default_config(self) -> Dict[str, Any]:
+        return {
+            "store": {
+                "persist_dir": "chroma_db_shared_memory",
+                "meta_filter": {
+                    "entropy_threshold": 0.85,
+                    "keyword_weight": 0.3,
+                    "density_weight": 0.3,
+                    "shannon_weight": 0.2,
+                    "length_weight": 0.2,
+                    "min_length": 20,
+                },
+            },
+            "consensus": {
+                "conflict_threshold": 0.4,
+                "min_agreement_ratio": 0.6,
+                "reputation_file": "data/agent_reputation.json",
+            },
+            "persistence": {
+                "auto_store_high_value": True,
+                "min_confidence": 0.7,
+                "max_memories_per_session": 10,
+            },
+        }
+
+    def get_store_config(self) -> Dict[str, Any]:
+        return self._data.get("store", {})
+
+    def get_consensus_config(self) -> Dict[str, Any]:
+        return self._data.get("consensus", {})
+
+    def get_persistence_config(self) -> Dict[str, Any]:
+        return self._data.get("persistence", {})
+
+    def is_auto_store_enabled(self) -> bool:
+        persistence = self._data.get("persistence", {})
+        return persistence.get("auto_store_high_value", True)
+
+    def get_min_confidence(self) -> float:
+        persistence = self._data.get("persistence", {})
+        return persistence.get("min_confidence", 0.7)
+
+    def get_max_memories_per_session(self) -> int:
+        persistence = self._data.get("persistence", {})
+        return persistence.get("max_memories_per_session", 10)
+
+    def reload(self, config_file: str = "shared_memory_config.yaml"):
+        self._data = _load_yaml(config_file)
+        if not self._data:
+            self._data = self._get_default_config()
+        logger.info(f"🔄 共享记忆配置已热更新: {config_file}")
+
+
+_shared_memory_manager: Optional[SharedMemoryConfigManager] = None
+
+
+def get_shared_memory_manager() -> SharedMemoryConfigManager:
+    """获取共享记忆配置管理器单例"""
+    global _shared_memory_manager
+    if _shared_memory_manager is None:
+        _shared_memory_manager = SharedMemoryConfigManager()
+    return _shared_memory_manager

@@ -26,8 +26,10 @@ from app.config.config_loader import (
     get_report_manager,
     get_expert_manager,
     get_validation_manager,
-    get_limits_manager
+    get_limits_manager,
+    get_shared_memory_manager,
 )
+from app.agents.core.shared_memory import SharedMemorySystem
 from app.services.vision_service import VisionAnalysisService
 
 from langchain_openai import ChatOpenAI
@@ -347,12 +349,13 @@ def init_all_resources():
     logger.info("🚀 开始初始化系统资源")
     logger.info("=" * 80)
 
-    logger.info("📋 [1/7] 加载配置管理器...")
+    logger.info("📋 [1/8] 加载配置管理器...")
     prompt_mgr = get_prompt_manager()
     report_mgr = get_report_manager()
     expert_mgr = get_expert_manager()
     validation_mgr = get_validation_manager()
     limits_mgr = get_limits_manager()
+    shared_memory_mgr = get_shared_memory_manager()
 
     logger.info(f"  ✅ Prompt管理器: 已加载 {len(prompt_mgr._prompts)} 个prompt模板")
     logger.info(f"  ✅ 报告管理器: 可用模式 {report_mgr.list_modes()}")
@@ -371,8 +374,9 @@ def init_all_resources():
     logger.info(f"  ✅ 参数限制:")
     logger.info(f"     - 最大子问题数: {limits_mgr.get_max_sub_questions()}")
     logger.info(f"     - 最大证据字符数: {limits_mgr.get_max_evidence_chars()}")
+    logger.info(f"  ✅ 共享记忆配置: 自动存储={shared_memory_mgr.is_auto_store_enabled()}")
 
-    logger.info("🤖 [2/7] 初始化大语言模型...")
+    logger.info("🤖 [2/8] 初始化大语言模型...")
     _dashscope_base = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     _dashscope_key = os.getenv("DASHSCOPE_API_KEY")
 
@@ -388,14 +392,14 @@ def init_all_resources():
 
     logger.info("  ✅ 模型加载完成: qwen-max, qwen-plus, qwen-turbo")
 
-    logger.info("💬 [3/7] 初始化上下文摘要服务...")
+    logger.info("💬 [3/8] 初始化上下文摘要服务...")
     context_summary = ConversationSummaryService(
         llm=llm_turbo,
         prompt_manager=prompt_mgr
     )
     logger.info("  ✅ 上下文摘要服务初始化完成")
 
-    logger.info("🔍 [4/7] 初始化向量检索引擎...")
+    logger.info("🔍 [4/8] 初始化向量检索引擎...")
     retriever = UnifiedSearchEngine(
         persist_dir=CONFIG.get("persist_dir", "./chroma_db_unified"),
         top_k=CONFIG.get("top_k_final", 3)
@@ -414,7 +418,7 @@ def init_all_resources():
     else:
         logger.warning("  ⚠️  本地文档为空，system_role 使用 YAML 静态列表")
 
-    logger.info("📚 [5/7] 初始化学习助手...")
+    logger.info("📚 [5/8] 初始化学习助手...")
     learning_assistant = LearningAssistant(
         llm_main=llm_max,
         llm_fast=llm_plus,
@@ -424,7 +428,20 @@ def init_all_resources():
     )
     logger.info("  ✅ 学习助手初始化完成")
 
-    logger.info("🧠 [6/7] 初始化学习推理智能体...")
+    logger.info("🧠 [6/8] 初始化共享记忆系统...")
+    shared_memory_config = {
+        "store": shared_memory_mgr.get_store_config(),
+        "consensus": shared_memory_mgr.get_consensus_config(),
+    }
+    shared_memory_system = SharedMemorySystem(shared_memory_config)
+    logger.info("  ✅ 共享记忆系统初始化完成")
+    stats = shared_memory_system.store.get_stats()
+    logger.info(f"     - 已有记忆: {stats.get('total', 0)} 条")
+    rep_scores = shared_memory_system.consensus.reputation_store.get_all_scores()
+    if rep_scores:
+        logger.info(f"     - 信誉数据: {len(rep_scores)} 个智能体")
+
+    logger.info("🧠 [7/8] 初始化学习推理智能体...")
     agent = LearningAgent(
         llm_proposer=llm_max,
         llm_critic=llm_plus,
@@ -432,10 +449,11 @@ def init_all_resources():
         prompt_manager=prompt_mgr,
         report_manager=report_mgr,
         llm_turbo=llm_turbo,
+        shared_memory_system=shared_memory_system,
     )
     logger.info("  ✅ 学习推理智能体初始化完成")
 
-    logger.info("🔧 [7/7] 初始化其他服务...")
+    logger.info("🔧 [8/8] 初始化其他服务...")
     vision_service = VisionAnalysisService(prompt_manager=prompt_mgr)
     naming_model = NamingModel()
     logger.info("  ✅ 影像识别服务初始化完成")

@@ -153,16 +153,24 @@ class ConversationSummaryService:
             return "\n".join(parts).strip()
 
     def update_all_info(self, previous_all_info: str, question: str, answer: str, threshold: float = 2000):
-        # 兼容旧代码调用 (如果传入的是旧的分数阈值 0.4，则覆盖为长度阈值 2000)
         if threshold < 2.0:
             threshold = 2000
-            
+
         previous_all_info = previous_all_info.strip()
         current_len = len(previous_all_info) + len(question) + len(answer)
-        
-        # 只有当累计长度超过阈值（如2000字）时，才触发一次背景归纳清洗
+
         is_triggered = current_len > threshold
-        
+
+        entropy_score = None
+        entropy_details = None
+        try:
+            from app.agents.core.shared_memory import MetaMemoryFilter
+            meta_filter = MetaMemoryFilter()
+            entropy_score, entropy_details = meta_filter.compute_entropy_score(answer)
+            logger.info(f"[context_summary] 答案熵值={entropy_score:.4f} | 明细={entropy_details}")
+        except Exception as e:
+            logger.debug(f"[context_summary] 熵值计算跳过: {e}")
+
         if is_triggered:
             logger.info(f"触发滑动窗口摘要 (当前长度 {current_len} > {threshold})")
             updated_all_info = self.summarize_context(previous_all_info, question, answer)
@@ -174,9 +182,14 @@ class ConversationSummaryService:
             else:
                 updated_all_info = new_turn
 
-        return {
+        result = {
             "score": 1.0 if is_triggered else 0.0,
             "reason": "sliding_window_trigger" if is_triggered else "append_only",
             "is_valuable": is_triggered,
-            "updated_all_info": updated_all_info
+            "updated_all_info": updated_all_info,
         }
+        if entropy_score is not None:
+            result["entropy_score"] = entropy_score
+            result["entropy_details"] = entropy_details
+
+        return result
