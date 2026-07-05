@@ -25,11 +25,11 @@
 | 特性 | 说明 |
 |:---|:---|
 | 🧠 **三群协同多智能体架构** | 基于 LangGraph StateGraph 构建 8 个专家智能体，YAML 配置驱动，支持动态编排与辩论-仲裁机制 |
-| 🔍 **证据前置 Hybrid RAG** | ChromaDB + DashScope 语义向量 + BM25 精准匹配，Reranker 深度重排，强制文献溯源 |
+| 🔍 **证据前置 Hybrid RAG** | 三阶漏斗检索：向量 + BM25 宽召回 → RRF 倒数排名融合粗排 → Reranker 4 模型自动切换精排；QA 生成扩充向量库；强制文献溯源 |
 | 💾 **共享记忆系统** | 物理层（ChromaDB 向量存储）+ 逻辑层（信任加权投票共识）+ 元记忆过滤（四维信息熵计算），跨会话保留高价值洞察 |
 | ⚡ **全栈响应式流式管道** | Java WebFlux + Python Asyncio 深度流式融合，AI 思考过程完全透明可视化，SSE 断线续传 |
 | 🖼️ **多模态与循证扩展** | qwen-vl-max 视觉理解 + PubMed 文献检索（8 级证据等级排序），图文联合理解 |
-| 🛡️ **防幻觉与质量保障** | 双层校验（规则引擎 + LLM 反思）+ 动态退火修正 + 辩论-仲裁 + 83 条自动化测试用例 |
+| 🛡️ **防幻觉与质量保障** | 双层校验（规则引擎 + LLM 反思）+ 动态退火修正 + 辩论-仲裁 + 71 条自动化测试用例 |
 
 ---
 
@@ -82,6 +82,65 @@
 | **后端** | Java · Spring Boot · WebFlux · Security · Redisson · MySQL · MyBatis-Plus | 21 · 3.3 · 6.1 · 6.3 · 3.27 · 8.0 · 3.5 | 响应式高并发 · JWT 认证 · 分布式限流 · WebClient 流式转发 · SSE 断线续传 |
 | **模型** | Python · FastAPI · LangGraph · LangChain · Qwen · ChromaDB · gte-rerank · qwen-vl-max | 3.11 · 0.128 · 0.2.20 · 0.2.16 · Max/Plus/Turbo · 0.5 · — · — | 多智能体编排 · Hybrid RAG · 流式事件输出 · 多模态识别 · 文献检索 |
 
+### Hybrid RAG 检索架构（三阶漏斗）
+
+```
+                         用户查询
+                            │
+                            ▼
+            ┌───────────────────────────────┐
+            │     第一阶：宽召回              │
+            │  ┌──────────┐  ┌──────────┐   │
+            │  │ 向量检索   │  │  BM25    │   │
+            │  │ (语义相似) │  │ (关键词)  │   │
+            │  │ top-20    │  │ top-20   │   │
+            │  └──────────┘  └──────────┘   │
+            │        最多 40 篇候选            │
+            └───────────────┬───────────────┘
+                            │
+                            ▼
+            ┌───────────────────────────────┐
+            │     第二阶：RRF 粗排            │
+            │  倒数排名融合                    │
+            │  RRF(d) = 1/(60+Rankᵥ)        │
+            │         + 1/(60+Rank_b)       │
+            │  40 篇 → 20 篇候选              │
+            └───────────────┬───────────────┘
+                            │
+                            ▼
+            ┌───────────────────────────────┐
+            │     第三阶：Reranker 精排       │
+            │  4 模型自动切换容灾：            │
+            │  qwen-rerank-v1               │
+            │    → gte-rerank-v2            │
+            │    → qwen-rerank              │
+            │    → gte-rerank               │
+            │  20 篇 → 3 篇最终结果           │
+            └───────────────────────────────┘
+```
+
+| 阶段 | 技术 | 输入 → 输出 | 说明 |
+|:---|:---|:---|:---|
+| **宽召回** | DashScope Embedding (text-embedding-v2) + BM25 | 各 20 篇 → 最多 40 篇 | 语义向量 + 关键词双路并行召回，互补覆盖 |
+| **粗排** | RRF (Reciprocal Rank Fusion) | 40 篇 → 20 篇 | 零成本零延迟，纯排名融合，避开 Dense/Sparse 分值区间差异 |
+| **精排** | BGEReranker (DashScope ReRank API) | 20 篇 → 3 篇 | 深度语义重排序，4 模型自动切换容灾，失败时原始结果兜底 |
+
+#### 文档预处理流程
+
+| 步骤 | 实现 | 参数 |
+|:---|:---|:---|
+| PDF 加载 | PyPDFLoader | — |
+| 文本清洗 | `clean_text()` 去除换行和多余空格 | — |
+| 文档切分 | RecursiveCharacterTextSplitter | chunk_size=512, overlap=128 |
+| QA 扩充 | QAGenerator (qwen-turbo) | 每 10 个 chunk 合并，生成 3-5 个 QA 对 |
+
+#### 检索优化
+
+| 特性 | 实现 |
+|:---|:---|
+| 检索缓存 | MD5(query+top_k) 哈希，TTL 300 秒 |
+| 去重 | 基于 page_content 内容去重，同一内容取最高排名 |
+
 ---
 
 ## 📁 项目结构
@@ -90,10 +149,10 @@
 learning-multi-agent-system/
 ├── frontend/                        # 前端交互层（Vue 3）
 │   └── src/
-│       ├── api/                     # API 请求（画像/资源/路径/辅导/评估）
-│       ├── components/              # 组件（表单/头像/加载/对话）
-│       ├── views/                   # 页面（登录/画像/资源/路径/辅导/评估）
-│       ├── stores/                  # Pinia 状态管理
+│       ├── api/                     # API 请求（画像/资源/路径/辅导/评估/用户）
+│       ├── components/              # 组件（表单/头像/加载/对话/SVG图标）
+│       ├── views/                   # 页面（首页/登录/画像/资源/路径/辅导/评估）
+│       ├── stores/                  # Pinia 状态管理（用户/主题）
 │       ├── utils/                   # 工具（请求封装/图片压缩）
 │       └── router/                  # 路由配置
 │
@@ -102,7 +161,7 @@ learning-multi-agent-system/
 │       ├── controller/              # REST 控制器（14 个）
 │       ├── service/                 # 业务逻辑（AI 流式/对话持久化/OSS）
 │       ├── cache/                   # SSE 事件缓存
-│       ├── config/                  # 配置（Security/WebClient/Redisson/OSS）
+│       ├── config/                  # 配置（Security/WebClient/Redisson/OSS/Jackson/MyBatisPlus）
 │       ├── pojo/                    # 实体类
 │       ├── po/                      # 请求参数 & 响应视图对象
 │       ├── mapper/                  # MyBatis-Plus Mapper
@@ -112,29 +171,38 @@ learning-multi-agent-system/
 │   └── app/
 │       ├── main.py                  # FastAPI 入口 & API 路由
 │       ├── agents/                  # 多智能体核心
-│       │   ├── orchestrators/       # LangGraph 图定义 & 6 个节点实现
-│       │   ├── core/                # 状态模型 / 共享记忆 / 异常 / 结果封装
+│       │   ├── orchestrators/       # LangGraph 图定义 & 7 个节点实现
+│       │   ├── core/                # 状态模型 / 共享记忆 / 异常 / 结果封装 / 装饰器
 │       │   ├── infra/               # Reranker 容灾
 │       │   ├── services/            # 检索 / 查询 / 综合服务
+│       │   ├── pipelines/           # RAG 管道
+│       │   ├── bailian/             # 百炼平台集成（学习风险分析）
+│       │   ├── schemas/             # 数据结构定义
 │       │   └── utils/               # LLM / JSON / 重试 / 文本工具
 │       ├── rag/                     # Hybrid RAG（向量 + BM25 / QA 生成 / 文档加载）
 │       ├── services/                # 多模态影像 & PubMed 文献检索
 │       ├── config/                  # YAML 配置（专家 / 规则 / 模板 / Prompt / 限额 / 共享记忆）
-│       └── utils/                   # 任务管理 / 上下文摘要 / Token 聚合
+│       ├── evaluation/              # 评估模块
+│       └── utils/                   # 任务管理 / 上下文摘要 / Token 聚合 / 错误码 / 命名模型
 │
 ├── tests/                           # 自动化测试脚本
-│   └── test_full_suite.py           # 全链路黑盒 + 并发压测
+│   └── test_full_suite.py           # 全链路黑盒 + 并发压测（33 条用例，支持断点续跑）
 │
-├── model/tests/                     # 模型层单元测试
+├── model/tests/                     # 模型层单元测试（38 条用例）
 │   ├── test_new_architecture.py     # 白盒路径覆盖测试
-│   └── test_rag.py                  # RAG 检索功能测试
+│   ├── test_shared_memory.py        # 共享记忆系统测试
+│   ├── test_rag.py                  # RAG 检索功能测试
+│   ├── test_api_client.py           # API 客户端集成测试
+│   ├── test_migration.py            # 架构迁移验证测试
+│   └── ...                          # 其他专项测试
 │
 └── docs/                            # 项目文档
     ├── 需求规格说明书.md              # SRS（10章，含UML图/算法伪代码）
     ├── 测试文档.md                    # V3.0（10章，黑白盒+并发+安全+容灾）
     ├── 数据库设计文档.md              # 14张表设计 + Mermaid ER图
     ├── 共享记忆系统优势总结.md         # 物理层+逻辑层+元记忆过滤优势分析
-    └── 多智能体个性化学习系统接口文档.md # 14模块完整API规范
+    ├── 多智能体个性化学习系统接口文档.md # 14模块完整API规范
+    └── API_SPEC.md                   # API 规范补充文档
 ```
 
 ---
@@ -157,8 +225,8 @@ learning-multi-agent-system/
               │               │               │
               ▼               ▼               ▼
         ┌──────────┐   ┌──────────┐   ┌──────────────┐
-        │  Reject  │   │  Fast    │   │  Analysis    │
-        │  Node    │   │  Track   │   │  Node        │
+        │  Reject  │   │Knowledge │   │  Analysis    │
+        │  Node    │   │  Node    │   │  Node        │
         └──────────┘   └──────────┘   └──────┬───────┘
                                              │
                                     ┌──────── ▼ ────────┐
@@ -236,6 +304,7 @@ learning-multi-agent-system/
 | `tutor` | 4 | 画像对话 + 需求分析 + 质量审核 + 学习激励 |
 | `assessment` | 5 | 特征抽取 + 需求分析 + 题目生成 + 质量审核 + 学习激励 |
 | `learning_path` | 4 | 画像对话 + 需求分析 + 质量审核 + 学习激励 |
+| `knowledge` | 1 | 直接 LLM 知识问答（不走完整工作流） |
 
 > 仲裁智能体在辩论启用且难度 ≥ 0.6 时自动加入。
 
@@ -286,8 +355,8 @@ learning-multi-agent-system/
 
 | 测试类型 | 用例数 | 覆盖范围 | 文档位置 |
 |:---|:---:|:---|:---|
-| 黑盒功能测试 | 53 | 8 大功能模块 | [测试文档 §2](docs/测试文档.md) |
-| 白盒路径覆盖 | 30 | 5 个核心模块，路径覆盖率 100% | [测试文档 §3](docs/测试文档.md) |
+| 黑盒功能测试 | 33 | 10 大功能模块（认证/画像/资源/辅导/路径/评估/代码/对话/并发/非AI） | [测试文档 §2](docs/测试文档.md) |
+| 白盒路径覆盖 | 38 | 核心模块路径覆盖 + 共享记忆系统 + RAG + 迁移验证 | [测试文档 §3](docs/测试文档.md) |
 | 并发性能测试 | 3 级梯度 | 10/50/100 并发 SSE | [测试文档 §4](docs/测试文档.md) |
 | 安全测试 | 16 | JWT/注入/限流/越权/上传 | [测试文档 §5](docs/测试文档.md) |
 | 容灾测试 | 7 | Rerank/PubMed/OSS/SSE 降级 | [测试文档 §6](docs/测试文档.md) |
@@ -307,9 +376,17 @@ learning-multi-agent-system/
 cd model
 python -m pytest tests/test_new_architecture.py -v
 
+# 共享记忆系统测试
+cd model
+python -m pytest tests/test_shared_memory.py -v
+
 # RAG 检索测试
 cd model
 python -m pytest tests/test_rag.py -v
+
+# API 客户端集成测试（需启动模型服务）
+cd model
+python -m pytest tests/test_api_client.py -v
 
 # 全链路黑盒 + 并发压测（需启动完整服务）
 cd tests
@@ -404,7 +481,7 @@ MEDICAL_DOCS_DIR="/path/to/your/pdf/documents"
 |:---|:---|
 | `expert_config.yaml` | 8 个专家定义 · 辩论配置 · 动态编排规则 |
 | `rules_config.yaml` | 质量校验规则 · 退火策略（5 类驳回分类与修正） |
-| `report_templates.yaml` | 5 种报告模板（画像 / 资源 / 辅导 / 评估 / 路径） |
+| `report_templates.yaml` | 6 种报告模板（画像 / 资源 / 辅导 / 评估 / 路径 / 知识问答） |
 | `prompts.yaml` | 各场景 Prompt 模板库 |
 | `limits_config.yaml` | 参数上限与关键词配置 |
 | `shared_memory_config.yaml` | 共享记忆系统配置（熵值阈值 · 共识参数 · 持久化策略） |
@@ -450,15 +527,29 @@ MEDICAL_DOCS_DIR="/path/to/your/pdf/documents"
 | 资源 | `/model/resources/generate/*` | POST (SSE) | 7 种资源类型独立生成 |
 | 路径 | `/api/learning-path/generate` | POST | 生成学习路径 |
 | 路径 | `/model/learning-path/recommend` | POST | 个性化资源推送 |
+| 路径 | `/model/learning-path/{path_id}/adjust` | POST | 动态调整学习路径 |
 | 辅导 | `/api/tutor/chat` | POST (SSE) | 智能辅导对话 |
-| 评估 | `/api/assessment/generate` | POST (SSE) | 生成评估报告 |
+| 评估 | `/api/evaluation/generate` | POST (SSE) | 生成评估报告 |
 | 评估 | `/model/evaluation/optimize` | POST | 触发学习方案优化 |
+| 评估 | `/model/evaluation/behavior` | POST | 提交学习行为数据 |
+| 评估 | `/model/evaluation/mastery-heatmap` | GET | 知识点掌握度热力图 |
+| 文献 | `/model/pubmed/search` | POST | PubMed 学术文献检索 |
+| 课程 | `/model/courses` | GET | 课程列表 |
+| 课程 | `/model/courses/{course_id}/knowledge-tree` | GET | 课程知识体系树 |
+| 代码 | `/api/code/execute` | POST | 代码执行沙箱 |
+| 代码 | `/api/code/assist` | POST | 代码辅助开发 |
+| 任务 | `/model/tasks/{task_id}` | GET | 查询异步任务状态 |
+| 任务 | `/model/tasks/{task_id}/stream` | GET (SSE) | SSE 流式重连 |
+| 管理 | `/admin/reload_config` | POST | 配置热更新 |
+| 管理 | `/admin/report_modes` | GET | 可用报告模式列表 |
+| 分析 | `/ai/analyze` | POST | 学习风险快速分析 |
 
 ### 前端路由
 
 | 路由 | 页面 | 功能 |
 |:---|:---|:---|
 | `/login` | login.vue | 登录 / 注册 |
+| `/` | home.vue | 首页布局（导航栏 + 子路由） |
 | `/profile` | profile.vue | 学习画像构建 |
 | `/resources` | resources.vue | 资源生成 |
 | `/learning-path` | learning-path.vue | 学习路径规划 |
@@ -485,8 +576,9 @@ MEDICAL_DOCS_DIR="/path/to/your/pdf/documents"
 |:---|:---|
 | **JWT 双向认证** | Java 与 Python 之间共享 JWT Secret 双向验证 |
 | **分布式限流** | Redisson 信号量控制最大并发数，防止服务过载 |
-| **SSE 断线续传** | 滑动窗口缓存 + Last-Event-ID 机制 |
+| **SSE 断线续传** | 滑动窗口缓存 + Last-Event-ID 机制 + `/model/tasks/{task_id}/stream` 重连接口 |
 | **Token 自动续期** | 即将过期时自动签发新 Token |
+| **配置热更新** | `/admin/reload_config` 接口支持运行时热更新 YAML 配置，无需重启服务 |
 
 ### 内容安全
 
@@ -513,9 +605,10 @@ MEDICAL_DOCS_DIR="/path/to/your/pdf/documents"
 | 文档 | 说明 |
 |:---|:---|
 | [需求规格说明书](docs/需求规格说明书.md) | 10 章：功能/非功能需求 + UML 图（组件图/类图/时序图/部署图）+ 核心算法流程图与伪代码 |
-| [测试文档](docs/测试文档.md) | V3.0 · 10 章：黑盒 53 条 + 白盒 30 条 + 并发压测 + 安全测试 + 容灾测试 + 系统效果量化评估 |
+| [测试文档](docs/测试文档.md) | V3.0 · 10 章：黑盒 33 条 + 白盒 38 条 + 并发压测 + 安全测试 + 容灾测试 + 系统效果量化评估 |
 | [数据库设计文档](docs/数据库设计文档.md) | 14 张表详细设计 + Mermaid ER 图 + 索引策略 + 数据字典 |
 | [接口文档](docs/多智能体个性化学习系统接口文档.md) | 14 模块完整 API 规范（请求/响应/状态码） |
+| [API 规范补充](docs/API_SPEC.md) | API 补充规范文档 |
 
 ---
 
