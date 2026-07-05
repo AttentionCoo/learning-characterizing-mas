@@ -1,0 +1,25 @@
+{
+  "timestamp": "2026-07-05T21:02:17.151978",
+  "config": {
+    "test_questions": 10,
+    "eval_llm": "qwen-plus",
+    "embedding": "text-embedding-v2",
+    "search_top_k": 5
+  },
+  "results": {
+    "recursive": {
+      "context_precision": 0.19999999998,
+      "context_recall": 0.4616666666666666,
+      "faithfulness": 0.6342120068604452,
+      "answer_relevancy": 0.9307258274340098,
+      "avg_retrieval_time_ms": 1787.9950523376465
+    },
+    "semantic": {
+      "context_precision": 0.1249999999875,
+      "context_recall": 0.2783333333333333,
+      "faithfulness": 0.6173648806618188,
+      "answer_relevancy": 0.939540279372034,
+      "avg_retrieval_time_ms": 2780.859875679016
+    }
+  }
+}
