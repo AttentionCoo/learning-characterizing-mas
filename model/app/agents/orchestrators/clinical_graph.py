@@ -88,7 +88,11 @@ class LearningGraphBuilder:
         graph.add_edge("reject", END)
         graph.add_edge("knowledge_answer", END)
 
-        # 条件路由：有影像 → vision → retrieve，无影像 → 直接 retrieve
+        # 影像不相关时的拒绝节点
+        if self.vision_node:
+            graph.add_node("reject_image", self._reject_image_node)
+
+        # 条件路由：有影像 → vision → retrieve（或 reject），无影像 → 直接 retrieve
         if self.vision_node:
             graph.add_conditional_edges(
                 "analysis",
@@ -98,8 +102,17 @@ class LearningGraphBuilder:
                     "retrieve": "retrieve",
                 }
             )
-            graph.add_edge("vision", "retrieve")
-            logger.info("[graph] 已添加 analysis → vision → retrieve 条件路由（有影像时）")
+            # 影像分析后：检查是否与脑卒中相关
+            graph.add_conditional_edges(
+                "vision",
+                self._route_after_vision,
+                {
+                    "retrieve": "retrieve",
+                    "reject": "reject_image",
+                }
+            )
+            graph.add_edge("reject_image", END)
+            logger.info("[graph] 已添加 analysis → vision → (retrieve | reject_image) 条件路由")
         else:
             graph.add_edge("analysis", "retrieve")
 
@@ -147,8 +160,43 @@ class LearningGraphBuilder:
         logger.info("[graph] 无医学影像 → 路由到 retrieve 节点")
         return "retrieve"
 
+    def _route_after_vision(self, state: LearningState) -> str:
+        """vision 节点之后的条件路由：检查影像是否与脑卒中相关"""
+        is_stroke_related = state.get("is_image_stroke_related", True)
+        findings = state.get("vision_findings")
+
+        if not is_stroke_related:
+            # 获取影像类型用于提示
+            image_type = findings.get("image_type", "unknown") if findings else "unknown"
+            logger.info(f"[graph] 影像与脑卒中无关 (类型: {image_type}) → 路由到 reject_image")
+            state["_reject_image_type"] = image_type
+            return "reject"
+
+        logger.info(f"[graph] 影像与脑卒中相关 → 路由到 retrieve")
+        return "retrieve"
+
     async def _reject_node(self, state: LearningState) -> dict:
         return {"report": "您的问题与脑卒中学习不相关，本系统仅支持脑卒中（中风）相关的学习问答，包括脑卒中的病因、症状、诊断、治疗、康复、预防、护理、并发症等方面。请提出与脑卒中学习相关的问题。"}
+
+    async def _reject_image_node(self, state: LearningState) -> dict:
+        """当上传的影像与脑卒中无关时的拒绝消息"""
+        image_type = state.get("_reject_image_type", "")
+        findings = state.get("vision_findings", {})
+
+        type_hint = ""
+        if image_type == "courseware_image":
+            type_hint = "\n\n检测到您上传的图片属于课件/非医学影像类型。"
+        elif image_type:
+            type_hint = f"\n\n检测到您上传的图片类型为「{image_type}」，经分析该图片内容与脑卒中（中风）学习无关。"
+
+        # 如果 vision 给了一些分析描述，附带简短的说明
+        key_findings = findings.get("key_findings", []) if findings else []
+        findings_hint = ""
+        if key_findings:
+            first_finding = key_findings[0][:80]
+            findings_hint = f"\n\n图片分析结果：{first_finding}..."
+
+        return {"report": f"您上传的图片与脑卒中学习无关，本系统仅支持脑卒中（中风）相关的医学影像分析。{type_hint}{findings_hint}\n\n请上传与脑卒中相关的医学影像，例如：\n- 头部CT/MRI影像\n- 脑血管造影片\n- 脑卒中相关的病理切片\n- 脑卒中相关的临床照片/心电图\n- 脑卒中相关的检验报告/影像报告\n\n如果您需要分析其他类型的医学影像，请提出具体的脑卒中相关学习问题。"}
 
     async def _knowledge_node(self, state: LearningState) -> dict:
         if not self.llm_critic:

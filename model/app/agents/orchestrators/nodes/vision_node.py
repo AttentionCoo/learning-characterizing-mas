@@ -35,6 +35,28 @@ class VisionAnalysisNode(BaseNode):
     # 节点输出键名（用于 LangGraph state 更新）
     OUTPUT_FINDINGS_KEY = "vision_findings"
     OUTPUT_EVIDENCE_KEY = "vision_evidence"
+    OUTPUT_STROKE_RELATED_KEY = "is_image_stroke_related"
+
+    # 与脑卒中直接相关的影像类型
+    _STROKE_RELATED_IMAGE_TYPES = {
+        "neuroimaging_ct", "neuroimaging_mri", "neuroimaging_angiography",
+    }
+
+    # 可能与脑卒中相关的影像类型（取决于分析内容）
+    _POTENTIALLY_STROKE_RELATED_TYPES = {
+        "pathology_slide", "clinical_photo", "lab_report",
+        "radiology_report", "ecg_waveform", "medical_illustration",
+    }
+
+    # 脑卒中相关关键词（用于检查 findings 文本）
+    _STROKE_FINDING_KEYWORDS = [
+        "脑卒中", "中风", "卒中", "脑梗", "脑梗死", "脑出血", "脑缺血",
+        "脑血管", "缺血性", "出血性", "梗死", "梗塞", "血栓",
+        "大脑中动脉", "大脑前动脉", "大脑后动脉", "基底动脉", "颈内动脉",
+        "溶栓", "取栓", "抗血小板", "抗凝",
+        "stroke", "cerebral", "infarction", "hemorrhage", "ischemic",
+        "颅内", "脑实质", "脑室", "脑沟", "蛛网膜下腔",
+    ]
 
     def __init__(
         self,
@@ -132,16 +154,21 @@ class VisionAnalysisNode(BaseNode):
         existing_questions = list(state.get("learning_questions", []))
         merged_questions = vision_questions + existing_questions
 
+        # Step 6: 判断影像是否与脑卒中相关
+        is_stroke_related = self._check_stroke_relevance(findings)
+
         result = {
             self.OUTPUT_FINDINGS_KEY: findings.model_dump() if findings else None,
             self.OUTPUT_EVIDENCE_KEY: vision_evidence_text,
             "evidence": merged_evidence,
             "learning_questions": merged_questions,
+            self.OUTPUT_STROKE_RELATED_KEY: is_stroke_related,
         }
 
         logger.info(
             f"[vision_node] 节点完成 | 影像证据长度: {len(vision_evidence_text)} | "
-            f"新增子问题: {len(vision_questions)} | PubMed文献: {len(pubmed_papers)}"
+            f"新增子问题: {len(vision_questions)} | PubMed文献: {len(pubmed_papers)} | "
+            f"卒中相关: {is_stroke_related}"
         )
         return result
 
@@ -179,6 +206,69 @@ class VisionAnalysisNode(BaseNode):
             questions.append(f"{img_type_name}在脑卒中诊断中的价值和典型表现")
 
         return questions
+
+    def _check_stroke_relevance(self, findings) -> bool:
+        """判断医学影像分析结果是否与脑卒中相关。
+
+        策略：
+        1. 影像类型直接匹配（CT/MRI/脑血管造影） → 确定相关
+        2. 影像类型可能相关（病理/心电/临床照片等） → 检查分析内容
+        3. 课
+��资料类型 → 检查是否有卒中关键词
+        4. 无 findings 或低置信度 → 不相关
+        """
+        if not findings:
+            return False
+
+        img_type = findings.image_type if hasattr(findings, 'image_type') else ""
+
+        # 1. 直接相关的影像类型
+        if img_type in self._STROKE_RELATED_IMAGE_TYPES:
+            logger.info(f"[vision_node] 影像类型 {img_type} 与脑卒中直接相关 → 放行")
+            return True
+
+        # 2. 合并所有文本进行检查
+        combined_text = " ".join([
+            img_type,
+            findings.anatomical_region if hasattr(findings, 'anatomical_region') else "",
+            " ".join(findings.key_findings) if hasattr(findings, 'key_findings') and findings.key_findings else "",
+            " ".join(ab.description for ab in (findings.abnormalities or [])),
+            " ".join(findings.differential_diagnosis) if hasattr(findings, 'differential_diagnosis') and findings.differential_diagnosis else "",
+        ]).lower()
+
+        # 3. 检查卒中关键词
+        has_stroke_keyword = any(
+            kw.lower() in combined_text for kw in self._STROKE_FINDING_KEYWORDS
+        )
+
+        if has_stroke_keyword:
+            logger.info(f"[vision_node] 影像分析内容包含脑卒中关键词 → 放行")
+            return True
+
+        # 4. 可能相关的类型但无卒中关键词 → 检查置信度
+        if img_type in self._POTENTIALLY_STROKE_RELATED_TYPES:
+            confidence = findings.confidence if hasattr(findings, 'confidence') else 0
+            if confidence > 0.3:
+                logger.info(f"[vision_node] 影像类型 {img_type} 可能相关，置信度 {confidence:.0%} > 30% → 放行")
+                return True
+            else:
+                logger.info(f"[vision_node] 影像类型 {img_type} 置信度过低 ({confidence:.0%}) → 拦截")
+                return False
+
+        # 5. courseware_image 或其他类型 → 必须有卒中关键词或足够异常发现
+        has_meaningful_findings = (
+            (findings.key_findings and len(findings.key_findings) > 0) or
+            (findings.abnormalities and len(findings.abnormalities) > 0) or
+            (findings.differential_diagnosis and len(findings.differential_diagnosis) > 0)
+        )
+
+        confidence = findings.confidence if hasattr(findings, 'confidence') else 0
+        if has_meaningful_findings and confidence > 0.3:
+            logger.info(f"[vision_node] 影像有 {len(findings.key_findings or [])} 个发现，置信度 {confidence:.0%} → 放行")
+            return True
+
+        logger.info(f"[vision_node] 影像与脑卒中无关 | 类型: {img_type} | 置信度: {confidence:.0%} → 拦截")
+        return False
 
     @staticmethod
     def has_images(state: LearningState) -> bool:

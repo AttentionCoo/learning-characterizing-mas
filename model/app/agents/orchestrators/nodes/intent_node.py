@@ -111,6 +111,7 @@ class IntentNode(BaseNode):
     async def run(self, state: LearningState) -> Dict:
         case_text = state["case_text"]
         preset_intent = state.get("intent_type", "")
+        has_images = bool(state.get("images", []))
 
         if preset_intent:
             logger.info(f"[intent] 意图已由 report_mode 预设为: {preset_intent}，跳过 LLM 分类")
@@ -123,11 +124,26 @@ class IntentNode(BaseNode):
         has_stroke = self._has_stroke_keyword(case_text)
         has_learning = self._has_learning_keyword(case_text)
 
-        if not has_stroke and not has_learning:
-            logger.info(f"[intent] 关键词预检未通过（无脑卒中关键词也无学习关键词），直接拦截")
-            return {"intent_type": "non_stroke", "difficulty_score": 0.0}
+        # 当有医学影像时，放宽关键词预检 — 图片内容可能携带卒中相关性
+        if has_images:
+            if not has_stroke and not has_learning:
+                logger.info(f"[intent] 文本无卒中关键词但包含 {len(state.get('images', []))} 张图片，放宽预检，交由 vision 节点判断")
+                # 标记为 knowledge 类型，先放行，在 vision 节点后再做最终判断
+                return {"intent_type": "knowledge", "difficulty_score": 0.3,
+                        "_image_pending_check": True}
+            else:
+                logger.info(f"[intent] 文本有卒中/学习关键词 + 图片，正常分类")
+        else:
+            if not has_stroke and not has_learning:
+                logger.info(f"[intent] 关键词预检未通过（无脑卒中关键词也无学习关键词），直接拦截")
+                return {"intent_type": "non_stroke", "difficulty_score": 0.0}
 
-        content = await self.chain.ainvoke({"case_text": case_text})
+        # 调用 LLM 分类（有图片时提示图片存在）
+        prompt_text = case_text
+        if has_images:
+            prompt_text = f"【注意：用户同时上传了 {len(state.get('images', []))} 张医学影像/图片，请结合图片上传行为综合判断意图】\n{case_text}"
+
+        content = await self.chain.ainvoke({"case_text": prompt_text})
         result = self._parse_json(content)
         intent_type = result.get("type", "irrelevant")
         difficulty_score = result.get("difficulty_score", 0.5)
