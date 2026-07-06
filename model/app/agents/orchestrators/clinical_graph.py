@@ -180,23 +180,57 @@ class LearningGraphBuilder:
 
     async def _reject_image_node(self, state: LearningState) -> dict:
         """当上传的影像与脑卒中无关时的拒绝消息"""
+        gate_result = state.get("_gate_result", "")
         image_type = state.get("_reject_image_type", "")
         findings = state.get("vision_findings", {})
 
-        type_hint = ""
-        if image_type == "courseware_image":
-            type_hint = "\n\n检测到您上传的图片属于课件/非医学影像类型。"
-        elif image_type:
-            type_hint = f"\n\n检测到您上传的图片类型为「{image_type}」，经分析该图片内容与脑卒中（中风）学习无关。"
+        if gate_result == "rejected_by_gate":
+            # Tier 1 门控直接拒绝
+            return {"report": (
+                "⚠️ **图片已被拦截**\n\n"
+                "经 AI 医学影像门控系统检测，您上传的图片**与脑卒中（中风）医学内容无关**。\n\n"
+                "本系统仅支持脑卒中相关的医学影像分析，包括但不限于：\n"
+                "- 🧠 **头部CT / MRI** — 脑梗死、脑出血的影像判读\n"
+                "- 🔬 **脑血管造影**（CTA/MRA/DSA）— 血管狭窄、闭塞、动脉瘤\n"
+                "- 🩻 **病理切片** — 脑卒中相关组织学\n"
+                "- 📊 **心电图** — 房颤等心源性卒中风险评估\n"
+                "- 📋 **检验报告 / 影像报告** — 脑卒中相关实验室检查\n\n"
+                "请上传与脑卒中相关的医学影像。如需其他帮助，请用文字描述您的学习需求。"
+            )}
 
-        # 如果 vision 给了一些分析描述，附带简短的说明
-        key_findings = findings.get("key_findings", []) if findings else []
-        findings_hint = ""
-        if key_findings:
-            first_finding = key_findings[0][:80]
-            findings_hint = f"\n\n图片分析结果：{first_finding}..."
+        if gate_result == "rejected_by_content_check":
+            # Tier 2/3 内容检测拒绝
+            findings_summary = ""
+            if findings:
+                ftype = findings.get("image_type", "")
+                fkeys = findings.get("key_findings", [])
+                if fkeys:
+                    findings_summary = f"\n\n图片分析摘要：类型={ftype}，发现={'；'.join(fkeys[:2])}"
 
-        return {"report": f"您上传的图片与脑卒中学习无关，本系统仅支持脑卒中（中风）相关的医学影像分析。{type_hint}{findings_hint}\n\n请上传与脑卒中相关的医学影像，例如：\n- 头部CT/MRI影像\n- 脑血管造影片\n- 脑卒中相关的病理切片\n- 脑卒中相关的临床照片/心电图\n- 脑卒中相关的检验报告/影像报告\n\n如果您需要分析其他类型的医学影像，请提出具体的脑卒中相关学习问题。"}
+            return {"report": (
+                "⚠️ **图片内容与脑卒中无关**\n\n"
+                "经 AI 影像分析，您上传的图片内容**不属于脑卒中（中风）相关的医学影像**。"
+                f"{findings_summary}\n\n"
+                "请上传脑卒中相关的医学影像，例如：\n"
+                "- 头部CT/MRI（脑梗、脑出血等）\n"
+                "- 脑血管造影片\n"
+                "- 脑卒中相关的病理切片、心电图、检验报告\n\n"
+                "如需其他学习帮助，请直接输入文字问题。"
+            )}
+
+        # 默认拒绝消息
+        if image_type:
+            return {"report": (
+                f"⚠️ **不支持的图片类型**\n\n"
+                f"检测到您上传的图片类型为「{image_type}」，该类型图片经分析后与脑卒中学习无关。\n\n"
+                "本系统仅支持脑卒中相关的医学影像分析。请上传头部CT、MRI、血管造影等脑卒中相关的医学影像。"
+            )}
+
+        return {"report": (
+            "⚠️ **图片与脑卒中学习无关**\n\n"
+            "您上传的图片不属于脑卒中相关的医学影像。本系统仅支持脑卒中（中风）相关的医学影像分析与学习。\n\n"
+            "请上传：头部CT/MRI、脑血管造影、病理切片、心电图、检验报告等与脑卒中相关的医学影像。"
+        )}
 
     async def _knowledge_node(self, state: LearningState) -> dict:
         if not self.llm_critic:
