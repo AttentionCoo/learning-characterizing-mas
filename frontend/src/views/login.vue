@@ -149,7 +149,7 @@ onBeforeUnmount(() => { if (animId) cancelAnimationFrame(animId) })
       >
         <!-- 请将视频文件放入 frontend/public/videos/ 目录，然后修改 src 路径 -->
         <source src="/videos/login-bg.mp4" type="video/mp4" />
-        <source src="/videos/login-bg.webm" type="video/webm" />
+
       </video>
       <div class="video-overlay"></div>
     </div>
@@ -221,23 +221,19 @@ onBeforeUnmount(() => { if (animId) cancelAnimationFrame(animId) })
 
   video {
     position: absolute;
-    top: 50%;
-    left: 50%;
-    min-width: 100%;
-    min-height: 100%;
-    width: auto;
-    height: auto;
-    transform: translate(-50%, -50%);
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
     object-fit: cover;
   }
 
   .video-overlay {
     position: absolute;
     inset: 0;
-    background: rgba(0, 0, 0, 0.45);
-    // 在深色模式下加深遮罩，在浅色模式下稍亮
+    background: rgba(0, 0, 0, 0.35);
     :global(.dark) & {
-      background: rgba(0, 0, 0, 0.55);
+      background: rgba(0, 0, 0, 0.45);
     }
   }
 }
