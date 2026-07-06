@@ -24,12 +24,16 @@
 
 | 特性 | 说明 |
 |:---|:---|
-| 🧠 **三群协同多智能体架构** | 基于 LangGraph StateGraph 构建 8 个专家智能体，YAML 配置驱动，支持动态编排与辩论-仲裁机制 |
+| 🧠 **三群协同多智能体架构** | 基于 LangGraph StateGraph 构建 9 个专家智能体，YAML 配置驱动，支持动态编排与辩论-仲裁机制 |
 | 🔍 **证据前置 Hybrid RAG** | 三阶漏斗检索：向量 + BM25 宽召回 → RRF 倒数排名融合粗排 → Reranker 4 模型自动切换精排；QA 生成扩充向量库；强制文献溯源 |
 | 💾 **共享记忆系统** | 物理层（ChromaDB 向量存储）+ 逻辑层（信任加权投票共识）+ 元记忆过滤（四维信息熵计算），跨会话保留高价值洞察 |
 | ⚡ **全栈响应式流式管道** | Java WebFlux + Python Asyncio 深度流式融合，AI 思考过程完全透明可视化，SSE 断线续传 |
-| 🖼️ **多模态与循证扩展** | qwen-vl-max 视觉理解 + PubMed 文献检索（8 级证据等级排序），图文联合理解 |
+| 🖼️ **医学多模态影像分析** | 10 类医学影像自动分类 + qwen-vl-max 结构化分析 + DICOM 元数据提取 + 多图对比 + Vision-RAG 桥接循证检索 |
+| 📚 **循证医学文献检索** | PubMed E-utilities 文献检索（8 级证据等级排序）+ 本地知识库联合检索，图文联合理解 |
 | 🛡️ **防幻觉与质量保障** | 双层校验（规则引擎 + LLM 反思）+ 动态退火修正 + 辩论-仲裁 + 71 条自动化测试用例 |
+| 🩺 **医学 OCR 结构化提取** | 检验报告 + 处方 + 通用医学文档的 OCR 流式识别与结构化提取 |
+| 💻 **代码执行与辅助** | 支持 Python 代码在线执行与 AI 编程辅助，适用于医学数据处理与算法教学场景 |
+| 📊 **学习风险评估** | 百炼平台集成，自动评估学生学习风险等级并给出干预建议 |
 
 ---
 
@@ -149,16 +153,17 @@
 learning-multi-agent-system/
 ├── frontend/                        # 前端交互层（Vue 3）
 │   └── src/
-│       ├── api/                     # API 请求（画像/资源/路径/辅导/评估/用户）
-│       ├── components/              # 组件（表单/头像/加载/对话/SVG图标）
+│       ├── api/                     # API 请求（画像/资源/路径/辅导/评估/用户/医学影像）
+│       ├── components/              # 组件（表单/头像/加载/对话/SVG图标/医学影像查看器/图片上传）
 │       ├── views/                   # 页面（首页/登录/画像/资源/路径/辅导/评估）
 │       ├── stores/                  # Pinia 状态管理（用户/主题）
-│       ├── utils/                   # 工具（请求封装/图片压缩）
+│       ├── styles/                  # 样式（变量/过渡动画/公共样式）
+│       ├── utils/                   # 工具（请求封装/图片压缩/流式暂停）
 │       └── router/                  # 路由配置
 │
 ├── backend/ai/MyServer/             # 后端服务层（Java Spring Boot）
 │   └── src/main/java/com/it/
-│       ├── controller/              # REST 控制器（14 个）
+│       ├── controller/              # REST 控制器（15 个：画像/资源/路径/辅导/评估/医学影像/代码/监控/用户/课程/文档/题目/登录/上传/首页）
 │       ├── service/                 # 业务逻辑（AI 流式/对话持久化/OSS）
 │       ├── cache/                   # SSE 事件缓存
 │       ├── config/                  # 配置（Security/WebClient/Redisson/OSS/Jackson/MyBatisPlus）
@@ -169,9 +174,12 @@ learning-multi-agent-system/
 │
 ├── model/                           # 模型推理层（Python FastAPI）
 │   └── app/
-│       ├── main.py                  # FastAPI 入口 & API 路由
+│       ├── main.py                  # FastAPI 入口 & API 路由（9 大模块 30+ 接口）
 │       ├── agents/                  # 多智能体核心
-│       │   ├── orchestrators/       # LangGraph 图定义 & 7 个节点实现
+│       │   ├── orchestrators/       # LangGraph 图定义 & 8 个节点实现
+│       │   │   ├── clinical_graph.py  # LearningGraphBuilder（含 Vision 节点分支）
+│       │   │   ├── qwen_agent.py      # LearningAgent（顶层智能体入口）
+│       │   │   └── nodes/             # 工作流节点（intent/analysis/vision/retrieve/reason/validate/report）
 │       │   ├── core/                # 状态模型 / 共享记忆 / 异常 / 结果封装 / 装饰器
 │       │   ├── infra/               # Reranker 容灾
 │       │   ├── services/            # 检索 / 查询 / 综合服务
@@ -180,13 +188,19 @@ learning-multi-agent-system/
 │       │   ├── schemas/             # 数据结构定义
 │       │   └── utils/               # LLM / JSON / 重试 / 文本工具
 │       ├── rag/                     # Hybrid RAG（向量 + BM25 / QA 生成 / 文档加载）
-│       ├── services/                # 多模态影像 & PubMed 文献检索
-│       ├── config/                  # YAML 配置（专家 / 规则 / 模板 / Prompt / 限额 / 共享记忆）
+│       ├── services/                # 多模态影像 & PubMed 文献检索 & OCR
+│       │   ├── medical_vision_service.py  # 10 类医学影像结构化分析
+│       │   ├── medical_ocr_service.py     # 检验报告/处方/文档 OCR 提取
+│       │   ├── vision_rag_bridge.py       # 影像发现 → PubMed/本地知识库桥接
+│       │   ├── vision_service.py          # 通用视觉分析服务
+│       │   └── pubmed_service.py          # PubMed 文献检索
+│       ├── config/                  # YAML 配置（9 专家 / 规则 / 模板 / Prompt / 限额 / 共享记忆）
 │       ├── evaluation/              # 评估模块
-│       └── utils/                   # 任务管理 / 上下文摘要 / Token 聚合 / 错误码 / 命名模型
+│       └── utils/                   # 任务管理 / 上下文摘要 / Token 聚合 / 错误码 / 命名模型 / 模型下载
 │
 ├── tests/                           # 自动化测试脚本
-│   └── test_full_suite.py           # 全链路黑盒 + 并发压测（33 条用例，支持断点续跑）
+│   ├── test_full_suite.py           # 全链路黑盒 + 并发压测（33 条用例，支持断点续跑）
+│   └── test_medical_multimodal_e2e.py # 医学多模态端到端测试
 │
 ├── model/tests/                     # 模型层单元测试（38 条用例）
 │   ├── test_new_architecture.py     # 白盒路径覆盖测试
@@ -194,6 +208,8 @@ learning-multi-agent-system/
 │   ├── test_rag.py                  # RAG 检索功能测试
 │   ├── test_api_client.py           # API 客户端集成测试
 │   ├── test_migration.py            # 架构迁移验证测试
+│   ├── test_medical_multimodal.py   # 医学多模态功能测试
+│   ├── compare_chunking.py          # 分块策略对比测试
 │   └── ...                          # 其他专项测试
 │
 └── docs/                            # 项目文档
@@ -202,7 +218,8 @@ learning-multi-agent-system/
     ├── 数据库设计文档.md              # 14张表设计 + Mermaid ER图
     ├── 共享记忆系统优势总结.md         # 物理层+逻辑层+元记忆过滤优势分析
     ├── 多智能体个性化学习系统接口文档.md # 14模块完整API规范
-    └── API_SPEC.md                   # API 规范补充文档
+    ├── API_SPEC.md                   # API 规范补充文档
+    └── RAG技术学习文档.md             # RAG 检索技术学习文档
 ```
 
 ---
@@ -229,22 +246,40 @@ learning-multi-agent-system/
         │  Node    │   │  Node    │   │  Node        │
         └──────────┘   └──────────┘   └──────┬───────┘
                                              │
-                                    ┌──────── ▼ ────────┐
-                                    │  Retrieve Node    │
-                                    │ Hybrid RAG 证据检索│
-                                    └──────── ┬ ────────┘
-                                             │
-                                    ┌──────── ▼ ────────┐
+                              ┌──────────────┼──────────────┐
+                              │ 有医学影像     │              │
+                              ▼              │              │
+                    ┌──────────────┐         │              │
+                    │  Vision Node │         │              │
+                    │ 影像分析+证据  │         │              │
+                    └──────┬───────┘         │              │
+                           │                 │              │
+                           └────────┬────────┘              │
+                                    │                       │
+                                    ▼                       │
+                           ┌──────────────┐                │
+                           │ 视觉证据合并   │                │
+                           └──────┬───────┘                │
+                                    │                       │
+                                    ▼                       ▼
+                           ┌──────────────┐   ┌──────────────┐
+                           │  Retrieve    │   │  Retrieve    │
+                           │ Node (含视觉) │   │    Node     │
+                           └──────┬───────┘   └──────┬───────┘
+                                    │                │
+                                    └───────┬────────┘
+                                            │
+                                    ┌─────── ▼ ────────┐
                                     │   Reason Node     │
                                     │ 多智能体推理+辩论    │
-                                    └──────── ┬ ────────┘
-                                             │
-                                    ┌──────── ▼ ────────┐
+                                    └─────── ┬ ────────┘
+                                            │
+                                    ┌─────── ▼ ────────┐
                                     │  Validate Node    │
                                     │ 质量校验+退火反思    │ ──↺ 校验失败
-                                    └──────── ┬ ────────┘
-                                             │
-                                    ┌──────── ▼ ────────┐
+                                    └─────── ┬ ────────┘
+                                            │
+                                    ┌─────── ▼ ────────┐
                                     │   Report Node     │
                                     │ 报告生成+学习激励    │
                                     └───────────────────┘
@@ -257,6 +292,7 @@ learning-multi-agent-system/
 | 画像对话智能体 | 1 | 全场景 | 引导式对话，收集学生信息 |
 | 特征抽取智能体 | 2 | profile / assessment | 自动抽取 8 维度画像特征 |
 | 需求分析智能体 | 3 | resource / tutor / learning_path | 分析需求，拆解任务 |
+| 医学影像分析智能体 | 3.5 | tutor / resource / assessment / learning_path | 基于影像结构化发现提供影像-临床关联分析 |
 | 文档撰写智能体 | 4 | resource | 生成专业课程讲解文档 |
 | 题目生成智能体 | 5 | resource / assessment | 生成多类型练习题目 |
 | 质量审核智能体 | 6 | resource / assessment / learning_path | 审核学术准确性与个性化匹配 |
@@ -300,10 +336,10 @@ learning-multi-agent-system/
 | 意图 | 专家数 | 参与角色 |
 |:---|:---:|:---|
 | `profile` | 3 | 画像对话 + 特征抽取 + 学习激励 |
-| `resource` | 6 | 需求分析 + 文档撰写 + 题目生成 + 质量审核 + 学习激励 + 画像对话 |
-| `tutor` | 4 | 画像对话 + 需求分析 + 质量审核 + 学习激励 |
-| `assessment` | 5 | 特征抽取 + 需求分析 + 题目生成 + 质量审核 + 学习激励 |
-| `learning_path` | 4 | 画像对话 + 需求分析 + 质量审核 + 学习激励 |
+| `resource` | 7 | 需求分析 + 医学影像分析 + 文档撰写 + 题目生成 + 质量审核 + 学习激励 + 画像对话 |
+| `tutor` | 5 | 画像对话 + 需求分析 + 医学影像分析 + 质量审核 + 学习激励 |
+| `assessment` | 6 | 特征抽取 + 需求分析 + 医学影像分析 + 题目生成 + 质量审核 + 学习激励 |
+| `learning_path` | 5 | 画像对话 + 需求分析 + 医学影像分析 + 质量审核 + 学习激励 |
 | `knowledge` | 1 | 直接 LLM 知识问答（不走完整工作流） |
 
 > 仲裁智能体在辩论启用且难度 ≥ 0.6 时自动加入。
@@ -341,11 +377,121 @@ learning-multi-agent-system/
 | **学习路径规划** | 根据画像生成 5-15 步学习路径 | 前置步骤依赖 · 精准资源推送 · 路径动态调整 · 步骤进度追踪 |
 | **智能辅导** | 即时多模态答疑 | 文字解答 · 图片识别(qwen-vl-max) · 上下文感知 · 偏好回答形式 |
 | **学习效果评估** | 5 维度评估 + 闭环优化 | 知识掌握度 · 学习效率 · 技能应用 · 学习一致性 · 进度对齐度 |
-| **多模态影像识别** | 自动识别图片类型并匹配分析策略 | 课件笔记 · 代码编程 · 通用医学影像 · 多图联合分析 |
+| **医学多模态影像分析** | 10 类影像分类 + 结构化分析 | CT/MRI/DSA/病理/心电图/临床照片/检验报告/影像报告/医学图解/课件资料 |
+| **医学影像对比** | 多图对比分析 | 同模态治疗前后对比 · 不同模态交叉对比（CT vs MRI） |
+| **DICOM 元数据提取** | DICOM 文件技术参数提取 | 扫描参数 · 序列信息 · 不提取患者隐私 |
+| **医学 OCR 提取** | 检验报告/处方/文档结构化 | 检验指标数值提取 · 处方药品信息解析 · 流式识别 |
+| **Vision-RAG 桥接** | 影像发现 → 循证检索 | 自动从影像分析结果生成 PubMed + 本地知识库检索 |
 | **PubMed 文献检索** | 集成 NCBI E-utilities API | 8 级证据等级排序 · 与本地 ChromaDB 知识库互补 |
-| **代码辅助开发** | 面向医学生的代码工具 | 代码生成 · 执行沙箱 · 错误诊断 · 实操案例生成 |
+| **代码辅助开发** | 面向医学生的代码工具 | 代码生成 · 在线执行 · 错误诊断 · 实操案例生成 |
+| **学习风险评估** | 百炼平台集成 | 风险等级判定 · 学习干预建议 · 异步评估 |
+| **系统监控** | 限流熔断器状态监控 | 登录失败/成功统计 · 熔断器状态查询 |
 
 > 所有资源生成与辅导接口均支持 **SSE 流式输出** 和 **图片输入**。
+
+---
+
+## 🖼️ 医学多模态影像分析
+
+### 10 类医学影像自动分类
+
+系统基于 qwen-vl-max 多模态大模型，自动识别并分类 10 种医学影像类型，每类配有专用分析 Prompt：
+
+| 影像类型 | 标识 | 专用分析策略 |
+|:---|:---|:---|
+| 神经影像 CT | `neuroimaging_ct` | 脑实质密度评估 · 出血/缺血征象识别 · 中线移位判断 |
+| 神经影像 MRI | `neuroimaging_mri` | DWI/ADC 序列解读 · T1/T2 信号分析 · 梗死核心/半暗带评估 |
+| DSA 血管造影 | `angiography_dsa` | 血管狭窄/闭塞评估 · 侧支循环分级 · 介入治疗指征 |
+| 病理切片 | `pathology` | 细胞形态学分析 · 染色特征识别 · 病理分期辅助 |
+| 心电图 | `ecg` | 心率/心律分析 · ST-T 改变识别 · 房颤/心梗征象 |
+| 临床照片 | `clinical_photo` | 神经系统体征 · 皮肤病变 · 术后评估 |
+| 检验报告 | `lab_report` | 血常规/生化/凝血功能指标提取 |
+| 影像报告 | `radiology_report` | 报告文本结构化提取 |
+| 医学图解 | `medical_illustration` | 解剖结构标注 · 病理机制图解 |
+| 课件资料 | `courseware` | 教学内容提取 · 知识点归纳 |
+
+### 影像分析 → 推理工作流集成
+
+```
+医学影像输入
+      │
+      ▼
+┌─────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│ 影像分类      │───►│ 结构化分析         │───►│ Vision-RAG 桥接  │
+│ (10类自动)    │    │ (JSON Schema约束) │    │ PubMed+本地检索  │
+└─────────────┘    └──────────────────┘    └────────┬────────┘
+                                                     │
+                    ┌────────────────────────────────┘
+                    ▼
+          ┌──────────────────┐
+          │ 视觉证据注入 State │
+          │ → retrieve → reason│
+          │ → validate → report│
+          └──────────────────┘
+```
+
+### 多图对比分析
+
+支持同一模态不同时间点对比（如治疗前后 CT）或不同模态交叉对比（CT vs MRI），自动生成对比分析报告，包含变化描述、临床意义解读和鉴别诊断建议。
+
+### DICOM 元数据提取
+
+从 DICOM 文件中提取技术参数（扫描参数、序列信息等），不提取患者身份信息，符合医疗数据隐私保护要求。
+
+### 医学 OCR 结构化提取
+
+| 能力 | 说明 |
+|:---|:---|
+| **检验报告 OCR** | 自动提取检验指标名称、数值、参考范围、异常标记 |
+| **处方 OCR** | 解析药品名称、剂量、用法、频次等结构化信息 |
+| **通用文档 OCR** | 流式识别医学文档文本，支持实时输出 |
+
+---
+
+## 📊 学习风险评估
+
+集成阿里云百炼平台，通过 `LearningRiskAnalyzer` 异步评估学生学习风险：
+
+```
+学生画像数据 ──► LearningRiskAnalyzer ──► 风险评估结果
+                                           │
+                        ┌──────────────────┼──────────────────┐
+                        ▼                  ▼                  ▼
+                   低风险              中风险              高风险
+                 保持当前节奏        加强辅导关注        触发干预预警
+```
+
+| 评估维度 | 说明 |
+|:---|:---|
+| **风险等级** | 低风险 / 中风险 / 高风险 三级判定 |
+| **学习建议** | 针对性、可执行的学习改进建议（50字以内） |
+| **评估摘要** | 学习状况综合评估摘要（50字以内） |
+| **异步执行** | 基于 `asyncio` 异步调用，不阻塞主流程 |
+
+---
+
+## 🚀 部署指南
+
+项目支持多种部署方式，提供完整的部署文档：
+
+| 文档 | 说明 |
+|:---|:---|
+| `backend/ai/MyServer/BAOTA_DEPLOY.md` | 宝塔面板部署指南（Java 项目 + 环境变量配置） |
+| `backend/ai/MyServer/README_DEPLOY.md` | 通用部署文档 |
+| `ARCHITECTURE.md` | 模型层完整学习文档（文件架构 / 阅读顺序 / 数据模型 / 节点详解 / LangGraph 机制） |
+
+### 快速启动
+
+```bash
+# 1. 启动模型推理层
+cd model && pip install -r requirements.txt && python -m app.main
+
+# 2. 启动后端服务层
+cd backend/ai/MyServer && mvn spring-boot:run
+
+# 3. 启动前端交互层
+cd frontend && npm install && npm run dev
+```
 
 ---
 
@@ -479,7 +625,7 @@ MEDICAL_DOCS_DIR="/path/to/your/pdf/documents"
 
 | 配置文件 | 说明 |
 |:---|:---|
-| `expert_config.yaml` | 8 个专家定义 · 辩论配置 · 动态编排规则 |
+| `expert_config.yaml` | 9 个专家定义 · 辩论配置 · 动态编排规则 |
 | `rules_config.yaml` | 质量校验规则 · 退火策略（5 类驳回分类与修正） |
 | `report_templates.yaml` | 6 种报告模板（画像 / 资源 / 辅导 / 评估 / 路径 / 知识问答） |
 | `prompts.yaml` | 各场景 Prompt 模板库 |
@@ -534,6 +680,13 @@ MEDICAL_DOCS_DIR="/path/to/your/pdf/documents"
 | 评估 | `/model/evaluation/behavior` | POST | 提交学习行为数据 |
 | 评估 | `/model/evaluation/mastery-heatmap` | GET | 知识点掌握度热力图 |
 | 文献 | `/model/pubmed/search` | POST | PubMed 学术文献检索 |
+| 医学影像 | `/model/medical/analyze-image` | POST | 医学影像结构化分析 |
+| 医学影像 | `/model/medical/analyze-case` | POST (SSE) | 多模态病例综合分析 |
+| 医学影像 | `/model/medical/compare-images` | POST | 多图对比分析 |
+| 医学影像 | `/model/medical/dicom-metadata` | POST | DICOM 元数据提取 |
+| 医学OCR | `/model/medical/ocr/lab-report` | POST | 检验报告 OCR 提取 |
+| 医学OCR | `/model/medical/ocr/prescription` | POST | 处方 OCR 提取 |
+| 医学OCR | `/model/medical/ocr/text` | POST (SSE) | 通用文档 OCR 流式识别 |
 | 课程 | `/model/courses` | GET | 课程列表 |
 | 课程 | `/model/courses/{course_id}/knowledge-tree` | GET | 课程知识体系树 |
 | 代码 | `/api/code/execute` | POST | 代码执行沙箱 |
