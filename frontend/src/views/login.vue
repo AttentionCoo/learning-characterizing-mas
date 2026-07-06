@@ -137,6 +137,23 @@ onBeforeUnmount(() => { if (animId) cancelAnimationFrame(animId) })
 
 <template>
   <div class="login-page">
+    <!-- 背景视频 -->
+    <div class="video-background">
+      <video
+        autoplay
+        muted
+        loop
+        playsinline
+        preload="auto"
+        poster=""
+      >
+        <!-- 请将视频文件放入 frontend/public/videos/ 目录，然后修改 src 路径 -->
+        <source src="/videos/login-bg.mp4" type="video/mp4" />
+        <source src="/videos/login-bg.webm" type="video/webm" />
+      </video>
+      <div class="video-overlay"></div>
+    </div>
+
     <canvas ref="canvasRef" class="particle-canvas"></canvas>
 
     <!-- 极光光球 -->
@@ -193,6 +210,36 @@ onBeforeUnmount(() => { if (animId) cancelAnimationFrame(animId) })
   background: var(--color-bg-base);
   overflow: hidden;
   isolation: isolate;
+}
+
+// ── 背景视频 ──
+.video-background {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+
+  video {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    min-width: 100%;
+    min-height: 100%;
+    width: auto;
+    height: auto;
+    transform: translate(-50%, -50%);
+    object-fit: cover;
+  }
+
+  .video-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    // 在深色模式下加深遮罩，在浅色模式下稍亮
+    :global(.dark) & {
+      background: rgba(0, 0, 0, 0.55);
+    }
+  }
 }
 
 .particle-canvas {
