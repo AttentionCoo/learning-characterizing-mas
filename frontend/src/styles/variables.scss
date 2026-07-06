@@ -1,4 +1,4 @@
-﻿// ─────────────────── Design Tokens ───────────────────
+// ─────────────────── Design Tokens ───────────────────
 :root {
   // ── 主色 ──
   --color-primary: #11967f;
@@ -97,6 +97,9 @@
   --transition-fast: 0.15s ease;
   --transition-normal: 0.18s ease;
   --transition-slow: 0.22s ease;
+  --transition-dreamy: 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-bounce: 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+  --transition-spring: 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
 
   // ── 玻璃拟态 ──
   --glass-bg: rgba(255, 255, 255, 0.72);
@@ -104,15 +107,35 @@
   --glass-shadow: 0 8px 32px rgba(15, 65, 79, 0.1);
   --glass-blur: 16px;
 
-  // ── 流光渐变 ──
+  // ── 梦幻流光渐变 ──
   --gradient-aurora: linear-gradient(135deg, #11967f 0%, #0ea5e9 50%, #8b5cf6 100%);
+  --gradient-aurora-flow: linear-gradient(135deg, #06b6d4 0%, #11967f 25%, #8b5cf6 50%, #ec4899 75%, #f59e0b 100%);
   --gradient-warm: linear-gradient(135deg, #f59e0b 0%, #ef4444 50%, #ec4899 100%);
   --gradient-cool: linear-gradient(135deg, #06b6d4 0%, #11967f 50%, #10b981 100%);
   --gradient-shimmer: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.4) 50%, transparent 100%);
+  --gradient-prism: linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f093fb 50%, #f5576c 75%, #4facfe 100%);
+  --gradient-starlight: linear-gradient(180deg, rgba(255,255,255,0.15) 0%, rgba(167,139,250,0.1) 50%, transparent 100%);
+  --gradient-cosmic: radial-gradient(ellipse at 20% 50%, rgba(139, 92, 246, 0.15) 0%, transparent 50%),
+                    radial-gradient(ellipse at 80% 20%, rgba(14, 165, 233, 0.12) 0%, transparent 50%),
+                    radial-gradient(ellipse at 50% 80%, rgba(16, 185, 129, 0.1) 0%, transparent 50%);
+  --gradient-nebula: radial-gradient(ellipse at 30% 30%, rgba(139, 92, 246, 0.06) 0%, transparent 50%),
+                     radial-gradient(ellipse at 70% 60%, rgba(14, 165, 233, 0.04) 0%, transparent 50%),
+                     radial-gradient(ellipse at 50% 50%, rgba(17, 150, 127, 0.03) 0%, transparent 60%);
 
-  // ── 光晕 ──
+  // ── 梦幻光晕 ──
   --glow-primary: 0 0 20px rgba(17, 150, 127, 0.3);
   --glow-strong: 0 0 40px rgba(17, 150, 127, 0.4);
+  --glow-dreamy: 0 0 30px rgba(139, 92, 246, 0.25), 0 0 60px rgba(14, 165, 233, 0.15);
+  --glow-prism: 0 0 20px rgba(139, 92, 246, 0.3), 0 0 40px rgba(236, 72, 153, 0.2), 0 0 60px rgba(14, 165, 233, 0.15);
+  --glow-aurora: 0 0 30px rgba(17, 150, 127, 0.25), 0 0 60px rgba(139, 92, 246, 0.15), 0 0 90px rgba(14, 165, 233, 0.1);
+  --glow-starlight: 0 0 10px rgba(255, 255, 255, 0.5), 0 0 30px rgba(167, 139, 250, 0.35);
+  --glow-card-hover: 0 8px 40px rgba(139, 92, 246, 0.12), 0 2px 12px rgba(17, 150, 127, 0.08);
+
+  // ── 星尘粒子色 ──
+  --color-stardust-1: rgba(167, 139, 250, 0.6);
+  --color-stardust-2: rgba(14, 165, 233, 0.5);
+  --color-stardust-3: rgba(17, 150, 127, 0.45);
+  --color-stardust-4: rgba(251, 191, 36, 0.4);
 }
 
 // ─────────────────── 深色模式 ───────────────────
@@ -196,7 +219,18 @@
   --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   --glass-blur: 16px;
 
-  // ── 光晕 ──
+  // ── 梦幻光晕（深色） ──
   --glow-primary: 0 0 20px rgba(45, 212, 191, 0.25);
   --glow-strong: 0 0 40px rgba(45, 212, 191, 0.35);
+  --glow-dreamy: 0 0 30px rgba(139, 92, 246, 0.3), 0 0 60px rgba(45, 212, 191, 0.2);
+  --glow-prism: 0 0 20px rgba(139, 92, 246, 0.35), 0 0 40px rgba(236, 72, 153, 0.25), 0 0 60px rgba(45, 212, 191, 0.2);
+  --glow-aurora: 0 0 30px rgba(45, 212, 191, 0.3), 0 0 60px rgba(139, 92, 246, 0.2), 0 0 90px rgba(14, 165, 233, 0.15);
+  --glow-starlight: 0 0 10px rgba(255, 255, 255, 0.5), 0 0 30px rgba(167, 139, 250, 0.4);
+  --glow-card-hover: 0 8px 40px rgba(139, 92, 246, 0.15), 0 2px 12px rgba(45, 212, 191, 0.1);
+
+  // ── 星尘粒子色（深色） ──
+  --color-stardust-1: rgba(167, 139, 250, 0.7);
+  --color-stardust-2: rgba(45, 212, 191, 0.6);
+  --color-stardust-3: rgba(14, 165, 233, 0.55);
+  --color-stardust-4: rgba(251, 191, 36, 0.5);
 }

@@ -385,10 +385,32 @@ function getScoreColor(score) {
   padding: 20px 28px 16px;
   border-bottom: 1px solid var(--color-border-light);
   flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--gradient-aurora-flow);
+    background-size: 300% 100%;
+    animation: aurora-flow 8s ease infinite;
+    opacity: 0.5;
+  }
 }
 
 .header-content {
-  h1 { margin: 0; font-size: 1.5rem; font-weight: 800; color: var(--color-text-strong); letter-spacing: -0.02em; }
+  h1 {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 800;
+    background: var(--gradient-aurora);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: -0.02em;
+  }
   p { margin: 4px 0 0; font-size: 13px; color: var(--color-text-medium); }
 }
 

@@ -3,7 +3,15 @@
 </script>
 
 <template>
-  <router-view></router-view>
+  <div class="app-shell">
+    <div class="cosmic-bg"></div>
+    <div class="floating-orbs">
+      <div class="orb orb-1"></div>
+      <div class="orb orb-2"></div>
+      <div class="orb orb-3"></div>
+    </div>
+    <router-view></router-view>
+  </div>
 </template>
 
 <style lang="scss">
@@ -70,5 +78,66 @@ body,
 
 *::-webkit-scrollbar-corner {
   background: var(--color-scrollbar-track);
+}
+
+.app-shell {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+}
+
+// ── 梦幻宇宙背景 ──
+.cosmic-bg {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: var(--gradient-nebula);
+  transition: opacity 0.8s ease;
+}
+
+// ── 梦幻浮动光球 ──
+.floating-orbs {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: 0.18;
+  animation: float-wide 16s ease-in-out infinite;
+
+  &.orb-1 {
+    width: 350px;
+    height: 350px;
+    background: radial-gradient(circle, rgba(139, 92, 246, 0.5), transparent);
+    top: -8%;
+    right: 10%;
+    animation-delay: 0s;
+  }
+
+  &.orb-2 {
+    width: 280px;
+    height: 280px;
+    background: radial-gradient(circle, rgba(14, 165, 233, 0.4), transparent);
+    bottom: -5%;
+    left: 5%;
+    animation-delay: -6s;
+  }
+
+  &.orb-3 {
+    width: 220px;
+    height: 220px;
+    background: radial-gradient(circle, rgba(16, 185, 129, 0.35), transparent);
+    top: 45%;
+    left: 55%;
+    animation-delay: -11s;
+  }
 }
 </style>

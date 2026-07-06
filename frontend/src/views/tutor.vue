@@ -370,10 +370,32 @@ const quickQuestions = [
   padding: 20px 28px 16px;
   border-bottom: 1px solid var(--color-border-light);
   flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--gradient-aurora-flow);
+    background-size: 300% 100%;
+    animation: aurora-flow 8s ease infinite;
+    opacity: 0.5;
+  }
 }
 
 .header-content {
-  h1 { margin: 0; font-size: 1.5rem; font-weight: 800; color: var(--color-text-strong); letter-spacing: -0.02em; }
+  h1 {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 800;
+    background: var(--gradient-aurora);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: -0.02em;
+  }
   p { margin: 4px 0 0; font-size: 13px; color: var(--color-text-medium); }
 }
 
@@ -451,22 +473,37 @@ const quickQuestions = [
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #e8faf7 0%, #e0f4f0 100%);
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.08), rgba(17, 150, 127, 0.1));
   border-radius: 12px;
+  border: 1px solid rgba(139, 92, 246, 0.12);
   box-shadow:
-    0 2px 8px rgba(17, 150, 127, 0.15),
-    0 1px 3px rgba(17, 150, 127, 0.1);
-  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    0 2px 8px rgba(139, 92, 246, 0.12),
+    0 1px 3px rgba(17, 150, 127, 0.08);
+  transition: all var(--transition-bounce);
+  position: relative;
+  overflow: hidden;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.06), rgba(14, 165, 233, 0.04));
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
 
   &:hover {
-    transform: scale(1.05) rotate(-3deg);
+    transform: scale(1.08) rotate(-3deg);
     box-shadow:
-      0 4px 16px rgba(17, 150, 127, 0.25),
-      0 2px 6px rgba(14, 165, 233, 0.15);
+      0 4px 20px rgba(139, 92, 246, 0.25),
+      0 2px 8px rgba(14, 165, 233, 0.2),
+      var(--glow-dreamy);
+
+    &::before { opacity: 1; }
   }
 
   svg {
-    filter: drop-shadow(0 2px 4px rgba(17, 150, 127, 0.2));
+    filter: drop-shadow(0 2px 4px rgba(139, 92, 246, 0.2));
   }
 }
 
@@ -493,11 +530,11 @@ const quickQuestions = [
   align-items: center;
   gap: 12px;
   padding: 14px 18px;
-  background: linear-gradient(135deg, #f8fcfa 0%, #eef9f5 100%);
-  border: 1px solid rgba(17, 150, 127, 0.12);
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.03), rgba(17, 150, 127, 0.04));
+  border: 1px solid rgba(139, 92, 246, 0.12);
   border-radius: 16px 16px 16px 4px;
   box-shadow:
-    0 2px 8px rgba(17, 150, 127, 0.06),
+    0 2px 8px rgba(139, 92, 246, 0.06),
     inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 
@@ -642,15 +679,21 @@ const quickQuestions = [
   border: none;
   border-radius: 12px;
   background: var(--gradient-aurora);
+  background-size: 200% 200%;
+  animation: aurora-flow 4s ease infinite;
   color: #fff;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all var(--transition-fast);
+  transition: all var(--transition-bounce);
 
-  &:hover:not(:disabled) { opacity: 0.85; transform: scale(1.05); }
-  &:disabled { opacity: 0.4; cursor: not-allowed; }
+  &:hover:not(:disabled) {
+    transform: scale(1.08);
+    box-shadow: var(--glow-dreamy);
+  }
+  &:active:not(:disabled) { transform: scale(0.93); }
+  &:disabled { opacity: 0.4; cursor: not-allowed; animation: none; }
 }
 
 .conversation-sidebar {

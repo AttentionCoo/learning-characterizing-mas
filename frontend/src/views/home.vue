@@ -89,6 +89,9 @@ function handleMouseLeave() {
 <template>
   <div class="app-layout" :class="{ collapsed: sidebarCollapsed }">
     <aside class="sidebar" @mouseenter="handleMouseEnter" @mouseleave="handleMouseLeave">
+      <!-- 侧边栏顶部渐变装饰线 -->
+      <div class="sidebar-glow-line"></div>
+
       <div class="sidebar-header">
         <div class="logo" @click="toggleSidebar">
           <div class="logo-icon">
@@ -98,7 +101,8 @@ function handleMouseLeave() {
               <defs>
                 <linearGradient id="logo-grad" x1="0" y1="0" x2="32" y2="32">
                   <stop stop-color="#11967f"/>
-                  <stop offset="1" stop-color="#0f7666"/>
+                  <stop offset="0.5" stop-color="#0ea5e9"/>
+                  <stop offset="1" stop-color="#8b5cf6"/>
                 </linearGradient>
               </defs>
             </svg>
@@ -116,12 +120,13 @@ function handleMouseLeave() {
 
       <nav class="sidebar-nav">
         <router-link
-          v-for="item in navItems"
+          v-for="(item, idx) in navItems"
           :key="item.path"
           :to="item.path"
           class="nav-item"
           :class="{ active: activeNav === item.path }"
           :title="sidebarCollapsed ? item.label : ''"
+          :style="{ animationDelay: `${idx * 0.05}s` }"
         >
           <div class="nav-icon">
             <svg v-if="item.icon === 'profile'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -154,7 +159,8 @@ function handleMouseLeave() {
               <span class="nav-desc">{{ item.desc }}</span>
             </div>
           </transition>
-          <div v-if="activeNav === item.path && !sidebarCollapsed" class="nav-active-bar"></div>
+          <!-- 活跃态光轨 -->
+          <div v-if="activeNav === item.path" class="nav-active-glow"></div>
         </router-link>
       </nav>
 
@@ -191,7 +197,7 @@ function handleMouseLeave() {
 
     <main class="main-content">
       <router-view v-slot="{ Component }">
-        <transition name="page" mode="out-in">
+        <transition name="page-dreamy" mode="out-in">
           <keep-alive>
             <component :is="Component" />
           </keep-alive>
@@ -207,8 +213,11 @@ function handleMouseLeave() {
   height: 100vh;
   overflow: hidden;
   background: var(--color-bg-base);
+  position: relative;
+  z-index: 1;
 }
 
+// ── 侧边栏 ──
 .sidebar {
   width: 260px;
   min-width: 260px;
@@ -227,6 +236,26 @@ function handleMouseLeave() {
     width: 72px;
     min-width: 72px;
   }
+}
+
+// 顶部渐变装饰线
+.sidebar-glow-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--gradient-aurora-flow);
+  background-size: 300% 100%;
+  animation: aurora-flow 6s ease infinite;
+  z-index: 1;
+  opacity: 0.7;
+}
+
+@keyframes aurora-flow {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
 }
 
 .sidebar-header {
@@ -264,6 +293,7 @@ function handleMouseLeave() {
     background: var(--color-hover-bg);
     color: var(--color-text-strong);
     transform: scale(1.05);
+    box-shadow: var(--glow-dreamy);
   }
 
   &:active {
@@ -291,6 +321,11 @@ function handleMouseLeave() {
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: transform var(--transition-bounce);
+
+  .logo:hover & {
+    transform: scale(1.08) rotate(-5deg);
+  }
 }
 
 .logo-text {
@@ -324,21 +359,39 @@ function handleMouseLeave() {
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   position: relative;
   overflow: hidden;
+  animation: fade-in-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.08), rgba(17, 150, 127, 0.06));
+    opacity: 0;
+    transition: opacity 0.35s ease;
+  }
 
   &:hover {
     background: var(--color-hover-bg);
     color: var(--color-text-strong);
     transform: translateX(4px);
+
+    &::before { opacity: 1; }
+
+    .nav-icon {
+      transform: scale(1.08);
+    }
   }
 
   &.active {
     background: var(--color-active-bg);
     color: var(--color-primary-dark);
-    box-shadow: var(--glow-primary);
+    box-shadow: var(--glow-dreamy);
 
     .nav-icon {
       color: var(--color-primary);
       background: rgba(17, 150, 127, 0.1);
+      box-shadow: 0 0 12px rgba(17, 150, 127, 0.2);
     }
 
     .nav-label {
@@ -357,6 +410,24 @@ function handleMouseLeave() {
   }
 }
 
+// 活跃态光轨
+.nav-active-glow {
+  position: absolute;
+  right: 0;
+  top: 15%;
+  bottom: 15%;
+  width: 3px;
+  border-radius: 3px 0 0 3px;
+  background: var(--gradient-aurora);
+  box-shadow: 0 0 12px rgba(139, 92, 246, 0.5), 0 0 24px rgba(17, 150, 127, 0.3);
+  animation: glow-pulse 2s ease-in-out infinite;
+}
+
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(139, 92, 246, 0.4), 0 0 16px rgba(17, 150, 127, 0.2); }
+  50% { box-shadow: 0 0 16px rgba(139, 92, 246, 0.6), 0 0 32px rgba(14, 165, 233, 0.35); }
+}
+
 .nav-icon {
   flex-shrink: 0;
   display: flex;
@@ -365,7 +436,7 @@ function handleMouseLeave() {
   width: 36px;
   height: 36px;
   border-radius: var(--radius-md);
-  transition: all var(--transition-fast);
+  transition: all var(--transition-bounce);
 
   .collapsed & {
     width: 40px;
@@ -392,18 +463,6 @@ function handleMouseLeave() {
   color: var(--color-text-weak);
   line-height: 1.3;
   margin-top: 1px;
-}
-
-.nav-active-bar {
-  position: absolute;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 3px;
-  height: 20px;
-  border-radius: 3px 0 0 3px;
-  background: var(--gradient-aurora);
-  box-shadow: 0 0 8px rgba(17, 150, 127, 0.5);
 }
 
 .sidebar-footer {
@@ -473,31 +532,6 @@ function handleMouseLeave() {
   }
 }
 
-.user-avatar {
-  flex-shrink: 0;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: var(--gradient-aurora);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  border: 2px solid var(--color-avatar-border);
-
-  img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-
-  span {
-    color: #fff;
-    font-weight: 700;
-    font-size: 14px;
-  }
-}
-
 .user-info {
   display: flex;
   flex-direction: column;
@@ -532,8 +566,11 @@ function handleMouseLeave() {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  position: relative;
+  z-index: 1;
 }
 
+// ── 过渡动画 ──
 .fade-text-enter-active,
 .fade-text-leave-active {
   transition: opacity 0.15s ease, transform 0.15s ease;
@@ -545,19 +582,24 @@ function handleMouseLeave() {
   transform: translateX(-8px);
 }
 
-.page-enter-active,
-.page-leave-active {
+// 梦幻页面切换
+.page-dreamy-enter-active {
+  transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.page-dreamy-leave-active {
   transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
-.page-enter-from {
+.page-dreamy-enter-from {
   opacity: 0;
-  transform: translateY(12px) scale(0.99);
+  transform: translateY(16px) scale(0.98);
 }
 
-.page-leave-to {
+.page-dreamy-leave-to {
   opacity: 0;
-  transform: translateY(-4px);
+  transform: translateY(-6px) scale(0.99);
 }
 
 @media (max-width: 768px) {
@@ -610,7 +652,4 @@ function handleMouseLeave() {
     }
   }
 }
-
-.nav-item {
-  animation: fade-in-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
-}</style>
+</style>

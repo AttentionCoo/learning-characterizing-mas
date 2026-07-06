@@ -19,7 +19,7 @@ ef_module.DefaultEmbeddingFunction = lambda: None
 
 from langchain_chroma import Chroma
 
-from .data_loader import load_pdfs_from_dir, split_documents, clean_text_preserve_nl
+from .data_loader import load_pdfs_from_dir, split_documents
 from .qa_generator import QAGenerator
 
 
@@ -362,41 +362,25 @@ class UnifiedSearchEngine:
         )
         logger.info(f"📂 文档目录: {self.docs_dir}")
 
-        try:
-            raw_docs = load_pdfs_from_dir(self.docs_dir)
-        except Exception as e:
-            logger.error(f"❌ 加载文档失败: {e}")
-            raw_docs = []
-
         # ═══════════════════════════════════════════════════════
-        # 语义分块 vs 递归切分策略选择
+        # 向量库持久化：已有数据则直接加载，避免重复构建
         # ═══════════════════════════════════════════════════════
-        # 仅首次构建向量库时使用语义分块（成本高但质量优），
-        # 后续启动向量库已有数据，chunks 仅用于可能的 QA 衍生重建，
-        # 使用快速递归切分即可。
         need_rebuild = self._check_vectorstore_empty(persist_dir)
 
-        if need_rebuild and raw_docs:
-            logger.info("🧠 向量库为空，启用语义分块 (threshold=0.80, overlap=0.25)...")
+        if need_rebuild:
+            logger.info("🆕 向量库为空，开始首次构建...")
             try:
-                # 语义分块需要保留换行作为段落边界信号，重新加载文档
-                semantic_docs = load_pdfs_from_dir(self.docs_dir, clean_fn=clean_text_preserve_nl)
-                chunk_embeddings = DashScopeEmbeddings(model="text-embedding-v2")
-                self.chunks = split_documents(
-                    semantic_docs,
-                    embeddings=chunk_embeddings,
-                    similarity_threshold=0.80,   # 升高阈值，减少假断点
-                    min_chunk_size=100,
-                    max_chunk_size=800,
-                    overlap_ratio=0.25,           # 句子级重叠，防止边界信息丢失
-                    strategy="semantic",          # 显式指定语义分块
-                )
+                raw_docs = load_pdfs_from_dir(self.docs_dir)
             except Exception as e:
-                logger.warning(f"⚠️ 语义分块失败 ({e})，回退到混合分块")
-                self.chunks = split_documents(raw_docs)  # 默认 hybrid
-        else:
+                logger.error(f"❌ 加载文档失败: {e}")
+                raw_docs = []
+
             logger.info("🔀 使用混合分块 (Hybrid Chunking): 规则边界保护→递归切分(512/128)→合并小块")
-            self.chunks = split_documents(raw_docs)  # 默认 hybrid
+            self.chunks = split_documents(raw_docs)
+        else:
+            logger.info("✅ 向量库已存在，跳过文档加载与分块，直接加载已有数据")
+            raw_docs = []
+            self.chunks = []
 
         self.vectorstore = build_or_load_vectorstore(
             self.chunks,

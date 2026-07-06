@@ -1,4 +1,4 @@
-﻿<script setup>
+<script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import pause from '@/utils/pause'
 
@@ -169,19 +169,25 @@ function typing(text, delay = TYPE_DELAY) {
 
 <template>
   <div class="intro-shell">
-    <div class="title">脑卒中专精学习系统
+    <div class="title">
+      <span class="title-text gradient-text">脑卒中专精学习系统</span>
       <div class="sub-title">
         脑卒中医学生个性化学习平台，多智能体协同赋能
       </div>
     </div>
     <div class="card-area">
       <div class="card-stack">
-        <div v-for="card in stackCards" :key="card.textIndex" class="intro-card"
+        <div v-for="card in stackCards" :key="card.textIndex" class="intro-card prism-border"
           :class="{ leaving: card.layer === 0 && isLeaving }" :style="getCardStyle(card.layer, card.textIndex)">
+          <!-- 卡片光轨 -->
+          <div class="card-light-trail"></div>
           <span class="typing-text">
             {{ card.textIndex === typingTextIndex ? typedText : card.text }}
             <span class="cursor" v-show="card.textIndex === typingTextIndex && cursorShow">●</span>
           </span>
+          <!-- 角落光点 -->
+          <div class="card-sparkle sparkle-tl"></div>
+          <div class="card-sparkle sparkle-br"></div>
         </div>
       </div>
     </div>
@@ -193,25 +199,31 @@ function typing(text, delay = TYPE_DELAY) {
   height: 100%;
   position: relative;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
 }
 
 .title {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  font-size: 2rem;
-  margin-bottom: 2rem;
-  color: var(--color-text-strong);
+  text-align: left;
+  width: 100%;
+  max-width: 640px;
+  margin-bottom: 2.5rem;
+}
+
+.title-text {
+  font-size: 2.2rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.3;
 }
 
 .sub-title {
-  font-size: 1.4rem;
+  font-size: 1.2rem;
   margin-top: 12px;
-  margin-bottom: 2rem;
   color: var(--color-text-medium);
+  font-weight: 500;
+  letter-spacing: 0.01em;
 }
 
 .card-area {
@@ -224,7 +236,7 @@ function typing(text, delay = TYPE_DELAY) {
 .card-stack {
   position: relative;
   width: min(640px, 82vw);
-  height: 220px;
+  height: 240px;
   margin: 0 auto;
   perspective: 1200px;
 }
@@ -237,7 +249,6 @@ function typing(text, delay = TYPE_DELAY) {
   justify-content: center;
   padding: 2rem;
   border-radius: var(--radius-xl);
-  border: 1px solid rgba(17, 150, 127, 0.2);
   background: var(--color-card-intro-bg);
   box-shadow: var(--color-card-intro-shadow);
   will-change: transform, opacity;
@@ -245,6 +256,7 @@ function typing(text, delay = TYPE_DELAY) {
               box-shadow 0.3s ease;
   overflow: hidden;
 
+  // 背景光晕
   &::after {
     content: '';
     position: absolute;
@@ -252,8 +264,17 @@ function typing(text, delay = TYPE_DELAY) {
     left: -50%;
     width: 200%;
     height: 200%;
-    background: conic-gradient(from 0deg, transparent, rgba(17, 150, 127, 0.08), transparent, rgba(14, 165, 233, 0.06), transparent);
-    animation: rotate-glow 6s linear infinite;
+    background: conic-gradient(
+      from 0deg,
+      transparent,
+      rgba(139, 92, 246, 0.06),
+      transparent,
+      rgba(14, 165, 233, 0.05),
+      transparent,
+      rgba(17, 150, 127, 0.04),
+      transparent
+    );
+    animation: rotate-glow 8s linear infinite;
     pointer-events: none;
   }
 
@@ -265,9 +286,65 @@ function typing(text, delay = TYPE_DELAY) {
   }
 }
 
+// 光轨扫过
+.card-light-trail {
+  position: absolute;
+  top: -20%;
+  left: -100%;
+  width: 60%;
+  height: 140%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.08),
+    rgba(167, 139, 250, 0.12),
+    rgba(255, 255, 255, 0.08),
+    transparent
+  );
+  transform: skewX(-15deg);
+  animation: light-trail 6s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+@keyframes light-trail {
+  0% { left: -100%; opacity: 0; }
+  15% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { left: 200%; opacity: 0; }
+}
+
 @keyframes rotate-glow {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+// 角落光点
+.card-sparkle {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 2;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: var(--color-stardust-1);
+    box-shadow: 0 0 8px rgba(167, 139, 250, 0.6), 0 0 20px rgba(167, 139, 250, 0.3);
+    animation: stardust-twinkle 3s ease-in-out infinite;
+  }
+
+  &.sparkle-tl { top: 12px; left: 16px; }
+  &.sparkle-br { bottom: 12px; right: 16px; animation-delay: 1.5s; }
+}
+
+@keyframes stardust-twinkle {
+  0%, 100% { opacity: 0.3; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.3); }
 }
 
 .typing-text {
@@ -283,7 +360,10 @@ function typing(text, delay = TYPE_DELAY) {
 
 .cursor {
   margin-left: 0.3rem;
-  color: var(--color-primary);
+  background: linear-gradient(135deg, var(--color-primary), #8b5cf6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
   animation: blink 1s infinite;
   font-size: 1.8rem;
 }
@@ -295,7 +375,7 @@ function typing(text, delay = TYPE_DELAY) {
 
 @media (max-width: 768px) {
   .card-stack {
-    height: 240px;
+    height: 260px;
     width: min(86vw, 520px);
   }
 
@@ -310,6 +390,14 @@ function typing(text, delay = TYPE_DELAY) {
 
   .cursor {
     font-size: 1.3rem;
+  }
+
+  .title-text {
+    font-size: 1.6rem;
+  }
+
+  .sub-title {
+    font-size: 1rem;
   }
 }
 </style>

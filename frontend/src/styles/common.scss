@@ -593,3 +593,226 @@ input.auth-input:-webkit-autofill:focus {
   scrollbar-width: thin;
   scrollbar-color: var(--color-scrollbar-thumb) var(--color-scrollbar-track);
 }
+
+// ─────────────────── 梦幻页面头部 ───────────────────
+.dreamy-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 28px 16px;
+  border-bottom: 1px solid var(--color-border-light);
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+
+  // 底部渐变光条
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--gradient-aurora-flow);
+    background-size: 300% 100%;
+    animation: aurora-flow 8s ease infinite;
+    opacity: 0.5;
+  }
+
+  .header-left {
+    h1 {
+      margin: 0;
+      font-size: 1.5rem;
+      font-weight: 800;
+      background: var(--gradient-aurora);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: -0.02em;
+    }
+    p {
+      margin: 4px 0 0;
+      font-size: 13px;
+      color: var(--color-text-medium);
+    }
+  }
+
+  .header-badge {
+    padding: 6px 16px;
+    border-radius: var(--radius-pill);
+    font-size: 12px;
+    font-weight: 700;
+    background: rgba(139, 92, 246, 0.08);
+    color: #7c3aed;
+    border: 1px solid rgba(139, 92, 246, 0.15);
+    white-space: nowrap;
+    transition: all var(--transition-normal);
+
+    &:hover {
+      box-shadow: var(--glow-dreamy);
+      transform: translateY(-1px);
+    }
+  }
+}
+
+// ─────────────────── 梦幻卡片 ───────────────────
+.dreamy-card {
+  background: var(--color-bg-base);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-xl);
+  transition: all var(--transition-dreamy);
+  position: relative;
+  overflow: hidden;
+
+  &:hover {
+    border-color: rgba(139, 92, 246, 0.2);
+    box-shadow: var(--glow-card-hover);
+    transform: translateY(-2px);
+  }
+
+  // 顶部光条
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 20%;
+    right: 20%;
+    height: 1px;
+    background: var(--gradient-aurora);
+    opacity: 0;
+    transition: opacity 0.4s ease;
+  }
+
+  &:hover::before { opacity: 0.6; }
+}
+
+// ─────────────────── 梦幻按钮 ───────────────────
+.dreamy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border: none;
+  border-radius: var(--radius-lg);
+  background: var(--gradient-aurora);
+  background-size: 200% 200%;
+  animation: aurora-flow 4s ease infinite;
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--transition-bounce);
+  position: relative;
+  overflow: hidden;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--gradient-shimmer);
+    animation: shimmer 2.5s ease-in-out infinite;
+    pointer-events: none;
+  }
+
+  &:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: var(--glow-aurora);
+  }
+
+  &:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    animation: none;
+  }
+}
+
+// ─────────────────── 梦幻面板标题 ───────────────────
+.dreamy-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 18px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-text-strong);
+  border-bottom: 1px solid var(--color-border-light);
+  flex-shrink: 0;
+
+  .count-badge {
+    margin-left: 4px;
+    padding: 2px 10px;
+    border-radius: var(--radius-pill);
+    font-size: 11px;
+    font-weight: 700;
+    background: rgba(139, 92, 246, 0.1);
+    color: #7c3aed;
+  }
+}
+
+// ─────────────────── 梦幻空状态 ───────────────────
+.dreamy-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  gap: 12px;
+  text-align: center;
+
+  .empty-icon {
+    font-size: 3.5rem;
+    line-height: 1;
+    animation: float 3s ease-in-out infinite;
+  }
+
+  .empty-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--color-text-medium);
+  }
+
+  .empty-desc {
+    font-size: 13px;
+    color: var(--color-text-weak);
+    line-height: 1.6;
+    max-width: 300px;
+  }
+}
+
+// ─────────────────── 梦幻输入框聚焦 ───────────────────
+.dreamy-input-focus {
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+
+  &:focus {
+    outline: none;
+    border-color: var(--color-primary) !important;
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.12), var(--glow-dreamy) !important;
+  }
+}
+
+// ─────────────────── 梦幻列表项 ───────────────────
+.dreamy-list-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+
+  &:hover {
+    background: var(--color-hover-bg);
+    transform: translateX(4px);
+  }
+
+  &.active {
+    background: var(--color-active-bg);
+    box-shadow: inset 3px 0 0 var(--color-primary), var(--glow-dreamy);
+  }
+}

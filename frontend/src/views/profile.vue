@@ -679,6 +679,19 @@ function formatTime(timeStr) {
   border-bottom: 1px solid var(--color-border-light);
   flex-shrink: 0;
   background: var(--color-bg-base);
+  position: relative;
+  overflow: hidden;
+
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--gradient-aurora-flow);
+    background-size: 300% 100%;
+    animation: aurora-flow 8s ease infinite;
+    opacity: 0.5;
+  }
 }
 
 .header-content {
@@ -686,7 +699,10 @@ function formatTime(timeStr) {
     margin: 0;
     font-size: 1.5rem;
     font-weight: 800;
-    color: var(--color-text-strong);
+    background: var(--gradient-aurora);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
     letter-spacing: -0.02em;
   }
   p {
@@ -1070,21 +1086,24 @@ function formatTime(timeStr) {
   border: none;
   border-radius: 12px;
   background: var(--gradient-aurora);
+  background-size: 200% 200%;
+  animation: aurora-flow 4s ease infinite;
   color: #fff;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all var(--transition-fast);
+  transition: all var(--transition-bounce);
 
   &:hover:not(:disabled) {
-    opacity: 0.85;
-    transform: scale(1.05);
+    transform: scale(1.08);
+    box-shadow: var(--glow-dreamy);
   }
-
+  &:active:not(:disabled) { transform: scale(0.93); }
   &:disabled {
     opacity: 0.4;
     cursor: not-allowed;
+    animation: none;
   }
 }
 

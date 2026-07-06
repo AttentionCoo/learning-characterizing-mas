@@ -161,7 +161,7 @@ class ReasonNode(BaseNode):
         if self.shared_memory_system:
             for role, advice in zip(expert_roles, results):
                 if advice and not advice.startswith("未能获取"):
-                    _, entropy_score, _ = self.shared_memory_system.filter.compute_entropy_score(advice)
+                    entropy_score, _ = self.shared_memory_system.filter.compute_entropy_score(advice)
                     memory_entropy_scores[role] = entropy_score
 
                     try:
