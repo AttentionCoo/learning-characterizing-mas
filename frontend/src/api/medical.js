@@ -118,3 +118,13 @@ export function extractLabReportAPI(params) {
 export function extractPrescriptionAPI(params) {
   return request.post(`${MODEL_BASE}/ocr/prescription`, params)
 }
+
+/**
+ * DICOM → PNG 预览转换
+ * 将 DICOM Base64 数据转换为 PNG 格式用于前端缩略图预览
+ * @param {string} imageBase64 - Base64 编码的 DICOM 数据
+ * @returns {Promise} - { image: string } PNG base64 data URL
+ */
+export function dicomToPngAPI(imageBase64) {
+  return request.post(`${MODEL_BASE}/dicom-to-png`, { images: [imageBase64] })
+}

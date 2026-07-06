@@ -3,6 +3,7 @@ import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { getResourcesAPI, getResourceDetailAPI, resourceStreamAPI } from '@/api/resources'
+import ImageUploader from '@/components/ImageUploader.vue'
 
 marked.setOptions({ gfm: true, breaks: true })
 
@@ -37,6 +38,8 @@ const resourceDetail = ref(null)
 const resourceDetailLoading = ref(false)
 
 const showGenerator = ref(true)
+
+const uploadedImages = ref([])
 
 const resultContentRef = ref(null)
 const userScrolled = ref(false)
@@ -137,6 +140,7 @@ async function handleGenerate() {
           knowledgePoints: points,
           difficulty: difficulty.value,
           message: customMessage.value || `请为我生成${courseName.value || '脑卒中'}相关的学习资料`,
+          images: uploadedImages.value,
         },
         (chunk) => {
           if (!isGenerating.value) return
@@ -289,6 +293,16 @@ onMounted(() => {
           <div class="form-field">
             <label>补充说明 <span class="hint">可选</span></label>
             <textarea v-model="customMessage" placeholder="描述你的具体需求，如：重点讲解溶栓时间窗和rt-PA用法..." rows="2"></textarea>
+          </div>
+
+          <!-- 医学影像参考上传 -->
+          <div class="form-section">
+            <div class="section-label">📷 医学影像参考 <span class="hint">可选 · 用于结合影像资料生成教学内容</span></div>
+            <ImageUploader
+              v-model:images="uploadedImages"
+              :max-count="3"
+              :max-size-mb="10"
+            />
           </div>
 
           <button class="generate-btn" :disabled="!selectedTypes.length || isGenerating" @click="handleGenerate">

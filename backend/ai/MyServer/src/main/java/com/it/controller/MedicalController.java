@@ -188,4 +188,30 @@ public class MedicalController {
             return Result.error("处方OCR提取失败: " + e.getMessage());
         }
     }
+
+    /**
+     * DICOM → PNG 预览转换（代理到 Python /model/medical/dicom-to-png）
+     * 用于前端无法直接渲染 DICOM 文件时的缩略图预览
+     */
+    @PostMapping("/dicom-to-png")
+    public Result dicomToPng(@RequestBody MedicalImageParam param) {
+        log.info("[Medical] 收到DICOM转PNG请求");
+
+        try {
+            if (param.getImages() == null || param.getImages().isEmpty()) {
+                return Result.error("需要DICOM文件数据");
+            }
+
+            Map<String, Object> requestBody = Map.of(
+                    "image", param.getImages().get(0)
+            );
+
+            String response = streamingService.callModelSync("/model/medical/dicom-to-png", requestBody);
+            JsonNode jsonNode = objectMapper.readTree(response);
+            return Result.success(jsonNode.get("data"));
+        } catch (Exception e) {
+            log.error("[Medical] DICOM转PNG失败: {}", e.getMessage(), e);
+            return Result.error("DICOM转PNG失败: " + e.getMessage());
+        }
+    }
 }

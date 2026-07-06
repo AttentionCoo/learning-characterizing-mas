@@ -4,6 +4,7 @@ import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { getTutorConversationsAPI, getTutorConversationHistoryAPI, deleteTutorConversationAPI, tutorStreamAPI } from '@/api/tutor'
 import AppAvatar from '@/components/AppAvatar.vue'
+import ImageUploader from '@/components/ImageUploader.vue'
 import { useUserStore } from '@/stores/user'
 
 const userStore = useUserStore()
@@ -27,6 +28,8 @@ const inputRef = ref(null)
 const shouldAutoScroll = ref(true)
 
 const showSidebar = ref(true)
+const uploadedImages = ref([])
+const showImageUploader = ref(false)
 
 function renderMarkdown(text) {
   if (!text) return ''
@@ -106,7 +109,18 @@ async function handleSend() {
 
   draftMessage.value = ''
   shouldAutoScroll.value = true
-  chatMessages.value.push({ role: 'user', content: message })
+  showImageUploader.value = false
+
+  // 保存当前图片并清空上传列表
+  const currentImages = [...uploadedImages.value]
+  uploadedImages.value = []
+
+  // 将图片信息附到消息上
+  const userMsg = { role: 'user', content: message }
+  if (currentImages.length > 0) {
+    userMsg.images = currentImages
+  }
+  chatMessages.value.push(userMsg)
   chatMessages.value.push({ role: 'assistant', content: '' })
   const aiIndex = chatMessages.value.length - 1
 
@@ -137,7 +151,7 @@ async function handleSend() {
 
   try {
     const result = await tutorStreamAPI(
-      { talkId: talkId.value, message },
+      { talkId: talkId.value, message, images: currentImages },
       (chunk) => {
         if (isThinking.value) { isThinking.value = false; thinkingHint.value = '' }
         charBuffer.push(...Array.from(chunk))
@@ -223,6 +237,14 @@ const quickQuestions = [
   '脑出血与脑梗死的鉴别诊断',
   '脑卒中二级预防的抗血小板策略',
 ]
+
+/** 判断 Base64 data URL 是否为 DICOM 文件 */
+function isDICOMDataUrl(dataUrl) {
+  if (!dataUrl || typeof dataUrl !== 'string') return false
+  return dataUrl.includes('application/dicom') ||
+         dataUrl.includes('application/octet-stream') ||
+         /\.dcm/i.test(dataUrl)
+}
 </script>
 
 <template>
@@ -270,6 +292,17 @@ const quickQuestions = [
               </div>
               <div v-else-if="msg.role === 'assistant'" class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
               <div v-else class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
+              <!-- 用户消息中的医学影像 -->
+              <div v-if="msg.role === 'user' && msg.images?.length" class="message-images">
+                <div
+                  v-for="(img, idx) in msg.images"
+                  :key="idx"
+                  class="message-image-thumb"
+                >
+                  <img v-if="!isDICOMDataUrl(img)" :src="img" alt="上传的医学影像" />
+                  <div v-else class="msg-dicom-badge">🏥 DICOM</div>
+                </div>
+              </div>
               <div v-if="msg.role === 'assistant' && idx === chatMessages.length - 1 && isStreaming && !isThinking && currentStage" class="stage-bar">
                 <span class="stage-dot"></span>
                 <span class="stage-text">{{ currentStage }}</span>
@@ -288,6 +321,36 @@ const quickQuestions = [
         </div>
 
         <div class="chat-input-area">
+          <!-- 已上传图片预览行 -->
+          <div class="upload-preview-row" v-if="uploadedImages.length > 0">
+            <div
+              v-for="(img, idx) in uploadedImages"
+              :key="idx"
+              class="upload-thumb"
+            >
+              <img v-if="!isDICOMDataUrl(img)" :src="img" alt="预览" />
+              <div v-else class="dicom-thumb-badge">🏥<br/>DICOM</div>
+              <button class="upload-thumb-remove" @click="uploadedImages.splice(idx, 1)">✕</button>
+            </div>
+            <span class="upload-count">已上传 {{ uploadedImages.length }} 张影像</span>
+          </div>
+
+          <!-- ImageUploader 面板 -->
+          <div class="image-uploader-panel" v-if="showImageUploader">
+            <div class="uploader-header">
+              <span>📷 上传医学影像</span>
+              <button class="uploader-close" @click="showImageUploader = false">✕</button>
+            </div>
+            <ImageUploader
+              v-model:images="uploadedImages"
+              :max-count="3"
+              :max-size-mb="10"
+            />
+            <div class="uploader-footer">
+              <span class="uploader-hint">支持 JPG/PNG/WebP/DICOM(.dcm) · 最多3张 · 单张最大10MB</span>
+            </div>
+          </div>
+
           <div class="input-wrapper">
             <textarea
               ref="inputRef"
@@ -298,6 +361,18 @@ const quickQuestions = [
               @keydown="handleKeydown"
               @input="($event.target.style.height = 'auto'), ($event.target.style.height = $event.target.scrollHeight + 'px')"
             ></textarea>
+            <button
+              class="attach-btn"
+              :class="{ active: showImageUploader || uploadedImages.length > 0 }"
+              @click="showImageUploader = !showImageUploader"
+              title="上传医学影像"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                <circle cx="8.5" cy="8.5" r="1.5"/>
+                <polyline points="21 15 16 10 5 21"/>
+              </svg>
+            </button>
             <button class="send-btn" :disabled="!draftMessage.trim() || isStreaming" @click="handleSend">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="22" y1="2" x2="11" y2="13"/>
@@ -827,4 +902,144 @@ const quickQuestions = [
 .message { animation: fade-in-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) both; }
 .conv-item { transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
 .conv-item:hover { transform: translateX(4px); }
+
+// ── 图片上传面板 ──
+.image-uploader-panel {
+  border-top: 1px solid var(--color-border-light);
+  background: var(--color-bg-light);
+  padding: 12px 16px;
+  animation: slide-down 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.uploader-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--color-text-strong);
+}
+.uploader-close {
+  width: 24px; height: 24px;
+  border: none; border-radius: 6px;
+  background: var(--color-ghost-hover);
+  color: var(--color-text-medium);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.75rem;
+  transition: all var(--transition-fast);
+  &:hover { background: var(--color-hover-bg); color: var(--color-text-strong); }
+}
+.uploader-footer {
+  margin-top: 8px;
+  text-align: center;
+}
+.uploader-hint {
+  font-size: 0.72rem;
+  color: var(--color-text-weak);
+}
+
+@keyframes slide-down {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+// ── 已上传图片预览行 ──
+.upload-preview-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 24px 4px;
+  flex-wrap: wrap;
+}
+.upload-thumb {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 2px solid var(--color-border);
+  background: var(--color-bg-light);
+  transition: all var(--transition-fast);
+  &:hover { border-color: var(--color-primary); }
+  img { width: 100%; height: 100%; object-fit: cover; }
+}
+.dicom-thumb-badge {
+  width: 100%; height: 100%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #1e293b, #334155);
+  color: #94a3b8; font-size: 0.55rem; font-weight: 700;
+  line-height: 1.2; text-align: center;
+}
+.upload-thumb-remove {
+  position: absolute; top: 1px; right: 1px;
+  width: 16px; height: 16px;
+  border-radius: 50%; border: none;
+  background: rgba(15, 23, 42, 0.7);
+  color: #fff; font-size: 8px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity var(--transition-fast);
+  .upload-thumb:hover & { opacity: 1; }
+}
+.upload-count {
+  font-size: 0.75rem;
+  color: var(--color-text-weak);
+  margin-left: 4px;
+}
+
+// ── 附件按钮 ──
+.attach-btn {
+  flex-shrink: 0;
+  width: 36px; height: 36px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-bg-base);
+  color: var(--color-text-medium);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+  &:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+    background: var(--color-active-bg);
+  }
+  &.active {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+    background: rgba(17, 150, 127, 0.08);
+    box-shadow: 0 0 0 2px rgba(17, 150, 127, 0.12);
+  }
+}
+
+// ── 消息中的图片 ──
+.message-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.message-image-thumb {
+  width: 72px;
+  height: 72px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--color-border-light);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  &:hover {
+    border-color: var(--color-primary);
+    box-shadow: var(--glow-primary);
+    transform: scale(1.05);
+  }
+  img { width: 100%; height: 100%; object-fit: cover; }
+}
+.msg-dicom-badge {
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #1e293b, #334155);
+  color: #94a3b8; font-size: 0.64rem; font-weight: 700;
+}
 </style>

@@ -6,9 +6,15 @@
         v-for="(img, idx) in images"
         :key="idx"
         class="image-preview-item"
-        @click="$emit('preview', idx)"
+        :class="{ 'dicom-file': isDICOMImage(idx) }"
+        @click="!isDICOMImage(idx) && $emit('preview', idx)"
       >
-        <img :src="img" alt="预览" />
+        <!-- DICOM 文件显示占位符 -->
+        <div v-if="isDICOMImage(idx)" class="dicom-placeholder">
+          <span class="dicom-icon">🏥</span>
+          <span class="dicom-label">DICOM</span>
+        </div>
+        <img v-else :src="img" alt="预览" />
         <button class="remove-btn" @click.stop="removeImage(idx)" title="移除">✕</button>
         <div class="image-index">{{ idx + 1 }}</div>
       </div>
@@ -48,7 +54,7 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import { compressImage } from '@/utils/imageCompress'
+import { processFile } from '@/utils/imageCompress'
 
 const props = defineProps({
   images: { type: Array, default: () => [] },
@@ -61,6 +67,8 @@ const emit = defineEmits(['update:images', 'preview', 'type-detected'])
 const fileInputRef = ref(null)
 const isDragging = ref(false)
 const detectedType = ref('')
+// 记录每个图片是否为 DICOM（用于显示占位符）
+const dicomFlags = ref([])
 
 const typeLabels = {
   neuroimaging_ct: '头部CT',
@@ -75,6 +83,13 @@ const typeLabels = {
   courseware_image: '课件资料',
 }
 
+/**
+ * 判断某个 Base64 是否为 DICOM 数据（用于预览显示）
+ */
+function isDICOMImage(idx) {
+  return dicomFlags.value[idx] === true
+}
+
 function triggerFileInput() {
   fileInputRef.value?.click()
 }
@@ -82,6 +97,9 @@ function triggerFileInput() {
 function removeImage(idx) {
   const newImages = [...props.images]
   newImages.splice(idx, 1)
+  const newFlags = [...dicomFlags.value]
+  newFlags.splice(idx, 1)
+  dicomFlags.value = newFlags
   emit('update:images', newImages)
 }
 
@@ -90,16 +108,10 @@ async function processFiles(files) {
   if (remaining <= 0) return
 
   const newImages = [...props.images]
+  const newFlags = [...dicomFlags.value]
 
   for (let i = 0; i < Math.min(files.length, remaining); i++) {
     const file = files[i]
-
-    // 检查文件类型
-    const isDICOM = file.name?.toLowerCase().endsWith('.dcm') ||
-                    file.name?.toLowerCase().endsWith('.dicom')
-    const isImage = file.type?.startsWith('image/')
-
-    if (!isDICOM && !isImage) continue
 
     // 检查文件大小
     if (file.size > props.maxSizeMB * 1024 * 1024) {
@@ -108,13 +120,15 @@ async function processFiles(files) {
     }
 
     try {
-      const base64 = await compressImage(file)
-      newImages.push(base64)
+      const result = await processFile(file)
+      newImages.push(result.dataUrl)
+      newFlags.push(result.isDICOM)
     } catch (err) {
       console.error(`文件 ${file.name} 处理失败:`, err)
     }
   }
 
+  dicomFlags.value = newFlags
   emit('update:images', newImages)
 
   // 简单类型检测
@@ -229,6 +243,30 @@ function detectImageType() {
 .upload-icon { font-size: 1.5rem; }
 .upload-hint p { margin: 4px 0; color: var(--color-text-medium); font-size: 0.88rem; }
 .upload-sub { font-size: 0.74rem !important; color: var(--color-text-weak) !important; }
+
+/* ── DICOM 占位符 ── */
+.dicom-file {
+  cursor: default !important;
+}
+.dicom-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #1e293b, #334155);
+  gap: 2px;
+}
+.dicom-icon {
+  font-size: 1.4rem;
+}
+.dicom-label {
+  font-size: 0.6rem;
+  color: #94a3b8;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
 
 .type-info { margin-top: 8px; display: flex; align-items: center; gap: 8px; font-size: 0.83rem; }
 .type-badge {

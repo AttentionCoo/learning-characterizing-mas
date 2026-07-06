@@ -1647,6 +1647,23 @@ async def medical_ocr_text(request: MedicalImageAnalysisRequest):
     return EventSourceResponse(generate(), ping=15)
 
 
+@app.post("/model/medical/dicom-to-png")
+async def medical_dicom_to_png(request: DICOMMetadataRequest):
+    """DICOM 文件转 PNG 预览接口
+
+    将 DICOM 文件（Base64编码）转换为 PNG 格式用于前端预览。
+    应用默认脑窗窗宽窗位（WW=80, WL=40）。
+    """
+    try:
+        png_base64 = MedicalVisionService.dicom_to_png_base64(request.image)
+        if not png_base64:
+            raise HTTPException(status_code=400, detail="DICOM 转换失败：无法读取像素数据，请确认文件为有效 DICOM 格式")
+        return {"code": 1, "msg": "success", "data": {"image": png_base64}}
+    except Exception as e:
+        logger.error(f"[medical/dicom-to-png] 转换失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ============================================================
 # 兼容旧接口
 # ============================================================
