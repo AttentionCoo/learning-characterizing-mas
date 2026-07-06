@@ -684,8 +684,12 @@ const overallProgress = computed(() => {
     font-size: 14px;
     transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 
-    box-shadow: 0 0 0 3px rgba(17, 150, 127, 0.15), var(--glow-primary);
     &::placeholder { color: var(--color-text-weak); }
+    &:focus {
+      outline: none;
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 3px rgba(17, 150, 127, 0.15), var(--glow-primary);
+    }
   }
 
   textarea { resize: vertical; min-height: 80px; }

@@ -255,8 +255,8 @@ const quickQuestions = [
                   <circle cx="12" cy="4" r="1" fill="#11967f"/>
                   <defs>
                     <linearGradient id="tutor-grad" x1="3" y1="8" x2="21" y2="20">
-                      <stop stop-color="#6366f1"/>
-                      <stop offset="1" stop-color="#8b5cf6"/>
+                      <stop stop-color="#11967f"/>
+                      <stop offset="1" stop-color="#0ea5e9"/>
                     </linearGradient>
                   </defs>
                 </svg>
@@ -451,22 +451,22 @@ const quickQuestions = [
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #f0f4ff 0%, #e8ecff 100%);
+  background: linear-gradient(135deg, #e8faf7 0%, #e0f4f0 100%);
   border-radius: 12px;
   box-shadow:
-    0 2px 8px rgba(99, 102, 241, 0.15),
-    0 1px 3px rgba(99, 102, 241, 0.1);
+    0 2px 8px rgba(17, 150, 127, 0.15),
+    0 1px 3px rgba(17, 150, 127, 0.1);
   transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 
   &:hover {
     transform: scale(1.05) rotate(-3deg);
     box-shadow:
-      0 4px 16px rgba(99, 102, 241, 0.25),
-      0 2px 6px rgba(139, 92, 246, 0.15);
+      0 4px 16px rgba(17, 150, 127, 0.25),
+      0 2px 6px rgba(14, 165, 233, 0.15);
   }
 
   svg {
-    filter: drop-shadow(0 2px 4px rgba(99, 102, 241, 0.2));
+    filter: drop-shadow(0 2px 4px rgba(17, 150, 127, 0.2));
   }
 }
 
@@ -493,11 +493,11 @@ const quickQuestions = [
   align-items: center;
   gap: 12px;
   padding: 14px 18px;
-  background: linear-gradient(135deg, #fafbff 0%, #f5f3ff 100%);
-  border: 1px solid rgba(99, 102, 241, 0.12);
+  background: linear-gradient(135deg, #f8fcfa 0%, #eef9f5 100%);
+  border: 1px solid rgba(17, 150, 127, 0.12);
   border-radius: 16px 16px 16px 4px;
   box-shadow:
-    0 2px 8px rgba(99, 102, 241, 0.06),
+    0 2px 8px rgba(17, 150, 127, 0.06),
     inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 
@@ -510,9 +510,9 @@ const quickQuestions = [
     width: 7px;
     height: 7px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    background: var(--gradient-aurora);
     animation: bounce 1.4s infinite ease-in-out;
-    box-shadow: 0 2px 4px rgba(99, 102, 241, 0.3);
+    box-shadow: 0 2px 4px rgba(17, 150, 127, 0.3);
 
     &:nth-child(1) { animation-delay: 0s; }
     &:nth-child(2) { animation-delay: 0.16s; }
@@ -523,7 +523,7 @@ const quickQuestions = [
 .thinking-text {
   font-size: 13px;
   font-weight: 500;
-  color: #6366f1;
+  color: var(--color-primary);
   letter-spacing: 0.01em;
 }
 
@@ -533,7 +533,7 @@ const quickQuestions = [
   gap: 8px;
   margin-top: 6px;
   padding: 4px 12px;
-  background: rgba(99, 102, 241, 0.06);
+  background: var(--color-active-bg);
   border-radius: 12px;
 }
 
@@ -541,14 +541,14 @@ const quickQuestions = [
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  background: var(--gradient-aurora);
   animation: pulse 1.5s ease-in-out infinite;
 }
 
 .stage-text {
   font-size: 12px;
   font-weight: 500;
-  color: #6366f1;
+  color: var(--color-text-label);
 }
 
 @keyframes pulse {

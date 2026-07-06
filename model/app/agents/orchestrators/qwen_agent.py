@@ -19,6 +19,7 @@ _NODE_LABELS: Dict[str, str] = {
     "intent": "正在判断问题类型...",
     "reject": "正在处理回复...",
     "analysis": "正在分析学习需求...",
+    "vision": "正在分析医学影像...",
     "retrieve": "正在检索教育参考资料...",
     "reason": "正在进行多智能体推理...",
     "validate": "正在进行质量校验...",
@@ -28,6 +29,7 @@ _NODE_LABELS: Dict[str, str] = {
 
 _NODE_PROGRESS_LABELS: Dict[str, str] = {
     "analysis": "正在分析学习需求",
+    "vision": "正在分析医学影像",
     "retrieve": "正在检索教育参考资料",
     "reason": "正在进行多智能体推理",
     "validate": "正在进行质量校验",
@@ -67,6 +69,7 @@ class LearningAgent:
         report_manager,
         llm_turbo=None,
         shared_memory_system=None,
+        vision_node=None,
     ):
         self.llm_proposer = llm_proposer
         self.llm_critic = llm_critic
@@ -75,6 +78,7 @@ class LearningAgent:
         self.prompts = prompt_manager
         self.reports = report_manager
         self.shared_memory_system = shared_memory_system
+        self.vision_node = vision_node
 
         self.intent_node = IntentNode(self.llm_turbo)
         self.analysis_node = AnalysisNode(self.llm_critic)
@@ -90,6 +94,7 @@ class LearningAgent:
             reason_node=self.reason_node,
             validate_node=self.validate_node,
             report_node=self.report_node,
+            vision_node=self.vision_node,
             llm_critic=self.llm_critic,
             report_manager=self.reports,
             shared_memory_system=shared_memory_system,
@@ -102,6 +107,7 @@ class LearningAgent:
         report_mode: str = "emergency",
         show_thinking: bool = True,
         profile_summary: str = "",
+        images: list = None,
     ) -> AsyncGenerator[Dict, None]:
         if not profile_summary and all_info:
             profile_summary = all_info
@@ -136,6 +142,10 @@ class LearningAgent:
             "shared_memory_hits": [],
             "memory_entropy_scores": {},
             "consensus_result": {},
+            "images": images or [],
+            "vision_findings": None,
+            "vision_evidence": "",
+            "has_medical_images": bool(images) if images else False,
         }
         streamed_nodes: set = set()
         llm_call_counts: Dict[str, int] = {}
@@ -228,6 +238,14 @@ class LearningAgent:
     def _node_summary(self, node: str, output: dict) -> str:
         if not isinstance(output, dict):
             return ""
+        if node == "vision":
+            findings = output.get("vision_findings")
+            has_findings = findings and isinstance(findings, dict) and len(findings) > 0
+            if has_findings:
+                img_type = findings.get("image_type", "未知")
+                key_count = len(findings.get("key_findings", []))
+                return f"医学影像分析完成（{img_type}，{key_count} 项关键发现）"
+            return "医学影像分析完成"
         if node == "analysis":
             q = output.get("learning_questions", [])
             return f"提取到 {len(q)} 个学习子问题"

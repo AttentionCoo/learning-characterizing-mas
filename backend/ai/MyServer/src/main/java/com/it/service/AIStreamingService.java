@@ -3,8 +3,10 @@ package com.it.service;
 import com.it.po.uo.ContDTO;
 import com.it.po.vo.AnswerVO;
 import com.it.pojo.Talk;
+import org.springframework.http.codec.ServerSentEvent;
 import reactor.core.publisher.Flux;
 import java.util.List;
+import java.util.Map;
 
 public interface AIStreamingService {
     // 创建新对话
@@ -22,4 +24,14 @@ public interface AIStreamingService {
     List<ContDTO> getPreContent(Long userId, Long talkId);
 
     Talk getTalkById(Long talkId);
+
+    // ============================================================
+    // 医学多模态通用转发方法
+    // ============================================================
+
+    /** 同步调用 Python 模型层（非流式） */
+    String callModelSync(String uri, Map<String, Object> body);
+
+    /** 流式转发到 Python 模型层（SSE） */
+    Flux<ServerSentEvent<String>> streamToModel(String uri, Map<String, Object> body, String token);
 }

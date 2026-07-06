@@ -31,6 +31,17 @@ from app.config.config_loader import (
 )
 from app.agents.core.shared_memory import SharedMemorySystem
 from app.services.vision_service import VisionAnalysisService
+from app.services.medical_vision_service import MedicalVisionService
+from app.services.medical_ocr_service import MedicalOCRService
+from app.services.vision_rag_bridge import VisionRAGBridge
+from app.agents.orchestrators.nodes.vision_node import VisionAnalysisNode
+from app.schemas.medical_image import (
+    MedicalImageAnalysisRequest,
+    MedicalImageAnalysisResponse,
+    MedicalCaseAnalysisRequest,
+    CompareImagesRequest,
+    DICOMMetadataRequest,
+)
 
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage
@@ -55,7 +66,7 @@ logger = logging.getLogger(__name__)
 performance_logger = logging.getLogger("performance")
 performance_logger.setLevel(logging.INFO)
 
-resources = {"model": None, "naming_model": None, "executor": None, "context_summary": None, "vision_service": None, "llm_turbo": None, "learning_assistant": None, "task_manager": AsyncTaskManager()}
+resources = {"model": None, "naming_model": None, "executor": None, "context_summary": None, "vision_service": None, "medical_vision_service": None, "medical_ocr_service": None, "vision_rag_bridge": None, "llm_turbo": None, "learning_assistant": None, "task_manager": AsyncTaskManager()}
 
 
 # ============================================================
@@ -245,31 +256,17 @@ async def _run_agent_background(
         if naming_model and executor and naming_input:
             naming_future = loop.run_in_executor(executor, naming_model.run_naming, naming_input)
 
-        if images:
-            vision_svc = resources.get("vision_service")
-            if vision_svc:
-                async for event in vision_svc.analyze_stream(
-                    images=images,
-                    question=image_question or "",
-                    all_info="",
-                ):
-                    if event.get("type") == "thinking":
-                        task_mgr.add_event(task_id, {
-                            "type": "node_start",
-                            "node": "vision",
-                            "label": event.get("title", "正在分析图片..."),
-                        })
-                    elif event.get("type") == "chunk":
-                        content_str = str(event.get("content", ""))
-                        if content_str:
-                            final_parts.append(content_str)
-                            task_mgr.add_event(task_id, {"type": "token", "content": content_str})
+        # 如果只有图片且没有文本内容，标记为医学影像分析模式
+        has_images = bool(images)
+        if has_images:
+            logger.info(f"[background] 任务 {task_id} 包含 {len(images)} 张医学影像，将经由 vision 节点处理")
 
         async for event in agent.run_learning_reasoning(
             case_text=case_text,
             all_info=all_info,
             report_mode=report_mode,
             show_thinking=True,
+            images=images or [],
         ):
             if not isinstance(event, dict):
                 continue
@@ -441,7 +438,27 @@ def init_all_resources():
     if rep_scores:
         logger.info(f"     - 信誉数据: {len(rep_scores)} 个智能体")
 
-    logger.info("🧠 [7/8] 初始化学习推理智能体...")
+    logger.info("🧠 [7/10] 初始化医学多模态服务...")
+    medical_vision_service = MedicalVisionService(prompt_manager=prompt_mgr)
+    medical_ocr_service = MedicalOCRService(prompt_manager=prompt_mgr)
+    pubmed_service = PubMedService()
+    vision_rag_bridge = VisionRAGBridge(
+        pubmed_service=pubmed_service,
+        unified_search_engine=retriever,
+    )
+    logger.info("  ✅ 医学影像分析服务初始化完成")
+    logger.info("  ✅ 医学OCR服务初始化完成")
+    logger.info("  ✅ Vision-RAG桥接服务初始化完成")
+
+    logger.info("🧠 [8/10] 初始化医学影像分析节点...")
+    vision_node = VisionAnalysisNode(
+        medical_vision_service=medical_vision_service,
+        vision_rag_bridge=vision_rag_bridge,
+        llm_fast=llm_plus,
+    )
+    logger.info("  ✅ VisionAnalysisNode 初始化完成")
+
+    logger.info("🧠 [9/10] 初始化学习推理智能体...")
     agent = LearningAgent(
         llm_proposer=llm_max,
         llm_critic=llm_plus,
@@ -450,10 +467,11 @@ def init_all_resources():
         report_manager=report_mgr,
         llm_turbo=llm_turbo,
         shared_memory_system=shared_memory_system,
+        vision_node=vision_node,
     )
-    logger.info("  ✅ 学习推理智能体初始化完成")
+    logger.info("  ✅ 学习推理智能体初始化完成（已集成医学多模态节点）")
 
-    logger.info("🔧 [8/8] 初始化其他服务...")
+    logger.info("🔧 [10/10] 初始化其他服务...")
     vision_service = VisionAnalysisService(prompt_manager=prompt_mgr)
     naming_model = NamingModel()
     logger.info("  ✅ 影像识别服务初始化完成")
@@ -464,7 +482,7 @@ def init_all_resources():
     logger.info(f"🎉 系统初始化完成！耗时: {init_time:.2f}秒")
     logger.info("=" * 80)
 
-    return agent, naming_model, context_summary, vision_service, llm_turbo, learning_assistant
+    return agent, naming_model, context_summary, vision_service, medical_vision_service, medical_ocr_service, vision_rag_bridge, llm_turbo, learning_assistant
 
 
 @asynccontextmanager
@@ -474,13 +492,16 @@ async def lifespan(app: FastAPI):
     loop = asyncio.get_running_loop()
 
     try:
-        agent, naming, context_summary, vision_service, llm_turbo, learning_assistant = await loop.run_in_executor(
+        agent, naming, context_summary, vision_service, medical_vision_service, medical_ocr_service, vision_rag_bridge, llm_turbo, learning_assistant = await loop.run_in_executor(
             resources["executor"], init_all_resources
         )
         resources["model"] = agent
         resources["naming_model"] = naming
         resources["context_summary"] = context_summary
         resources["vision_service"] = vision_service
+        resources["medical_vision_service"] = medical_vision_service
+        resources["medical_ocr_service"] = medical_ocr_service
+        resources["vision_rag_bridge"] = vision_rag_bridge
         resources["llm_turbo"] = llm_turbo
         resources["learning_assistant"] = learning_assistant
         logging.info(">>> 所有模型组装完成，服务已就绪")
@@ -1421,6 +1442,209 @@ async def pubmed_search(request: PubMedSearchRequest):
         papers = []
 
     return {"code": 1, "msg": "success", "data": {"papers": papers}}
+
+
+# ============================================================
+# 9. 医学多模态影像分析模块（新增）
+# ============================================================
+
+@app.post("/model/medical/analyze-image")
+async def medical_analyze_image(request: MedicalImageAnalysisRequest):
+    """医学影像结构化分析接口（非流式，返回结构化 JSON）
+
+    支持：CT/MRI/DSA/病理/心电图/临床照片/检验报告/影像报告/医学图解/课件资料
+    """
+    medical_vision = resources.get("medical_vision_service")
+    if not medical_vision:
+        raise HTTPException(status_code=503, detail="Medical vision service not ready")
+
+    if not request.images:
+        raise HTTPException(status_code=422, detail="至少需要一张医学影像")
+
+    try:
+        # 结构化分析
+        findings = await medical_vision.analyze_structured(
+            images=request.images,
+            question=request.question,
+            all_info=request.all_info,
+        )
+
+        # Vision → PubMed 桥接
+        pubmed_evidence = []
+        local_evidence = []
+        bridge = resources.get("vision_rag_bridge")
+        if bridge:
+            import asyncio
+            pubmed_task = asyncio.create_task(
+                bridge.search_pubmed_from_findings(findings, max_results=3)
+            )
+            local_evidence = bridge.search_local_knowledge(findings, top_k=3)
+            try:
+                pubmed_evidence = await pubmed_task
+            except Exception as e:
+                logger.warning(f"[medical/analyze-image] PubMed检索失败: {e}")
+
+        return {
+            "code": 1,
+            "msg": "success",
+            "data": MedicalImageAnalysisResponse(
+                findings=findings,
+                pubmed_evidence=pubmed_evidence,
+                local_evidence=local_evidence,
+                analysis_text=findings.raw_description,
+            ).model_dump(),
+        }
+
+    except Exception as e:
+        logger.error(f"[medical/analyze-image] 分析失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/model/medical/analyze-case")
+async def medical_analyze_case(request: MedicalCaseAnalysisRequest):
+    """多模态病例综合分析接口（SSE 流式）
+
+    同时处理文本+医学影像，影像分析结果自动融入多智能体推理流程。
+    工作流：intent → vision → retrieve → reason → validate → report
+    """
+    agent = resources.get("model")
+    if not agent:
+        raise HTTPException(status_code=503, detail="Model service not ready")
+
+    task_mgr = resources["task_manager"]
+    task_id = uuid.uuid4().hex
+    talk_id = request.talkId or str(uuid.uuid4().int % 100000)
+    new_talk = request.talkId is None
+
+    # 构建病例分析Prompt
+    case_prefix = f"【多模态病例分析 - {request.case_type}】\n"
+    if request.include_evidence:
+        case_prefix += "请结合医学影像分析结果和循证医学证据，进行综合分析。\n"
+
+    combined_message = f"{case_prefix}{request.message}"
+
+    task_mgr.create_task(task_id, "medical_case_analysis", {"talkId": talk_id})
+
+    asyncio.create_task(_run_agent_background(
+        task_id=task_id,
+        agent=agent,
+        case_text=combined_message,
+        all_info="",
+        report_mode="tutor",  # 使用 tutor 模式以启用多智能体推理
+        task_mgr=task_mgr,
+        naming_model=resources.get("naming_model") if new_talk else None,
+        executor=resources.get("executor"),
+        naming_input=request.message if new_talk else None,
+        images=request.images if request.images else None,
+        image_question=request.message,
+    ))
+
+    init_event = {"type": "init", "taskId": task_id, "talkId": talk_id, "newTalk": new_talk, "mode": "medical_case_analysis"}
+    return EventSourceResponse(_stream_task_events(task_id, task_mgr, init_event), ping=15)
+
+
+@app.post("/model/medical/compare-images")
+async def medical_compare_images(request: CompareImagesRequest):
+    """多图对比分析接口
+
+    支持同一模态的不同时间点对比（如治疗前后CT）或不同模态对比（CT vs MRI）。
+    """
+    medical_vision = resources.get("medical_vision_service")
+    if not medical_vision:
+        raise HTTPException(status_code=503, detail="Medical vision service not ready")
+
+    if len(request.images) < 2:
+        raise HTTPException(status_code=422, detail="至少需要2张图片进行对比分析")
+
+    try:
+        comparison = await medical_vision.compare_images(
+            images=request.images,
+            question=request.question,
+            all_info=request.all_info,
+        )
+        return {"code": 1, "msg": "success", "data": comparison.model_dump()}
+
+    except Exception as e:
+        logger.error(f"[medical/compare-images] 对比分析失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/model/medical/dicom-metadata")
+async def medical_dicom_metadata(request: DICOMMetadataRequest):
+    """DICOM文件元数据提取接口
+
+    从DICOM文件中提取技术参数（不提取患者身份信息）。
+    """
+    try:
+        metadata = MedicalVisionService.read_dicom_metadata(request.image)
+        return {"code": 1, "msg": "success", "data": metadata.model_dump()}
+
+    except Exception as e:
+        logger.error(f"[medical/dicom-metadata] 提取失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/model/medical/ocr/lab-report")
+async def medical_ocr_lab_report(request: MedicalImageAnalysisRequest):
+    """检验报告OCR结构化提取接口"""
+    ocr_service = resources.get("medical_ocr_service")
+    if not ocr_service:
+        raise HTTPException(status_code=503, detail="Medical OCR service not ready")
+
+    if not request.images:
+        raise HTTPException(status_code=422, detail="需要一张检验报告图片")
+
+    try:
+        lab_report = await ocr_service.extract_lab_report(
+            image_base64=request.images[0],
+            all_info=request.all_info,
+        )
+        return {"code": 1, "msg": "success", "data": lab_report.model_dump()}
+
+    except Exception as e:
+        logger.error(f"[medical/ocr/lab-report] 提取失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/model/medical/ocr/prescription")
+async def medical_ocr_prescription(request: MedicalImageAnalysisRequest):
+    """处方OCR结构化提取接口"""
+    ocr_service = resources.get("medical_ocr_service")
+    if not ocr_service:
+        raise HTTPException(status_code=503, detail="Medical OCR service not ready")
+
+    if not request.images:
+        raise HTTPException(status_code=422, detail="需要一张处方图片")
+
+    try:
+        prescriptions = await ocr_service.extract_prescription(
+            image_base64=request.images[0],
+        )
+        return {"code": 1, "msg": "success", "data": [p.model_dump() for p in prescriptions]}
+
+    except Exception as e:
+        logger.error(f"[medical/ocr/prescription] 提取失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/model/medical/ocr/text")
+async def medical_ocr_text(request: MedicalImageAnalysisRequest):
+    """通用医学文档OCR流式识别接口"""
+    ocr_service = resources.get("medical_ocr_service")
+    if not ocr_service:
+        raise HTTPException(status_code=503, detail="Medical OCR service not ready")
+
+    if not request.images:
+        raise HTTPException(status_code=422, detail="需要一张文档图片")
+
+    async def generate():
+        async for event in ocr_service.extract_text_stream(
+            image_base64=request.images[0],
+            document_type=request.expected_image_type or "general",
+        ):
+            yield json.dumps(event, ensure_ascii=False)
+
+    return EventSourceResponse(generate(), ping=15)
 
 
 # ============================================================

@@ -46,3 +46,8 @@ class LearningState(TypedDict):
     shared_memory_hits: List[Dict]
     memory_entropy_scores: Dict
     consensus_result: Dict
+    # 医学多模态影像字段
+    images: List[str]
+    vision_findings: Optional[Dict]
+    vision_evidence: str
+    has_medical_images: bool

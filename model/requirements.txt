@@ -80,6 +80,12 @@ pdfplumber==0.11.9
 pypdf==4.3.1
 
 # =========================
+# Medical Imaging (DICOM/NIfTI)
+# =========================
+pydicom>=2.4.0
+# nibabel>=5.2.0  # Optional: for NIfTI neuroimaging files
+
+# =========================
 # Retrieval
 # =========================
 rank-bm25==0.2.2

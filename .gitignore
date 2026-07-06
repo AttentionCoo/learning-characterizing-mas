@@ -1,37 +1,282 @@
-# 敏感配置文件（显式移到最上方，防止误提交）
+# ============================================================
+# 敏感配置文件（顶层，防止误提交）
+# ============================================================
 .env
 .env.*
+!*.env.example
+
+# ============================================================
+# IDE / 编辑器
+# ============================================================
 
 # IntelliJ IDEA
 .idea/
 *.iml
+*.iws
+*.ipr
+out/
 
-# Maven & Java 编译产物
+# VS Code
+.vscode/
+*.code-workspace
+
+# Eclipse
+.classpath
+.project
+.settings/
+.metadata/
+
+# NetBeans
+nbproject/
+nbbuild/
+nbdist/
+nbactions.xml
+
+# 其他编辑器
+*.swp
+*.swo
+*~
+.bak
+
+# ============================================================
+# Java / Maven / Gradle
+# ============================================================
+
+# Maven
 target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# Gradle
+.gradle/
+build/
+!gradle-wrapper.jar
+gradle-app.setting
+!gradle-wrapper.properties
+
+# Java
 *.class
+*.jar
+*.war
+*.ear
+*.nar
+hs_err_pid*
+replay_pid*
 
-# Logs
-*.log
+# Spring Boot
+!src/main/resources/application*.yml
+*.original
 
+# ============================================================
 # Python
+# ============================================================
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+sdist/
+wheels/
+*.whl
+.python-version
+pip-wheel-metadata/
+.venv/
+venv/
+env/
+ENV/
+.eggs/
+
+# pytest
+.pytest_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+.hypothesis/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# pytype
+.pytype/
+
+# Cython
+*.pyd
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# ============================================================
+# Node.js / 前端
+# ============================================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+.npm
+.eslintcache
+.stylelintcache
+
+# Vite / Vue
+frontend/dist/
+frontend/.vite/
+*.local
+
+# Nuxt
+.nuxt/
+.output/
+
+# ============================================================
+# 日志文件
+# ============================================================
+*.log
+logs/
+app.log
+
+# ============================================================
+# 操作系统
+# ============================================================
 
 # macOS
 .DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
 
-# Frontend
-node_modules/
-frontend/(backup01)dist/
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
 
-# Claude Code memory (local tool, not project code)
-memory/
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
 
-# 本地文档（不入库）
-流式输出架构改进方案.md
-
-# ChromaDB 运行时数据
+# ============================================================
+# ChromaDB 向量数据库运行时数据
+# ============================================================
+chroma_db_*/
+chroma_db_unified/
 chroma_db_shared_memory/
 
+# ============================================================
 # 共享记忆运行时数据
+# ============================================================
 model/data/agent_reputation.json
+
+# ============================================================
+# 模型文件（仅忽略运行时下载/缓存的大文件）
+# ============================================================
+model/data/models/
+*.safetensors
+*.pt
+*.pth
+*.onnx
+*.gguf
+checkpoints/
+
+# ============================================================
+# 运行时 / 缓存 / 临时文件
+# ============================================================
+*.tmp
+*.temp
+*.cache
+tmp/
+temp/
+.cache/
+
+# Redis dump
+*.rdb
+dump.rdb
+
+# SQLite
+*.sqlite
+*.sqlite3
+*.db
+
+# Core dumps
+core
+core.*
+
+# ============================================================
+# Claude Code（本地工具，非项目代码）
+# ============================================================
+.claude/
+memory/
+
+# ============================================================
+# 本地文档 / 草稿（不入库）
+# ============================================================
+流式输出架构改进方案.md
+*.draft.md
+TODO.md
+notes/
+local/
+
+# ============================================================
+# Docker
+# ============================================================
+docker-compose.override.yml
+.docker/
+
+# ============================================================
+# 证书 / 密钥
+# ============================================================
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.truststore
+credentials.json
+
+# ============================================================
+# 压缩包
+# ============================================================
+*.zip
+*.tar.gz
+*.tgz
+*.rar
+*.7z

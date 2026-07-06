@@ -23,6 +23,7 @@ import org.redisson.api.RedissonClient;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.http.MediaType;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -825,5 +826,68 @@ public class AIStreamingServiceImpl implements AIStreamingService {
 
     private String buildHistoryKey(Long userId, Long talkId) {
         return HISTORY_KEY_PREFIX + userId + ":" + talkId;
+    }
+
+    // ============================================================
+    // 医学多模态通用转发方法
+    // ============================================================
+
+    /**
+     * 同步调用 Python 模型层（非流式请求，用于医学影像结构化分析等非流式接口）
+     */
+    @Override
+    public String callModelSync(String uri, Map<String, Object> body) {
+        try {
+            return webClient.post()
+                    .uri(uri)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(body)
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .timeout(Duration.ofSeconds(120))
+                    .block();
+        } catch (Exception e) {
+            log.error("同步调用模型层失败: uri={}, err={}", uri, e.getMessage(), e);
+            throw new RuntimeException("模型层调用失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 流式转发到 Python 模型层（SSE 代理，用于医学多模态病例分析等流式接口）
+     */
+    @Override
+    public Flux<ServerSentEvent<String>> streamToModel(String uri, Map<String, Object> body, String token) {
+        return webClient.post()
+                .uri(uri)
+                .contentType(MediaType.APPLICATION_JSON)
+                .accept(MediaType.TEXT_PLAIN)
+                .bodyValue(body)
+                .retrieve()
+                .bodyToFlux(String.class)
+                .filter(line -> line != null && !line.trim().isEmpty())
+                .map(String::trim)
+                .filter(line -> !line.startsWith(":"))
+                .map(line -> line.startsWith("data:")
+                        ? line.substring(5).trim()
+                        : line)
+                .filter(line -> !line.isEmpty())
+                .filter(line -> !"[DONE]".equalsIgnoreCase(line))
+                .map(data -> {
+                    try {
+                        return ServerSentEvent.<String>builder()
+                                .data(data)
+                                .build();
+                    } catch (Exception e) {
+                        return ServerSentEvent.<String>builder()
+                                .data("{\"type\":\"error\",\"content\":\"数据解析失败\"}")
+                                .build();
+                    }
+                })
+                .onErrorResume(e -> {
+                    log.error("SSE流式转发失败: uri={}, err={}", uri, e.getMessage());
+                    return Flux.just(ServerSentEvent.<String>builder()
+                            .data("{\"type\":\"error\",\"content\":\"模型服务暂时不可用: " + e.getMessage() + "\"}")
+                            .build());
+                });
     }
 }

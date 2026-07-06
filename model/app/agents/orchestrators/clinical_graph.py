@@ -9,6 +9,7 @@ from app.agents.orchestrators.nodes.retrieve_node import RetrieveNode
 from app.agents.orchestrators.nodes.reason_node import ReasonNode
 from app.agents.orchestrators.nodes.report_node import ReportNode
 from app.agents.orchestrators.nodes.validate_node import ValidateNode
+from app.agents.orchestrators.nodes.vision_node import VisionAnalysisNode
 from app.config.config_loader import get_validation_manager
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,7 @@ class LearningGraphBuilder:
         reason_node: ReasonNode,
         report_node: ReportNode,
         validate_node: ValidateNode = None,
+        vision_node: VisionAnalysisNode = None,
         llm_critic=None,
         report_manager=None,
         shared_memory_system=None,
@@ -34,6 +36,7 @@ class LearningGraphBuilder:
         self.reason_node = reason_node
         self.report_node = report_node
         self.validate_node = validate_node
+        self.vision_node = vision_node
         self.llm_critic = llm_critic
         self.report_manager = report_manager
         self.shared_memory_system = shared_memory_system
@@ -50,6 +53,12 @@ class LearningGraphBuilder:
         graph.add_node("reject", self._reject_node)
         graph.add_node("knowledge_answer", self._knowledge_node)
         graph.add_node("analysis", self.analysis_node.run)
+
+        # 医学多模态：当存在影像时添加 vision 节点
+        if self.vision_node:
+            graph.add_node("vision", self.vision_node.run)
+            logger.info("[graph] 已添加 vision 影像分析节点")
+
         graph.add_node("retrieve", self.retrieve_node.run)
         graph.add_node("reason", self.reason_node.run)
 
@@ -78,7 +87,22 @@ class LearningGraphBuilder:
 
         graph.add_edge("reject", END)
         graph.add_edge("knowledge_answer", END)
-        graph.add_edge("analysis", "retrieve")
+
+        # 条件路由：有影像 → vision → retrieve，无影像 → 直接 retrieve
+        if self.vision_node:
+            graph.add_conditional_edges(
+                "analysis",
+                self._route_after_analysis,
+                {
+                    "vision": "vision",
+                    "retrieve": "retrieve",
+                }
+            )
+            graph.add_edge("vision", "retrieve")
+            logger.info("[graph] 已添加 analysis → vision → retrieve 条件路由（有影像时）")
+        else:
+            graph.add_edge("analysis", "retrieve")
+
         graph.add_edge("retrieve", "reason")
 
         if self.validate_node:
@@ -111,6 +135,17 @@ class LearningGraphBuilder:
         if t in valid_types:
             return t
         return "irrelevant"
+
+    def _route_after_analysis(self, state: LearningState) -> str:
+        """analysis 节点之后的条件路由：有医学影像走 vision，否则直接 retrieve"""
+        images = state.get("images", [])
+        has_images = bool(images)
+        state["has_medical_images"] = has_images
+        if has_images:
+            logger.info(f"[graph] 检测到 {len(images)} 张医学影像 → 路由到 vision 节点")
+            return "vision"
+        logger.info("[graph] 无医学影像 → 路由到 retrieve 节点")
+        return "retrieve"
 
     async def _reject_node(self, state: LearningState) -> dict:
         return {"report": "您的问题与脑卒中学习不相关，本系统仅支持脑卒中（中风）相关的学习问答，包括脑卒中的病因、症状、诊断、治疗、康复、预防、护理、并发症等方面。请提出与脑卒中学习相关的问题。"}
