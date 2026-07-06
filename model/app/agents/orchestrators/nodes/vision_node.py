@@ -9,14 +9,15 @@ VisionAnalysisNode — LangGraph 医学影像分析节点
   (当 state 中存在 images 且非空时)
 
 防护机制（三层）：
-  Tier 1: 快速门控 — 调用 VL 模型直接询问"是否与脑卒中相关"，非则直接拒绝
+  Tier 1: 快速门控 — 中文 Prompt 调用 VL 模型，询问是否脑卒中相关
   Tier 2: 类型检测 — 检查 image_type 是否属于神经/医学影像类别
-  Tier 3: 内容检测 — 检查 findings 文本是否包含卒中关键词或医学发现
+  Tier 3: 硬指标检测 — 统计医学解剖术语密度，非医学图片天然缺乏这些术语
 """
 
 import asyncio
 import logging
 import os
+import re
 import threading
 from typing import Dict, List, Optional
 
@@ -28,63 +29,58 @@ logger = logging.getLogger(__name__)
 # 流结束哨兵
 _STREAM_DONE = object()
 
-# Tier 1 快速门控 Prompt — 硬判断图片是否与脑卒中医学相关
-_STROKE_GATE_PROMPT = """You are a strict medical image gatekeeper for a stroke (脑卒中) education system. Look at this image and answer exactly ONE word: YES or NO.
+# ============================================================
+# Tier 1 门控 Prompt（中文版 — Qwen 对中文指令遵从度更高）
+# ============================================================
+_STROKE_GATE_PROMPT_CN = """你是脑卒中（中风）医学教育系统的严格守门人。请仔细查看这张图片，然后只回答一个字："是" 或 "否"。
 
-Answer YES only if the image is a MEDICAL image related to stroke medicine:
-- Brain CT, brain MRI, cerebral angiography (CTA/MRA/DSA)
-- Medical scans of the head/brain showing cross-sections
-- Pathology slides of cerebrovascular tissue
-- Clinical photos of stroke signs (facial asymmetry, limb weakness)
-- Medical reports/lab results for stroke diagnosis (blood tests, coagulation)
-- ECGs for atrial fibrillation / cardiac sources of embolism
-- Medical illustrations of brain vasculature or stroke mechanisms
+图片属于以下任一类型，回答"是"：
+- 脑部CT、脑部MRI、脑血管造影（CTA/MRA/DSA）
+- 头部/颅脑的医学扫描影像
+- 脑血管相关的病理切片
+- 脑卒中体征的临床照片（面瘫、肢体偏瘫等）
+- 脑卒中相关的检验报告单（血常规、凝血功能等）
+- 脑卒中相关的影像诊断报告
+- 脑卒中相关的心电图（房颤等）
+- 脑血管解剖或卒中机制的医学图解
 
-Answer NO for ANYTHING else, especially:
-- Photos of people (selfies, portraits, group photos, ID photos)
-- Text documents, math problems, homework, exam papers, books
-- Screenshots of phones/computers, social media, chat apps
-- Animals, pets, scenery, buildings, food, objects
-- Non-brain medical images (chest X-ray, bone fracture, skin rash, dental, etc.)
-- Any image that is NOT a medical image of the brain/head/vasculature
+图片属于以下任一类型，回答"否"：
+- 普通人像照片（自拍、大头照、证件照、合影等）
+- 文字资料（数学题、试卷、作业、笔记、课本、PPT、合同等）
+- 日常场景（动物、食物、建筑、风景、物品等）
+- 手机/电脑截图、社交媒体、聊天记录
+- 非脑部的医学影像（胸部X光、骨折、皮肤、牙科等）
+- 任何不属于脑卒中医学影像的图片
 
-Output ONLY the word YES or NO. No explanation, no punctuation, no other text."""
+只回答"是"或"否"，不要解释，不要标点，不要其他任何文字。"""
 
 
 class VisionAnalysisNode(BaseNode):
     """医学影像分析节点。
 
-    职责：
-    1. Tier 1 快速门控：VL 模型直接判断图片是否脑卒中相关
-    2. 调用 MedicalVisionService 进行结构化分析
-    3. 通过 VisionRAGBridge 将影像发现转化为 PubMed + 本地知识库检索
-    4. 将影像分析结果和循证证据写入 state，供后续节点使用
-
-    节点输出字段：
-    - vision_findings: 结构化的 MedicalImageFindings（dict）
-    - vision_evidence: 格式化的影像分析+证据文本（str）
-    - evidence: 在原有 evidence 基础上追加视觉证据
-    - is_image_stroke_related: 图片是否与脑卒中相关（bool）
+    防护流程：
+    Tier 1 → 中文门控（VL 模型直接判断）
+    Tier 2 → 影像类型检测（CT/MRI/DSA 放行）
+    Tier 3 → 医学术语密度检测（非医学图片天然缺乏医学术语）
     """
 
-    # 节点输出键名（用于 LangGraph state 更新）
     OUTPUT_FINDINGS_KEY = "vision_findings"
     OUTPUT_EVIDENCE_KEY = "vision_evidence"
     OUTPUT_STROKE_RELATED_KEY = "is_image_stroke_related"
 
-    # 与脑卒中直接相关的影像类型
+    # ── 与脑卒中直接相关的影像类型 ──
     _STROKE_RELATED_IMAGE_TYPES = {
         "neuroimaging_ct", "neuroimaging_mri", "neuroimaging_angiography",
     }
 
-    # 可能与脑卒中相关的影像类型（取决于分析内容）
+    # ── 可能与脑卒中相关的影像类型（需 Tier 3 进一步检测）──
     _POTENTIALLY_STROKE_RELATED_TYPES = {
         "pathology_slide", "clinical_photo", "lab_report",
         "radiology_report", "ecg_waveform", "medical_illustration",
     }
 
-    # 脑卒中相关关键词（用于检查 findings 文本）
-    _STROKE_FINDING_KEYWORDS = [
+    # ── 脑卒中关键词 ──
+    _STROKE_KEYWORDS = [
         "脑卒中", "中风", "卒中", "脑梗", "脑梗死", "脑出血", "脑缺血",
         "脑血管", "缺血性", "出血性", "梗死", "梗塞", "血栓",
         "大脑中动脉", "大脑前动脉", "大脑后动脉", "基底动脉", "颈内动脉",
@@ -93,41 +89,59 @@ class VisionAnalysisNode(BaseNode):
         "颅内", "脑实质", "脑室", "脑沟", "蛛网膜下腔",
     ]
 
-    # 明确非医学/非卒中内容指示词 — 出现在 findings 中直接判定不相关
-    _NON_MEDICAL_INDICATORS = [
-        # ── 数学/作业/考试 ──
-        "数学", "数学题", "数学公式", "方程式", "代数", "几何", "微积分",
-        "数学作业", "数学试卷", "考试题", "习题", "作业", "试卷", "考题",
-        "math", "equation", "algebra", "calculus", "geometry",
-        # ── 大头照/人像/自拍 ──
-        "自拍", "大头照", "证件照", "肖像", "人像", "人脸", "正面照",
-        "自拍照", "合影", "全家福", "毕业照", "聚会", "合照",
-        "portrait", "selfie", "headshot", "face photo", "person smiling",
-        "a person wearing", "a man in", "a woman in", "someone is",
-        "this is a photograph of a person",
-        # ── 日常场景 ──
-        "猫", "狗", "宠物", "动物", "食物", "菜", "饭", "餐厅", "厨房", "烹饪",
-        "车", "汽车", "建筑", "风景", "山", "海", "花", "草", "树", "天空",
-        "旅游", "运动", "运动场", "比赛", "操场", "健身",
-        "手机", "电脑", "屏幕截图", "聊天记录", "二维码", "社交媒体",
-        # ── 文档/表格 ──
-        "表格", "excel", "word", "ppt", "幻灯片", "电子表格",
-        "文档", "合同", "发票", "收据", "笔记", "备忘录",
-        "spreadsheet", "document", "slide", "presentation",
-        # ── 非卒中的医学内容 ──
-        "胸部", "肺", "骨折", "皮肤", "皮疹", "眼科", "牙", "口腔",
-        "孕妇", "胎儿", "儿科", "骨科", "外科手术", "腹腔",
-        "chest x-ray", "pneumonia", "bone fracture", "dermatology",
-        "dental", "ophthalmology", "obstetric",
-        # ── Qwen VL 对非医学图片的常见描述 ──
-        "this is a photo", "this image shows a person", "ordinary",
-        "casual", "snapshot", "screenshot", "selfie",
-        "non-medical", "not a medical image", "everyday scene",
-        "no medical content", "no obvious medical",
+    # ── 医学术语词库（用于密度检测）──
+    # 非医学图片的 findings 中几乎不会出现这些词汇
+    # 一个真实的医学影像会产生 5+ 个匹配
+    _MEDICAL_ANATOMY_TERMS = [
+        # 中文解剖/病理术语
+        "脑实质", "脑室", "脑沟", "脑回", "脑干", "小脑", "大脑",
+        "灰质", "白质", "基底节", "丘脑", "内囊", "外囊",
+        "额叶", "颞叶", "顶叶", "枕叶", "岛叶", "海马",
+        "中线", "占位", "水肿", "血肿", "缺血", "低密度", "高密度",
+        "DWI", "ADC", "FLAIR", "T1", "T2", "SWI", "GRE",
+        "血管", "动脉", "静脉", "狭窄", "闭塞", "灌注",
+        "出血", "梗死", "钙化", "软化", "萎缩", "扩张",
+        "信号", "密度", "增强", "强化", "病变", "异常",
+        "左侧", "右侧", "双侧", "对称", "不对称",
+        "供血区", "皮层", "髓质", "脑膜", "硬膜",
+        # 英文解剖术语
+        "brain", "cerebral", "cerebellar", "ventricle", "sulci",
+        "gyrus", "cortex", "white matter", "gray matter", "basal ganglia",
+        "thalamus", "frontal", "temporal", "parietal", "occipital",
+        "midline", "edema", "hematoma", "ischemia", "infarct",
+        "artery", "vein", "stenosis", "occlusion", "hemorrhage",
+        # 检验/临床术语
+        "血小板", "凝血", "INR", "PT", "APTT", "纤维蛋白原",
+        "血糖", "血脂", "胆固醇", "甘油三酯", "肌酐",
+        "白细胞", "红细胞", "血红蛋白", "血细胞比容",
+        "房颤", "窦性心律", "ST段", "T波", "QT间期",
+        # 报告/病理术语
+        "影像所见", "诊断意见", "报告医师", "检查日期",
+        "切片", "染色", "HE", "免疫组化", "细胞", "组织",
     ]
 
-    # Tier 1 门控通过阈值
-    _GATE_CONFIDENCE_THRESHOLD = 0.5
+    # ── 非医学指标（命中即拦截）──
+    _NON_MEDICAL_INDICATORS = [
+        # 数学/作业
+        "数学", "数学题", "方程式", "代数", "几何", "微积分",
+        "数学作业", "考试题", "试卷", "考题", "习题",
+        # 人像/自拍
+        "自拍", "大头照", "证件照", "肖像", "人像", "合影",
+        "全家福", "毕业照", "合照", "自拍照",
+        "portrait", "selfie", "headshot",
+        # 日常
+        "猫", "狗", "宠物", "动物", "食物", "餐厅", "厨房",
+        "汽车", "风景", "旅游", "运动", "游戏",
+        "手机", "截图", "聊天", "二维码",
+        # 文档
+        "表格", "excel", "word", "ppt", "幻灯片", "电子表格",
+        "合同", "发票", "收据", "笔记", "备忘录",
+        # 非卒中医學
+        "胸部", "骨折", "牙科", "眼科", "孕妇", "儿科",
+        # Qwen VL 对非医学图片的描述
+        "this is a photo of", "a person sitting", "a man in a",
+        "everyday scene", "casual", "snapshot", "non-medical",
+    ]
 
     def __init__(
         self,
@@ -135,26 +149,18 @@ class VisionAnalysisNode(BaseNode):
         vision_rag_bridge=None,
         llm_fast=None,
     ):
-        """
-        Args:
-            medical_vision_service: MedicalVisionService 实例
-            vision_rag_bridge: VisionRAGBridge 实例
-            llm_fast: 快速LLM（用于生成检索查询等轻量任务）
-        """
         self._vision = medical_vision_service
         self._bridge = vision_rag_bridge
         self._llm = llm_fast
         self._api_key = os.getenv("DASHSCOPE_API_KEY")
 
-    async def run(self, state: LearningState) -> Dict:
-        """执行影像分析节点。
+    # ================================================================
+    # 主流程
+    # ================================================================
 
-        流程：
-        Tier 1 快速门控 → 结构化分析 → PubMed检索 → 本地知识库检索 → 证据融合
-        """
+    async def run(self, state: LearningState) -> Dict:
         images = state.get("images", [])
         if not images:
-            logger.info("[vision_node] 无图片输入，跳过影像分析")
             return {
                 self.OUTPUT_FINDINGS_KEY: None,
                 self.OUTPUT_EVIDENCE_KEY: "",
@@ -165,14 +171,12 @@ class VisionAnalysisNode(BaseNode):
         all_info = state.get("all_info", "")
         existing_evidence = state.get("evidence", "")
 
-        logger.info(f"[vision_node] 开始处理 {len(images)} 张医学影像 | 问题: {question[:80]}")
+        logger.info(f"[vision_node] 处理 {len(images)} 张影像 | 问题: {question[:80]}")
 
-        # ================================================================
-        # Tier 1: 快速门控 — 直接问 VL 模型图片是否与脑卒中相关
-        # ================================================================
-        gate_passed = await self._run_stroke_gate(images, question)
+        # ── Tier 1: 中文门控 ──
+        gate_passed = await self._run_stroke_gate_cn(images)
         if not gate_passed:
-            logger.info("[vision_node] Tier 1 门控未通过 → 图片与脑卒中无关，直接拒绝")
+            logger.info("[vision_node] ❌ Tier 1 门控未通过")
             return {
                 self.OUTPUT_FINDINGS_KEY: None,
                 self.OUTPUT_EVIDENCE_KEY: "",
@@ -180,48 +184,37 @@ class VisionAnalysisNode(BaseNode):
                 "_gate_result": "rejected_by_gate",
             }
 
-        # ================================================================
-        # Step 1: 结构化影像分析
-        # ================================================================
+        # ── 结构化分析 ──
         findings = None
-        vision_evidence_text = ""
-
         if self._vision:
             try:
                 findings = await self._vision.analyze_structured(
-                    images=images,
-                    question=question,
-                    all_info=all_info,
+                    images=images, question=question, all_info=all_info,
                 )
                 logger.info(
-                    f"[vision_node] 影像分析完成 | 类型: {findings.image_type} | "
+                    f"[vision_node] 分析完成 | 类型: {findings.image_type} | "
                     f"发现: {len(findings.key_findings)} 条 | 置信度: {findings.confidence:.0%}"
                 )
             except Exception as e:
-                logger.error(f"[vision_node] 影像分析失败: {e}", exc_info=True)
+                logger.error(f"[vision_node] 分析失败: {e}", exc_info=True)
                 findings = None
-        else:
-            logger.warning("[vision_node] MedicalVisionService 未初始化")
 
-        # ================================================================
-        # Tier 2+3: 内容检测 — 从分析结果判断卒中相关性
-        # ================================================================
+        # ── Tier 2+3: 硬指标检测 ──
         is_stroke_related = self._check_stroke_relevance(findings, question)
 
         if not is_stroke_related:
-            logger.info("[vision_node] Tier 2/3 检测不通过 → 图片内容与脑卒中无关")
+            logger.info("[vision_node] ❌ Tier 2/3 内容检测不通过")
             return {
                 self.OUTPUT_FINDINGS_KEY: findings.model_dump() if findings else None,
-                self.OUTPUT_EVIDENCE_KEY: vision_evidence_text,
+                self.OUTPUT_EVIDENCE_KEY: "",
                 self.OUTPUT_STROKE_RELATED_KEY: False,
                 "_gate_result": "rejected_by_content_check",
             }
 
-        # ================================================================
-        # Step 2-5: 正常的检索与证据融合（仅卒中相关图片执行）
-        # ================================================================
+        # ── RAG 桥接 ──
         pubmed_papers = []
         local_docs = []
+        vision_evidence_text = ""
 
         if findings and self._bridge:
             import asyncio as _asyncio
@@ -232,27 +225,25 @@ class VisionAnalysisNode(BaseNode):
             try:
                 pubmed_papers = await pubmed_task
             except Exception as e:
-                logger.warning(f"[vision_node] PubMed检索失败: {e}")
+                logger.warning(f"[vision_node] PubMed 检索失败: {e}")
 
         if findings and self._bridge:
             vision_evidence_text = self._bridge.format_evidence_for_agent(
-                findings=findings,
-                pubmed_papers=pubmed_papers,
-                local_docs=local_docs,
+                findings=findings, pubmed_papers=pubmed_papers, local_docs=local_docs,
             )
 
         merged_evidence = existing_evidence
         if vision_evidence_text:
-            if merged_evidence:
-                merged_evidence = f"{vision_evidence_text}\n\n---\n\n{merged_evidence}"
-            else:
-                merged_evidence = vision_evidence_text
+            merged_evidence = (
+                f"{vision_evidence_text}\n\n---\n\n{merged_evidence}"
+                if merged_evidence else vision_evidence_text
+            )
 
         vision_questions = self._generate_vision_questions(findings) if findings else []
-        existing_questions = list(state.get("learning_questions", []))
-        merged_questions = vision_questions + existing_questions
+        merged_questions = vision_questions + list(state.get("learning_questions", []))
 
-        result = {
+        logger.info(f"[vision_node] ✅ 完成 | 证据: {len(vision_evidence_text)} 字 | PubMed: {len(pubmed_papers)} 篇")
+        return {
             self.OUTPUT_FINDINGS_KEY: findings.model_dump() if findings else None,
             self.OUTPUT_EVIDENCE_KEY: vision_evidence_text,
             "evidence": merged_evidence,
@@ -260,93 +251,68 @@ class VisionAnalysisNode(BaseNode):
             self.OUTPUT_STROKE_RELATED_KEY: True,
         }
 
-        logger.info(
-            f"[vision_node] 节点完成 | 影像证据长度: {len(vision_evidence_text)} | "
-            f"新增子问题: {len(vision_questions)} | PubMed文献: {len(pubmed_papers)}"
-        )
-        return result
-
     # ================================================================
-    # Tier 1: 快速门控
+    # Tier 1: 中文门控
     # ================================================================
 
-    async def _run_stroke_gate(self, images: List[str], question: str) -> bool:
-        """对每张图片调用 VL 模型进行门控判断。
+    async def _run_stroke_gate_cn(self, images: List[str]) -> bool:
+        """中文门控：对每张图片调用 VL 模型，问"是不是脑卒中医学影像？"
 
-        策略：逐一检查每张图片（最多3张）。
-        - 任一图片判定为 YES → 整体放行
-        - 所有图片判定为 NO → 整体拒绝
-        - API 异常 → 默认放行（交由 Tier 2/3 处理）
-
-        返回 True（放行）或 False（拒绝）。
+        所有图片都被判定为"否"才拒绝。任一图片通过即放行。
         """
         if not self._api_key:
-            logger.warning("[vision_node] 未配置 DASHSCOPE_API_KEY，跳过快门控（默认放行）")
+            logger.warning("[vision_node] 无 API KEY，跳过门控（放行）")
             return True
 
-        images_to_check = images[:3]  # 最多检查3张
-
-        for i, img in enumerate(images_to_check):
+        for i, img in enumerate(images[:3]):
             try:
-                gate_answer = await self._call_gate_for_image(img, question)
-                is_stroke = self._parse_gate_answer(gate_answer)
+                answer = await self._call_vl_gate(img)
+                passed = self._parse_cn_gate(answer)
 
                 logger.info(
-                    f"[vision_node] Tier 1 门控 图片{i+1}/{len(images_to_check)}: "
-                    f"原始回答='{gate_answer[:80].strip()}' → "
-                    f"{'✅ 放行' if is_stroke else '❌ 不通过'}"
+                    f"[vision_node] 门控 图{i+1}/{min(len(images),3)}: "
+                    f"回答='{answer[:60]}' → {'✅' if passed else '❌'}"
                 )
 
-                if is_stroke:
-                    # 有任意一张通过门控即可放行
-                    return True
+                if passed:
+                    return True  # 一张通过即放行
             except Exception as e:
-                logger.warning(f"[vision_node] 门控 图片{i+1} 异常: {e}，继续检查下一张")
+                logger.warning(f"[vision_node] 门控 图{i+1} 异常: {e}")
 
-        # 所有图片都未通过门控
-        logger.info(f"[vision_node] Tier 1 门控: {len(images_to_check)} 张图片全部未通过 → 拦截")
+        logger.info("[vision_node] 所有图片均未通过门控 → 拦截")
         return False
 
-    async def _call_gate_for_image(self, image: str, question: str) -> str:
-        """对单张图片执行门控调用，返回 VL 模型的原始回答文本。"""
-        messages = self._build_gate_messages([image], question)
+    async def _call_vl_gate(self, image: str) -> str:
+        """同步调用 VL 模型执行门控（非流式，获取完整回答）"""
+        messages = [
+            {"role": "system", "content": [{"text": _STROKE_GATE_PROMPT_CN}]},
+            {"role": "user", "content": [
+                {"image": image if image.startswith("data:") else f"data:image/jpeg;base64,{image}"},
+                {"text": '这张图片是否属于脑卒中相关的医学影像？只回答「是」或「否」。'},
+            ]},
+        ]
 
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue = asyncio.Queue()
 
         t = threading.Thread(
-            target=self._run_sync_gate,
-            args=(messages, queue, loop),
-            daemon=True,
+            target=self._run_sync_vl, args=(messages, queue, loop), daemon=True
         )
         t.start()
 
-        full_text_parts = []
+        parts = []
         while True:
             item = await queue.get()
             if item is _STREAM_DONE:
                 break
             if isinstance(item, Exception):
                 raise item
-            full_text_parts.append(str(item))
+            parts.append(str(item))
 
-        return "".join(full_text_parts).strip()
+        return "".join(parts).strip()
 
-    def _build_gate_messages(self, images: List[str], question: str) -> list:
-        """构建门控 API 消息"""
-        messages = [
-            {"role": "system", "content": [{"text": _STROKE_GATE_PROMPT}]}
-        ]
-        user_content = []
-        for img in images:
-            url = img if img.startswith("data:") else f"data:image/jpeg;base64,{img}"
-            user_content.append({"image": url})
-        user_content.append({"text": "Is this image related to stroke (脑卒中) medicine? YES or NO:"})
-        messages.append({"role": "user", "content": user_content})
-        return messages
-
-    def _run_sync_gate(self, messages: list, queue: asyncio.Queue, loop):
-        """后台线程：调用 DashScope VL API 执行门控判断"""
+    def _run_sync_vl(self, messages: list, queue: asyncio.Queue, loop):
+        """后台线程调用 DashScope VL API（流式，收集完整文本）"""
         from dashscope import MultiModalConversation
 
         def put(item):
@@ -362,11 +328,10 @@ class VisionAnalysisNode(BaseNode):
             )
             for chunk in response:
                 if chunk.status_code != 200:
-                    put(Exception(f"API error {chunk.status_code}"))
+                    put(Exception(f"API {chunk.status_code}"))
                     return
                 try:
-                    content_list = chunk.output.choices[0].message.content
-                    for item in content_list:
+                    for item in chunk.output.choices[0].message.content:
                         text = item.get("text", "")
                         if text:
                             put(text)
@@ -378,132 +343,140 @@ class VisionAnalysisNode(BaseNode):
             put(_STREAM_DONE)
 
     @staticmethod
-    def _parse_gate_answer(answer: str) -> bool:
-        """解析门控返回的 YES/NO 答案。
+    def _parse_cn_gate(answer: str) -> bool:
+        """解析中文门控回答。
 
-        极其严格的策略（宁可误拦 100 张合法图片，也不放过 1 张非医学图片）：
-        - 以 YES 开头（无视大小写和空格）→ 放行
-        - 以 NO 开头 → 拦截
-        - 包含 "NO"（明确拒绝）→ 拦截
-        - 包含特定医学信号词（neuro/stroke/brain/ct/mri等）→ 容错放行
-        - 其他所有情况 → 拦截
+        策略（极其严格，宁可误拦绝不放过）：
+        - 回答以"是"开头 → 放行
+        - 回答包含"否" → 拦截
+        - 回答包含脑卒中医学强信号 → 容错放行
+        - 其他 → 拦截
         """
-        answer = answer.strip().upper().replace(" ", "")
+        answer = answer.strip().replace(" ", "").replace("\n", "")
 
-        # 明确 YES
-        if answer.startswith("YES"):
-            return True
-        if answer == "Y":
+        # 明确的"是"
+        if answer.startswith("是"):
             return True
 
-        # 明确 NO（包括各种变体）
-        if answer.startswith("NO"):
+        # 明确的"否"
+        if "否" in answer[:10]:
             return False
-        if answer == "N":
+        if answer.startswith("不"):
             return False
-
-        # 检查前15字符是否包含 NO（模型可能在前面加了一些词）
-        if "NO" in answer[:15]:
+        if "NO" in answer[:10].upper():
             return False
 
-        # 最后手段容错：检查是否有强烈的医学阳性信号
-        # 这些词几乎不会出现在非医学图片的描述中
-        strong_medical = [
-            "NEUROIMAGING", "CEREBRAL", "INTRACRANIAL",
-            "ANGIOGRAPHY", "ISCHEMIC", "HEMORRHAGE",
-            "BRAINCT", "BRAINMRI", "CTSCAN", "MRISCAN",
+        # 容错：强烈的脑卒中医学信号
+        strong_signals = [
+            "脑卒中", "脑梗", "脑出血", "脑血管", "CT", "MRI",
+            "NEUROIMAGING", "CEREBRAL", "STROKE", "INTRACRANIAL",
+            "缺血", "梗死", "血栓", "溶栓",
         ]
-        has_strong = any(s in answer for s in strong_medical)
-        if has_strong:
-            logger.info(f"[vision_node] 门控容错放行（强医学信号）: '{answer[:80]}'")
+        has_strong = any(s in answer.upper() or s in answer for s in strong_signals)
+        no_marker = "否" in answer or "NO" in answer[:20].upper()
+
+        if has_strong and not no_marker:
+            logger.info(f"[vision_node] 门控容错放行: '{answer[:60]}'")
             return True
 
-        # 其他情况一律拦截
+        # 默认拦截
         return False
 
     # ================================================================
-    # Tier 2+3: 内容检测
+    # Tier 2+3: 硬指标检测
     # ================================================================
 
     def _check_stroke_relevance(self, findings, question: str = "") -> bool:
-        """判断医学影像分析结果是否与脑卒中相关。
+        """硬指标检测：医学影像产生大量解剖术语，非医学图片几乎没有。
 
-        三层检测：
-        Tier 2 — 影像类型检测：CT/MRI/DSA → 确定相关
-        Tier 3 — 内容检测：findings 中查找卒中关键词 + 排除非医学指标
+        这个检测不依赖 LLM 判断，完全基于可量化的术语匹配。
         """
         if not findings:
             return False
 
         img_type = findings.image_type if hasattr(findings, 'image_type') else ""
 
-        # === Tier 2: 影像类型检测 ===
+        # ── Tier 2: 影像类型直接放行 ──
         if img_type in self._STROKE_RELATED_IMAGE_TYPES:
-            logger.info(f"[vision_node] T2 影像类型 {img_type} 与脑卒中直接相关 → 放行")
+            logger.info(f"[vision_node] ✅ T2 类型 {img_type} 直接放行")
             return True
 
-        # === 合并所有文本 ===
+        # ── 构建合并文本 ──
         combined_text = " ".join([
             img_type,
             findings.anatomical_region if hasattr(findings, 'anatomical_region') else "",
             " ".join(findings.key_findings) if hasattr(findings, 'key_findings') and findings.key_findings else "",
             " ".join(ab.description for ab in (findings.abnormalities or [])),
             " ".join(findings.differential_diagnosis) if hasattr(findings, 'differential_diagnosis') and findings.differential_diagnosis else "",
+            findings.raw_description if hasattr(findings, 'raw_description') else "",
             question,
         ]).lower()
 
-        # === Tier 3a: 先检查非医学指标 — 命中则直接拒绝 ===
-        non_medical_hit = None
+        confidence = findings.confidence if hasattr(findings, 'confidence') else 0
+
+        # ── Tier 3a: 非医学指标 → 直接拦截 ──
         for indicator in self._NON_MEDICAL_INDICATORS:
             if indicator.lower() in combined_text:
-                non_medical_hit = indicator
-                break
+                logger.info(f"[vision_node] ❌ T3a 非医学指标 '{indicator}' → 拦截")
+                return False
 
-        if non_medical_hit:
-            logger.info(f"[vision_node] T3a 检测到非医学指标 '{non_medical_hit}' → 拦截")
-            return False
-
-        # === Tier 3b: 检查卒中关键词 ===
-        has_stroke_keyword = any(
-            kw.lower() in combined_text for kw in self._STROKE_FINDING_KEYWORDS
+        # ── Tier 3b: 硬指标 — 医学解剖术语计数 ──
+        medical_term_count = sum(
+            1 for term in self._MEDICAL_ANATOMY_TERMS
+            if term.lower() in combined_text
         )
 
-        if has_stroke_keyword:
-            logger.info(f"[vision_node] T3b 内容包含脑卒中关键词 → 放行")
-            return True
-
-        # === Tier 3c: 医学类型 + 有意义的发现 ===
-        confidence = findings.confidence if hasattr(findings, 'confidence') else 0
-        has_medical_findings = (
-            (findings.key_findings and len(findings.key_findings) > 0) or
-            (findings.abnormalities and len(findings.abnormalities) > 0)
+        # ── Tier 3c: 卒中关键词计数 ──
+        stroke_kw_count = sum(
+            1 for kw in self._STROKE_KEYWORDS
+            if kw.lower() in combined_text
         )
-
-        if img_type in self._POTENTIALLY_STROKE_RELATED_TYPES:
-            if has_medical_findings and confidence > 0.4:
-                logger.info(f"[vision_node] T3c 医学类型 {img_type} + 有发现 + 置信度 {confidence:.0%} → 放行")
-                return True
-            logger.info(f"[vision_node] T3c 医学类型 {img_type} 但缺少发现或置信度不足 → 拦截")
-            return False
-
-        # === courseware_image 严格检查 ===
-        if img_type == "courseware_image":
-            # 必须同时有：卒中关键词 + 足够置信度 + 明确发现
-            if has_stroke_keyword and has_medical_findings and confidence > 0.5:
-                logger.info(f"[vision_node] courseware 含卒中关键词+发现 → 放行")
-                return True
-            logger.info(f"[vision_node] courseware_image 不满足严格条件 → 拦截")
-            return False
-
-        # 其他未知类型
-        if has_medical_findings and has_stroke_keyword and confidence > 0.5:
-            logger.info(f"[vision_node] 未知类型但含卒中关键词+发现 → 放行")
-            return True
 
         logger.info(
-            f"[vision_node] 最终判断不相关 | 类型: {img_type} | "
-            f"置信度: {confidence:.0%} | 发现数: {len(findings.key_findings or [])} | "
-            f"卒中关键词: {has_stroke_keyword}"
+            f"[vision_node] T3 指标: 医学解剖术语={medical_term_count}, "
+            f"卒中关键词={stroke_kw_count}, 类型={img_type}, 置信度={confidence:.0%}"
+        )
+
+        # ── 硬判断逻辑 ──
+
+        # 规则1: 医学解剖术语 >= 5 → 肯定是医学影像 → 放行
+        if medical_term_count >= 5:
+            logger.info(f"[vision_node] ✅ 医学解剖术语 {medical_term_count} >= 5 → 放行")
+            return True
+
+        # 规则2: 卒中关键词 >= 3 且 医学术语 >= 2 → 放行
+        if stroke_kw_count >= 3 and medical_term_count >= 2:
+            logger.info(f"[vision_node] ✅ 卒中关键词 {stroke_kw_count} + 术语 {medical_term_count} → 放行")
+            return True
+
+        # 规则3: 潜在相关类型 + 医学术语 >= 3 → 放行
+        if img_type in self._POTENTIALLY_STROKE_RELATED_TYPES:
+            if medical_term_count >= 3 and confidence > 0.3:
+                logger.info(f"[vision_node] ✅ 医学类型 {img_type} + 术语 {medical_term_count} → 放行")
+                return True
+            logger.info(f"[vision_node] ❌ 医学类型 {img_type} 但术语不足 ({medical_term_count}) → 拦截")
+            return False
+
+        # 规则4: courseware_image → 极其严格，必须同时满足多个条件
+        if img_type == "courseware_image":
+            if stroke_kw_count >= 2 and medical_term_count >= 3 and confidence > 0.4:
+                logger.info(f"[vision_node] ✅ courseware 满足严格条件 → 放行")
+                return True
+            logger.info(f"[vision_node] ❌ courseware 不满足 (卒中{stroke_kw_count}/术语{medical_term_count}/置信度{confidence:.0%}) → 拦截")
+            return False
+
+        # 规则5: 其他未知类型 → 必须医学术语 >= 4 或 (卒中关键词 >= 2 且 术语 >= 2)
+        if medical_term_count >= 4:
+            logger.info(f"[vision_node] ✅ 未知类型但术语 {medical_term_count} >= 4 → 放行")
+            return True
+        if stroke_kw_count >= 2 and medical_term_count >= 2:
+            logger.info(f"[vision_node] ✅ 未知类型 卒中{stroke_kw_count} + 术语{medical_term_count} → 放行")
+            return True
+
+        # 默认拦截
+        logger.info(
+            f"[vision_node] ❌ 不满足任何放行条件 "
+            f"(术语{medical_term_count}/卒中{stroke_kw_count}/类型{img_type}) → 拦截"
         )
         return False
 
@@ -512,37 +485,25 @@ class VisionAnalysisNode(BaseNode):
     # ================================================================
 
     def _generate_vision_questions(self, findings) -> List[str]:
-        """从影像发现生成学习子问题，引导后续的检索和推理。"""
-        questions = []
-
         if not findings:
-            return questions
-
+            return []
+        questions = []
         for ab in findings.abnormalities[:3]:
             if ab.description and ab.location:
                 questions.append(f"{ab.location}{ab.description}的脑卒中影像学特征和临床处理")
             elif ab.description:
                 questions.append(f"{ab.description}的脑卒中相关知识")
-
         for dd in findings.differential_diagnosis[:2]:
             if dd:
                 questions.append(f"{dd}的诊断标准和影像学鉴别要点")
-
         for test in findings.recommended_confirmatory_tests[:2]:
             if test:
                 questions.append(f"脑卒中患者{test}的适应症和临床意义")
-
         img_type_name = findings.image_type.replace("neuroimaging_", "").replace("_", " ").upper()
         if img_type_name:
             questions.append(f"{img_type_name}在脑卒中诊断中的价值和典型表现")
-
         return questions
 
     @staticmethod
     def has_images(state: LearningState) -> bool:
-        """检查 state 中是否包含需要分析的医学影像。
-
-        供 clinical_graph.py 中的条件路由使用。
-        """
-        images = state.get("images", [])
-        return bool(images)
+        return bool(state.get("images", []))
