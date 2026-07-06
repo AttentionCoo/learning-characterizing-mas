@@ -28,27 +28,27 @@ function initParticles() {
   stars = []
 
   // 主粒子（连接网络）
-  const count = Math.min(60, Math.floor((w * h) / 12000))
+  const count = Math.min(30, Math.floor((w * h) / 25000))
   for (let i = 0; i < count; i++) {
     particles.push({
       x: Math.random() * w,
       y: Math.random() * h,
-      vx: (Math.random() - 0.5) * 0.4,
-      vy: (Math.random() - 0.5) * 0.4,
-      r: Math.random() * 2 + 1,
-      opacity: Math.random() * 0.5 + 0.2,
+      vx: (Math.random() - 0.5) * 0.3,
+      vy: (Math.random() - 0.5) * 0.3,
+      r: Math.random() * 1.5 + 0.5,
+      opacity: Math.random() * 0.3 + 0.1,
       pulse: Math.random() * Math.PI * 2,
     })
   }
 
   // 星尘粒子（闪烁的小点）
-  const starCount = Math.min(80, Math.floor((w * h) / 8000))
+  const starCount = Math.min(40, Math.floor((w * h) / 18000))
   for (let i = 0; i < starCount; i++) {
     stars.push({
       x: Math.random() * w,
       y: Math.random() * h,
-      r: Math.random() * 1.5 + 0.5,
-      opacity: Math.random() * 0.8 + 0.2,
+      r: Math.random() * 1 + 0.3,
+      opacity: Math.random() * 0.5 + 0.1,
       twinkleSpeed: Math.random() * 0.02 + 0.01,
       twinkleOffset: Math.random() * Math.PI * 2,
     })
@@ -78,10 +78,10 @@ function initParticles() {
       ctx.fill()
 
       // 星尘光晕
-      if (twinkle > 0.8) {
+      if (twinkle > 0.85) {
         ctx.beginPath()
-        ctx.arc(s.x, s.y, s.r * 2.5, 0, Math.PI * 2)
-        ctx.fillStyle = `rgba(${color}, ${alpha * 0.2})`
+        ctx.arc(s.x, s.y, s.r * 2, 0, Math.PI * 2)
+        ctx.fillStyle = `rgba(${color}, ${alpha * 0.1})`
         ctx.fill()
       }
     }
@@ -105,8 +105,8 @@ function initParticles() {
 
       // 光晕
       ctx.beginPath()
-      ctx.arc(p.x, p.y, p.r * 3, 0, Math.PI * 2)
-      ctx.fillStyle = `rgba(${lineColor}, ${alpha * 0.15})`
+      ctx.arc(p.x, p.y, p.r * 2, 0, Math.PI * 2)
+      ctx.fillStyle = `rgba(${lineColor}, ${alpha * 0.08})`
       ctx.fill()
 
       // 连线
@@ -115,13 +115,13 @@ function initParticles() {
         const dx = p.x - q.x
         const dy = p.y - q.y
         const dist = Math.sqrt(dx * dx + dy * dy)
-        if (dist < 140) {
+        if (dist < 100) {
           ctx.beginPath()
           ctx.moveTo(p.x, p.y)
           ctx.lineTo(q.x, q.y)
-          const lineAlpha = 0.15 * (1 - dist / 140) * pulse
+          const lineAlpha = 0.08 * (1 - dist / 100) * pulse
           ctx.strokeStyle = `rgba(${starColor1}, ${lineAlpha})`
-          ctx.lineWidth = 0.6
+          ctx.lineWidth = 0.4
           ctx.stroke()
         }
       }
@@ -145,7 +145,6 @@ onBeforeUnmount(() => { if (animId) cancelAnimationFrame(animId) })
         loop
         playsinline
         preload="auto"
-        poster=""
       >
         <!-- 请将视频文件放入 frontend/public/videos/ 目录，然后修改 src 路径 -->
         <source src="/videos/login-bg.mp4" type="video/mp4" />
@@ -164,7 +163,7 @@ onBeforeUnmount(() => { if (animId) cancelAnimationFrame(animId) })
 
     <!-- 飘散星尘 -->
     <div class="stardust-container">
-      <span v-for="n in 12" :key="n" class="stardust" :style="{
+      <span v-for="n in 6" :key="n" class="stardust" :style="{
         left: `${(n * 37 + 13) % 100}%`,
         top: `${(n * 53 + 7) % 100}%`,
         animationDelay: `${n * 0.8}s`,
@@ -226,15 +225,13 @@ onBeforeUnmount(() => { if (animId) cancelAnimationFrame(animId) })
     width: 100%;
     height: 100%;
     object-fit: cover;
+    filter: brightness(1.2) contrast(1.1) saturate(1.15);
   }
 
   .video-overlay {
     position: absolute;
     inset: 0;
-    background: rgba(0, 0, 0, 0.35);
-    :global(.dark) & {
-      background: rgba(0, 0, 0, 0.45);
-    }
+    background: transparent;
   }
 }
 
@@ -259,28 +256,28 @@ onBeforeUnmount(() => { if (animId) cancelAnimationFrame(animId) })
 
 .login-orb-1 {
   width: 500px; height: 500px;
-  background: radial-gradient(circle, rgba(139, 92, 246, 0.45), rgba(14, 165, 233, 0.2), transparent);
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.15), rgba(14, 165, 233, 0.06), transparent);
   top: -18%; left: -10%;
   animation-delay: 0s;
 }
 
 .login-orb-2 {
   width: 420px; height: 420px;
-  background: radial-gradient(circle, rgba(16, 185, 129, 0.35), rgba(6, 182, 212, 0.15), transparent);
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.12), rgba(6, 182, 212, 0.05), transparent);
   bottom: -15%; right: -8%;
   animation-delay: -5s;
 }
 
 .login-orb-3 {
   width: 300px; height: 300px;
-  background: radial-gradient(circle, rgba(236, 72, 153, 0.2), rgba(139, 92, 246, 0.15), transparent);
+  background: radial-gradient(circle, rgba(236, 72, 153, 0.07), rgba(139, 92, 246, 0.05), transparent);
   top: 40%; left: 55%;
   animation-delay: -9s;
 }
 
 .login-orb-4 {
   width: 250px; height: 250px;
-  background: radial-gradient(circle, rgba(251, 191, 36, 0.15), rgba(245, 158, 11, 0.08), transparent);
+  background: radial-gradient(circle, rgba(251, 191, 36, 0.05), rgba(245, 158, 11, 0.03), transparent);
   top: 15%; right: 25%;
   animation-delay: -12s;
 }
@@ -326,7 +323,7 @@ onBeforeUnmount(() => { if (animId) cancelAnimationFrame(animId) })
 
 @keyframes particle-rise {
   0% { transform: translateY(0) scale(1); opacity: 0; }
-  20% { opacity: 0.9; }
+  20% { opacity: 0.5; }
   100% { transform: translateY(-140px) scale(0); opacity: 0; }
 }
 
