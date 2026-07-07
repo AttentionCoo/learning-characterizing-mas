@@ -184,6 +184,29 @@ class LearningGraphBuilder:
         image_type = state.get("_reject_image_type", "")
         findings = state.get("vision_findings", {})
 
+        if gate_result == "rejected_by_precheck":
+            # Tier 0 预校验直接拒绝（格式/大小/数量问题）
+            reason = state.get("_precheck_reason", "图片不符合要求")
+            return {"report": (
+                "⚠️ **图片预检未通过**\n\n"
+                f"原因：{reason}\n\n"
+                "**图片要求：**\n"
+                "- 支持的格式：JPEG、PNG、BMP、TIFF、DICOM\n"
+                "- 单张图片不超过 14MB\n"
+                "- 单次最多上传 5 张图片\n"
+                "- 请勿上传非图片文件（PDF、文本、视频等）\n\n"
+                "请按要求重新上传脑卒中相关的医学影像。"
+            )}
+
+        if gate_result == "rejected_by_adversarial_detection":
+            # 对抗性提示检测
+            return {"report": (
+                "🚫 **请求已被安全系统拦截**\n\n"
+                "系统检测到您的请求中包含异常指令，该行为已被记录。\n\n"
+                "本系统仅支持脑卒中（中风）相关的医学影像分析学习。"
+                "如果您确实有脑卒中相关学习需求，请正常描述您的问题并上传相关医学影像。"
+            )}
+
         if gate_result == "rejected_by_gate":
             # Tier 1 门控直接拒绝
             return {"report": (
