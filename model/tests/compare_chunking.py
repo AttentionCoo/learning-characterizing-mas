@@ -73,8 +73,8 @@ logger.setLevel(logging.INFO)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(BASE_DIR, "data", "documents")
 
-RECURSIVE_PERSIST = os.path.join(BASE_DIR, "chroma_db_recursive")
-SEMANTIC_PERSIST = os.path.join(BASE_DIR, "chroma_db_semantic")
+RECURSIVE_PERSIST = os.path.join(BASE_DIR, "data", "vector_stores", "chroma_db_recursive")
+SEMANTIC_PERSIST = os.path.join(BASE_DIR, "data", "vector_stores", "chroma_db_semantic")
 
 # 评测用 LLM（用于生成回答 + RAGAS 评判）
 EVAL_LLM_MODEL = "qwen-plus"

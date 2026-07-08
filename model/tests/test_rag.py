@@ -22,7 +22,7 @@ def test_rag_retrieval():
     logger.info("==========================================")
 
     # 1. 尝试初始化检索引擎 (如果之前已经构建过，这里只会执行加载并连通)
-    persist_dir = CONFIG.get("persist_dir", "./chroma_db_unified")
+    persist_dir = CONFIG.get("persist_dir", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "vector_stores", "chroma_db_unified"))
     logger.info(f"👉 初始化检索引擎 (使用数据库路径: {persist_dir})")
     try:
         search_engine = UnifiedSearchEngine(persist_dir=persist_dir, top_k=3)

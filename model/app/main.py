@@ -398,7 +398,7 @@ def init_all_resources():
 
     logger.info("🔍 [4/8] 初始化向量检索引擎...")
     retriever = UnifiedSearchEngine(
-        persist_dir=CONFIG.get("persist_dir", "./chroma_db_unified"),
+        persist_dir=CONFIG.get("persist_dir", os.path.join(os.path.dirname(__file__), "data", "vector_stores", "chroma_db_unified")),
         top_k=CONFIG.get("top_k_final", 3)
     )
 

@@ -522,7 +522,7 @@ class SharedMemoryConfigManager:
     def _get_default_config(self) -> Dict[str, Any]:
         return {
             "store": {
-                "persist_dir": "chroma_db_shared_memory",
+                "persist_dir": os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "vector_stores", "chroma_db_shared_memory"),
                 "meta_filter": {
                     "entropy_threshold": 0.85,
                     "keyword_weight": 0.3,
