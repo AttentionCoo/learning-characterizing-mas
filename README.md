@@ -161,14 +161,16 @@ learning-multi-agent-system/
 │       ├── utils/                   # 工具（请求封装/图片压缩/流式暂停）
 │       └── router/                  # 路由配置
 │
-├── backend/ai/MyServer/             # 后端服务层（Java Spring Boot）
-│   └── src/main/java/com/it/
+├── backend/server/                  # 后端服务层（Java Spring Boot）
+│   └── src/main/java/com/learnagent/
 │       ├── controller/              # REST 控制器（15 个：画像/资源/路径/辅导/评估/医学影像/代码/监控/用户/课程/文档/题目/登录/上传/首页）
 │       ├── service/                 # 业务逻辑（AI 流式/对话持久化/OSS）
 │       ├── cache/                   # SSE 事件缓存
 │       ├── config/                  # 配置（Security/WebClient/Redisson/OSS/Jackson/MyBatisPlus）
-│       ├── pojo/                    # 实体类
-│       ├── po/                      # 请求参数 & 响应视图对象
+│       ├── entity/                  # 实体类
+│       ├── dto/                     # 数据传输对象
+│       ├── param/                   # 请求参数
+│       ├── vo/                      # 响应视图对象
 │       ├── mapper/                  # MyBatis-Plus Mapper
 │       └── utils/                   # JWT/OSS/IP 工具
 │
@@ -476,8 +478,8 @@ learning-multi-agent-system/
 
 | 文档 | 说明 |
 |:---|:---|
-| `backend/ai/MyServer/BAOTA_DEPLOY.md` | 宝塔面板部署指南（Java 项目 + 环境变量配置） |
-| `backend/ai/MyServer/README_DEPLOY.md` | 通用部署文档 |
+| `backend/server/BAOTA_DEPLOY.md` | 宝塔面板部署指南（Java 项目 + 环境变量配置） |
+| `backend/server/README_DEPLOY.md` | 通用部署文档 |
 | `ARCHITECTURE.md` | 模型层完整学习文档（文件架构 / 阅读顺序 / 数据模型 / 节点详解 / LangGraph 机制） |
 
 ### 快速启动
@@ -487,7 +489,7 @@ learning-multi-agent-system/
 cd model && pip install -r requirements.txt && python -m app.main
 
 # 2. 启动后端服务层
-cd backend/ai/MyServer && mvn spring-boot:run
+cd backend/server && mvn spring-boot:run
 
 # 3. 启动前端交互层
 cd frontend && npm install && npm run dev
@@ -559,7 +561,7 @@ python -m pytest test_full_suite.py -v
 **Step 1 — 初始化数据库**
 
 ```bash
-mysql -u root -p < backend/ai/MyServer/learningo-agents.sql
+mysql -u root -p < backend/server/learningo-agents.sql
 ```
 
 **Step 2 — 启动模型推理服务**
@@ -585,7 +587,7 @@ python -m app.main
 **Step 3 — 启动后端服务**
 
 ```bash
-cd backend/ai/MyServer
+cd backend/server
 mvn spring-boot:run
 ```
 

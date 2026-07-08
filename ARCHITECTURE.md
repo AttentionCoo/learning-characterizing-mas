@@ -800,7 +800,7 @@ Agent 在写入前计算信息的"熵值"，只有低熵（高价值、强关联
 
 ```yaml
 store:
-  persist_dir: "chroma_db_shared_memory"
+  persist_dir: "data/vector_stores/chroma_db_shared_memory"
   meta_filter:
     entropy_threshold: 0.85
     keyword_weight: 0.3
