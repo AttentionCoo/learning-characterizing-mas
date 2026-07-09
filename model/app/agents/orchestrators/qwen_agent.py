@@ -4,7 +4,7 @@ import json
 from typing import AsyncGenerator, Dict
 from langchain_core.messages import SystemMessage, HumanMessage
 from app.agents.core.schema import LearningState
-from app.agents.orchestrators.clinical_graph import LearningGraphBuilder
+from app.agents.orchestrators.learning_graph import LearningGraphBuilder
 from app.agents.orchestrators.nodes.intent_node import IntentNode
 from app.agents.orchestrators.nodes.analysis_node import AnalysisNode
 from app.agents.orchestrators.nodes.retrieve_node import RetrieveNode
@@ -66,6 +66,7 @@ class LearningAgent:
         prompt_manager,
         report_manager,
         llm_turbo=None,
+        shared_memory_system=None,
     ):
         self.llm_proposer = llm_proposer
         self.llm_critic = llm_critic
@@ -73,12 +74,13 @@ class LearningAgent:
         self.learning_assistant = learning_assistant
         self.prompts = prompt_manager
         self.reports = report_manager
+        self.shared_memory_system = shared_memory_system
 
         self.intent_node = IntentNode(self.llm_turbo)
         self.analysis_node = AnalysisNode(self.llm_critic)
-        self.retrieve_node = RetrieveNode(learning_assistant)
-        self.reason_node = ReasonNode(self.llm_critic, llm_synthesis=self.llm_proposer)
-        self.validate_node = ValidateNode(self.llm_critic)
+        self.retrieve_node = RetrieveNode(learning_assistant, shared_memory_system=shared_memory_system)
+        self.reason_node = ReasonNode(self.llm_critic, llm_synthesis=self.llm_proposer, shared_memory_system=shared_memory_system)
+        self.validate_node = ValidateNode(self.llm_critic, shared_memory_system=shared_memory_system)
         self.report_node = ReportNode(self.llm_proposer, report_manager)
 
         self.graph = LearningGraphBuilder(
@@ -90,6 +92,7 @@ class LearningAgent:
             report_node=self.report_node,
             llm_critic=self.llm_critic,
             report_manager=self.reports,
+            shared_memory_system=shared_memory_system,
         ).build()
 
     async def run_learning_reasoning(
@@ -130,6 +133,9 @@ class LearningAgent:
             "active_experts": [],
             "motivational_feedback": "",
             "profile_summary": profile_summary,
+            "shared_memory_hits": [],
+            "memory_entropy_scores": {},
+            "consensus_result": {},
         }
         streamed_nodes: set = set()
         llm_call_counts: Dict[str, int] = {}

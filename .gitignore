@@ -1,6 +1,10 @@
 # 敏感配置文件（显式移到最上方，防止误提交）
 .env
 .env.*
+!.env.example
+
+# 演示文稿等大文件不入库
+*.pptx
 
 # IntelliJ IDEA
 .idea/
@@ -29,3 +33,9 @@ memory/
 
 # 本地文档（不入库）
 流式输出架构改进方案.md
+
+# ChromaDB 运行时数据
+chroma_db_shared_memory/
+
+# 共享记忆运行时数据
+model/data/agent_reputation.json

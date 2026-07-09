@@ -26,6 +26,7 @@ class LearningGraphBuilder:
         validate_node: ValidateNode = None,
         llm_critic=None,
         report_manager=None,
+        shared_memory_system=None,
     ):
         self.intent_node = intent_node
         self.analysis_node = analysis_node
@@ -35,6 +36,7 @@ class LearningGraphBuilder:
         self.validate_node = validate_node
         self.llm_critic = llm_critic
         self.report_manager = report_manager
+        self.shared_memory_system = shared_memory_system
 
         self.validation_manager = get_validation_manager()
         self.max_reflection_count = self.validation_manager.get_max_reflection_count()

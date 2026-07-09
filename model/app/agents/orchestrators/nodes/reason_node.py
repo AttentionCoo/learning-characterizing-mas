@@ -11,9 +11,10 @@ logger = logging.getLogger(__name__)
 
 class ReasonNode(BaseNode):
 
-    def __init__(self, llm, expert_config=None, llm_synthesis=None):
+    def __init__(self, llm, expert_config=None, llm_synthesis=None, shared_memory_system=None):
         self.llm = llm
         self.llm_synthesis = llm_synthesis or llm
+        self.shared_memory_system = shared_memory_system
         self.expert_manager = expert_config or get_expert_manager()
         self.experts = self.expert_manager.get_experts()
         self.synthesis_config = self.expert_manager.get_synthesis_config()
@@ -28,6 +29,7 @@ class ReasonNode(BaseNode):
         logger.info(f"[reason] 辩论模式: {'启用' if self.debate_enabled else '禁用'} (最大轮数: {self.debate_max_rounds})")
         logger.info(f"[reason] 仲裁智能体: {self.arbitrator_role}")
         logger.info(f"[reason] 动态编排: {'启用' if self.dynamic_orchestration_enabled else '禁用'}")
+        logger.info(f"[reason] 共享记忆: {'启用' if self.shared_memory_system else '禁用'}")
         for expert in self.experts:
             logger.info(f"  - {expert.get('role')} (优先级: {expert.get('priority', 'N/A')}, 最低难度: {expert.get('min_difficulty', 0.0)})")
 
@@ -136,6 +138,42 @@ class ReasonNode(BaseNode):
 
         logger.info(f"[reason] 提案长度: {len(proposal_text)}, 批判长度: {len(critique_text)}")
 
+        consensus_result = {}
+        memory_entropy_scores = {}
+
+        if self.shared_memory_system and len(expert_roles) > 1:
+            agent_advices = {}
+            for role, advice in zip(expert_roles, results):
+                if advice and not advice.startswith("未能获取"):
+                    agent_advices[role] = advice
+
+            if agent_advices:
+                has_conflict = self.shared_memory_system.consensus.detect_conflict(agent_advices)
+                if has_conflict:
+                    logger.info("[reason] 检测到专家意见冲突，启动信任加权投票共识")
+                    consensus_result = self.shared_memory_system.resolve_conflict(
+                        agent_advices, session_weights=agent_weights
+                    )
+                    if consensus_result.get("consensus_reached"):
+                        winner = consensus_result["winning_agents"][0]
+                        logger.info(f"[reason] 共识达成，胜出专家: {winner}")
+
+        if self.shared_memory_system:
+            for role, advice in zip(expert_roles, results):
+                if advice and not advice.startswith("未能获取"):
+                    _, entropy_score, _ = self.shared_memory_system.filter.compute_entropy_score(advice)
+                    memory_entropy_scores[role] = entropy_score
+
+                    try:
+                        self.shared_memory_system.store_insight(
+                            agent_role=role,
+                            content=advice[:500],
+                            state=dict(state),
+                            confidence=0.8,
+                        )
+                    except Exception as e:
+                        logger.debug(f"[reason] 共享记忆存储失败 ({role}): {e}")
+
         result = {
             "proposal": proposal_text,
             "critique": critique_text,
@@ -143,6 +181,11 @@ class ReasonNode(BaseNode):
             "debate_history": debate_history,
             "motivational_feedback": motivational_feedback,
         }
+
+        if consensus_result:
+            result["consensus_result"] = consensus_result
+        if memory_entropy_scores:
+            result["memory_entropy_scores"] = memory_entropy_scores
 
         result.update(expert_advices)
 

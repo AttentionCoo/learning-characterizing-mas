@@ -43,3 +43,6 @@ class LearningState(TypedDict):
     active_experts: List[str]
     motivational_feedback: str
     profile_summary: str
+    shared_memory_hits: List[Dict]
+    memory_entropy_scores: Dict
+    consensus_result: Dict

@@ -1,0 +1,25 @@
+# 共享记忆系统配置
+# 物理层 + 逻辑层 + 元记忆过滤
+
+# 物理层 — 共享记忆存储
+store:
+  persist_dir: "chroma_db_shared_memory"
+  meta_filter:
+    entropy_threshold: 0.85
+    keyword_weight: 0.3
+    density_weight: 0.3
+    shannon_weight: 0.2
+    length_weight: 0.2
+    min_length: 20
+
+# 逻辑层 — 信任加权投票共识
+consensus:
+  conflict_threshold: 0.4
+  min_agreement_ratio: 0.6
+  reputation_file: "data/agent_reputation.json"
+
+# 元记忆过滤 — 持久化策略
+persistence:
+  auto_store_high_value: true
+  min_confidence: 0.7
+  max_memories_per_session: 10
