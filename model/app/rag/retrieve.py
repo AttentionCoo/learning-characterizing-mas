@@ -6,6 +6,7 @@ from .retrievers import (
     BGEReranker,
     build_or_load_vectorstore,
     HybridRetriever,
-    UnifiedSearchEngine
+    UnifiedSearchEngine,
+    reciprocal_rank_fusion,
 )
 

@@ -12,10 +12,10 @@ def main():
 
     vectordb = build_or_load_vectorstore(chunks)
 
-    retriever = HybridRetriever(vectordb, chunks, k=5)
+    retriever = HybridRetriever(vectordb, chunks, recall_k=5, rrf_top_k=5)
 
     query = "脑梗死出血转化的处理原则是什么？"
-    results = retriever.get_relevant_documents(query)
+    results = retriever.search(query, top_k_final=3)
 
     for i, doc in enumerate(results, 1):
         print(f"\n[{i}] ({doc.metadata['source']} - p{doc.metadata['page']})")
