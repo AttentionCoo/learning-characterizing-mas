@@ -77,21 +77,32 @@ def init_all_resources():
     logger.info(f"     - 最大证据字符数: {limits_mgr.get_max_evidence_chars()}")
     logger.info(f"  ✅ 共享记忆配置: 自动存储={shared_memory_mgr.is_auto_store_enabled()}")
 
-    logger.info("🤖 [2/8] 初始化大语言模型...")
-    _dashscope_base = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    _dashscope_key = os.getenv("DASHSCOPE_API_KEY")
+    logger.info("🤖 [2/8] 初始化大语言模型（讯飞星火）...")
+    _spark_base = "https://spark-api-open.xf-yun.com/v1"
+    _spark_password = os.getenv("SPARK_API_PASSWORD")
 
-    if not _dashscope_key:
-        logger.error("  ❌ 错误: DASHSCOPE_API_KEY 未设置")
-        raise ValueError("DASHSCOPE_API_KEY 环境变量未设置")
+    if not _spark_password:
+        logger.error("  ❌ 错误: SPARK_API_PASSWORD 未设置")
+        raise ValueError("SPARK_API_PASSWORD 环境变量未设置")
 
-    logger.info(f"  ✅ API密钥: {_dashscope_key[:10]}...{_dashscope_key[-4:]}")
+    # 讯飞的 APIPassword 与模型版本绑定，三档若用不同版本需分别配置，缺省共用同一个
+    # 用 or 而非 getenv 默认值兜底：compose 可能注入空字符串
+    _pw_max = os.getenv("SPARK_API_PASSWORD_MAX") or _spark_password
+    _pw_pro = os.getenv("SPARK_API_PASSWORD_PRO") or _spark_password
+    _pw_lite = os.getenv("SPARK_API_PASSWORD_LITE") or _spark_password
 
-    llm_max = ChatOpenAI(model="qwen-max", base_url=_dashscope_base, api_key=_dashscope_key, extra_body={"enable_thinking": False})
-    llm_plus = ChatOpenAI(model="qwen-plus", base_url=_dashscope_base, api_key=_dashscope_key, extra_body={"enable_thinking": False})
-    llm_turbo = ChatOpenAI(model="qwen-turbo", base_url=_dashscope_base, api_key=_dashscope_key, extra_body={"enable_thinking": False})
+    # 星火档位映射（可用 env 覆盖）：max→Max-32K（长提示词场景），pro→Pro，lite→Lite
+    _model_max = os.getenv("SPARK_MODEL_MAX") or "max-32k"
+    _model_pro = os.getenv("SPARK_MODEL_PRO") or "generalv3"
+    _model_lite = os.getenv("SPARK_MODEL_LITE") or "lite"
 
-    logger.info("  ✅ 模型加载完成: qwen-max, qwen-plus, qwen-turbo")
+    logger.info(f"  ✅ APIPassword: {_spark_password[:6]}...{_spark_password[-4:]}")
+
+    llm_max = ChatOpenAI(model=_model_max, base_url=_spark_base, api_key=_pw_max)
+    llm_plus = ChatOpenAI(model=_model_pro, base_url=_spark_base, api_key=_pw_pro)
+    llm_turbo = ChatOpenAI(model=_model_lite, base_url=_spark_base, api_key=_pw_lite)
+
+    logger.info(f"  ✅ 模型加载完成: {_model_max}, {_model_pro}, {_model_lite}")
 
     logger.info("💬 [3/8] 初始化上下文摘要服务...")
     context_summary = ConversationSummaryService(

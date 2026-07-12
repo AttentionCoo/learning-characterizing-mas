@@ -13,14 +13,14 @@ logger = logging.getLogger(__name__)
 
 class NamingModel(object):
     def __init__(self):
-        api_key = os.environ.get("DEEPSEEK_API_KEY")
+        api_key = os.environ.get("SPARK_API_PASSWORD_LITE") or os.environ.get("SPARK_API_PASSWORD")
         if not api_key:
-            logger.warning("未找到环境变量 DEEPSEEK_API_KEY，标题生成功能将不可用")
+            logger.warning("未找到环境变量 SPARK_API_PASSWORD，标题生成功能将不可用")
             self.llm = None
         else:
             self.llm = ChatOpenAI(
-                model="deepseek-chat",
-                base_url="https://api.deepseek.com/v1",
+                model=os.environ.get("SPARK_MODEL_LITE") or "lite",
+                base_url="https://spark-api-open.xf-yun.com/v1",
                 api_key=api_key,
                 temperature=0.3,
                 max_tokens=300,

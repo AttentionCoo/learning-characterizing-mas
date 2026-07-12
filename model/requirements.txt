@@ -28,6 +28,9 @@ onnxruntime>=1.17.0
 # LLM APIs
 # =========================
 openai==1.109.1
+# 讯飞图片理解 WebSocket 客户端
+websocket-client==1.8.0
+# 仅剩 Rerank 精排使用（可选，不配 DASHSCOPE_API_KEY 时不会被调用）
 dashscope==1.25.9
 
 # =========================
