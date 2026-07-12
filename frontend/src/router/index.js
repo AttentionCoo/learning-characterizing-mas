@@ -6,6 +6,7 @@ import resources from '@/views/resources.vue'
 import learningPath from '@/views/learning-path.vue'
 import tutor from '@/views/tutor.vue'
 import assessment from '@/views/assessment.vue'
+import codeAssist from '@/views/code-assist.vue'
 
 import { useUserStore } from '@/stores/user'
 
@@ -23,6 +24,7 @@ const router = createRouter({
         { path: 'learning-path', component: learningPath },
         { path: 'tutor', component: tutor },
         { path: 'assessment', component: assessment },
+        { path: 'code-assist', component: codeAssist },
       ],
     },
   ],

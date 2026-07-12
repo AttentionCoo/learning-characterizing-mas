@@ -1662,27 +1662,25 @@ data: {"type":"done","talkId":"5001","name":"学习评估报告"}
 
 **POST** `/api/code/execute`
 
-> 在安全沙箱中执行学生或系统生成的代码，返回运行结果。供代码实操、实践项目、代码辅导等场景调用。
+> 在受限沙箱中执行学生提交的 Python 代码，返回运行结果。Java 层鉴权后代理至模型层 `POST /model/code/execute`；沙箱以 `python -I` 隔离模式 + POSIX 资源上限（CPU/内存/输出大小/进程数）+ 独立临时目录 + 墙钟超时运行，生产部署叠加 Docker 容器边界。
 
 请求体：
 
 ```json
 {
-  "code": "import pandas as pd\ndf = pd.read_csv('/data/stroke_data.csv')\nprint(df.describe())",
+  "code": "import pandas as pd\ndf = pd.DataFrame({'nihss': [4, 12, 20]})\nprint(df.describe())",
   "language": "python",
   "timeout": 30,
-  "inputData": {
-    "/data/stroke_data.csv": "base64_encoded_csv_content"
-  }
+  "inputData": "第一行stdin\n第二行stdin"
 }
 ```
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| code | string | 是 | 待执行代码 |
-| language | string | 否 | 编程语言：python/r，默认 python |
-| timeout | int | 否 | 超时时间（秒），默认 30，最大 120 |
-| inputData | object | 否 | 输入数据文件映射，key为文件路径，value为Base64编码内容 |
+| code | string | 是 | 待执行代码，最长 50000 字符 |
+| language | string | 否 | 编程语言，当前仅支持 python（默认） |
+| timeout | int | 否 | 超时时间（秒），默认 30，范围 1–60 |
+| inputData | string | 否 | 标准输入内容，程序内 `input()` 按行读取 |
 
 响应：
 
@@ -1691,61 +1689,53 @@ data: {"type":"done","talkId":"5001","name":"学习评估报告"}
   "code": 1,
   "msg": "success",
   "data": {
+    "success": true,
     "exitCode": 0,
-    "stdout": "       age  nihss_score  ...\ncount  500.0       500.0  ...\n",
+    "stdout": "       nihss\ncount    3.0\n...",
     "stderr": "",
-    "outputFiles": {
-      "/output/model.pkl": "base64_encoded_model_file"
-    },
-    "executionTime": 2.3
+    "executionTime": 0.42,
+    "truncated": false,
+    "error": null
   }
 }
 ```
 
-### 8.2 代码辅助生成
+| 字段 | 说明 |
+|------|------|
+| success | 退出码为 0 时为 true |
+| stdout / stderr | 标准输出与标准错误，单侧超过 64000 字符时截断并置 `truncated=true` |
+| executionTime | 墙钟耗时（秒） |
+| error | 超时、代码超长等沙箱层错误描述；正常运行为 null |
+
+### 8.2 代码辅助（SSE 流式）
 
 **POST** `/api/code/assist`
 
-> 根据自然语言描述生成医学编程代码片段，融合代码辅助开发技术。
+> 代码补全、错误诊断、优化建议与代码讲解。与其他核心业务一致，经统一多智能体推理管道（`/model/get_result` + `report_mode=code_assist`）SSE 流式输出，事件格式、心跳与断线续传约定见 1.4 节。
 
 请求体：
 
 ```json
 {
-  "prompt": "用Python实现一个基于NIHSS评分的卒中严重度分类函数",
+  "talkId": null,
+  "assistType": "diagnose",
+  "prompt": "这段代码为什么报 KeyError",
   "language": "python",
-  "context": {
-    "courseName": "神经病学",
-    "knowledgePoints": ["NIHSS评分", "卒中严重度"]
-  },
-  "existingCode": null
+  "existingCode": "df = pd.DataFrame(...)\nprint(df['NIHSS'])",
+  "errorMessage": "KeyError: 'NIHSS'"
 }
 ```
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| prompt | string | 是 | 代码需求描述 |
-| language | string | 否 | 编程语言：python/r，默认 python |
-| context | object | 否 | 医学上下文信息 |
-| existingCode | string | 否 | 已有代码（用于续写/修改场景） |
+| talkId | string | 否 | 会话 ID，为空时自动创建新会话 |
+| assistType | string | 否 | 辅助类型：complete（补全）/ diagnose（诊断）/ optimize（优化）/ explain（讲解） |
+| prompt | string | 否 | 诉求描述（与 existingCode 至少一项非空） |
+| language | string | 否 | 编程语言，默认 python |
+| existingCode | string | 否 | 现有代码 |
+| errorMessage | string | 否 | 运行报错信息（诊断场景，前端自动携带沙箱 stderr） |
 
-响应：
-
-```json
-{
-  "code": 1,
-  "msg": "success",
-  "data": {
-    "generatedCode": "def classify_stroke_severity(nihss_score):\n    \"\"\"基于NIHSS评分的卒中严重度分类\n    0: 无卒中症状\n    1-4: 轻度卒中\n    5-15: 中度卒中\n    16-20: 中重度卒中\n    21-42: 重度卒中\n    \"\"\"\n    if nihss_score == 0:\n        return '无卒中症状'\n    elif nihss_score <= 4:\n        return '轻度卒中'\n    elif nihss_score <= 15:\n        return '中度卒中'\n    elif nihss_score <= 20:\n        return '中重度卒中'\n    else:\n        return '重度卒中'",
-    "explanation": "该函数根据NIHSS评分标准将卒中严重度分为5个等级...",
-    "sandboxVerified": true,
-    "sandboxResult": {
-      "exitCode": 0,
-      "stdout": "中度卒中"
-    }
-  }
-}
-```
+响应为标准 SSE 事件流（`init` → `node_start`/`chunk`... → `done`），最终回复按「改进后的完整代码 / 改动说明 / 相关知识点 / 进阶建议」结构输出。
 
 ---
 

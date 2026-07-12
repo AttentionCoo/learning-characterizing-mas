@@ -1,4 +1,5 @@
-﻿<div align="center">
+﻿
+<div align="center">
 
 # LearnAgent
 
@@ -27,7 +28,7 @@
 | 🧠 **三群协同多智能体架构** | 基于 LangGraph StateGraph 构建 8 个专家智能体，YAML 配置驱动，支持动态编排与辩论-仲裁机制 |
 | 🔍 **证据前置 Hybrid RAG** | ChromaDB + DashScope 语义向量 + BM25 精准匹配，Reranker 深度重排，强制文献溯源 |
 | ⚡ **全栈响应式流式管道** | Java WebFlux + Python Asyncio 深度流式融合，AI 思考过程完全透明可视化，SSE 断线续传 |
-| 🖼️ **多模态与循证扩展** | qwen-vl-max 视觉理解 + PubMed 文献检索（8 级证据等级排序），图文联合理解 |
+| 🖼️ **多模态视觉理解** | qwen-vl-max 视觉理解，课件笔记 / 代码截图 / 医学影像自动分类分析，图文联合理解 |
 
 ---
 
@@ -46,7 +47,7 @@
 ├──────────────────────────────────────────────────────────────────┤
 │                        模型推理层 Model                           │
 │   Python 3.11 · FastAPI · LangGraph · LangChain · Qwen          │
-│   ChromaDB · gte-rerank · qwen-vl-max · PubMed E-utilities      │
+│   ChromaDB · gte-rerank · qwen-vl-max                           │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -108,7 +109,9 @@ learning-multi-agent-system/
 │
 ├── model/                           # 模型推理层（Python FastAPI）
 │   └── app/
-│       ├── main.py                  # FastAPI 入口 & API 路由
+│       ├── main.py                  # FastAPI 入口（应用装配 & lifespan）
+│       ├── runtime.py               # 全局资源容器 & JWT 校验
+│       ├── routers/                 # API 路由（推理流式 / 画像抽取 / 评估优化 / 管理）
 │       ├── agents/                  # 多智能体核心
 │       │   ├── orchestrators/       # LangGraph 图定义 & 6 个节点实现
 │       │   ├── core/                # 状态模型 / 异常 / 结果封装
@@ -116,7 +119,7 @@ learning-multi-agent-system/
 │       │   ├── services/            # 检索 / 查询 / 综合服务
 │       │   └── utils/               # LLM / JSON / 重试 / 文本工具
 │       ├── rag/                     # Hybrid RAG（向量 + BM25 / QA 生成 / 文档加载）
-│       ├── services/                # 多模态影像 & PubMed 文献检索
+│       ├── services/                # 多模态影像 / 画像抽取 / 后台任务执行
 │       ├── config/                  # YAML 配置（专家 / 规则 / 模板 / Prompt / 限额）
 │       └── utils/                   # 任务管理 / 上下文摘要 / Token 聚合
 │
@@ -231,19 +234,30 @@ learning-multi-agent-system/
 | 模块 | 功能 | 关键特性 |
 |:---|:---|:---|
 | **对话式学习画像** | 自然语言对话自动抽取特征，构建 8 维度动态画像 | 知识基础 · 认知风格 · 学习目标 · 易错点 · 学习节奏 · 资源偏好 · 临床经验 · 情绪状态 |
-| **多智能体资源生成** | 7 种个性化资源类型 | 课程讲解文档 · 思维导图 · 练习题目 · 拓展阅读 · 视频脚本 · 代码实操 · 综合批量生成 |
+| **多智能体资源生成** | 8 种个性化资源类型 | 课程讲解文档 · 思维导图 · 练习题目 · 拓展阅读 · 临床案例 · 设计方案 · 评估报告 · 代码实操案例 |
 | **学习路径规划** | 根据画像生成 5-15 步学习路径 | 前置步骤依赖 · 精准资源推送 · 路径动态调整 · 步骤进度追踪 |
 | **智能辅导** | 即时多模态答疑 | 文字解答 · 图片识别(qwen-vl-max) · 上下文感知 · 偏好回答形式 |
 | **学习效果评估** | 5 维度评估 + 闭环优化 | 知识掌握度 · 学习效率 · 技能应用 · 学习一致性 · 进度对齐度 |
 | **多模态影像识别** | 自动识别图片类型并匹配分析策略 | 课件笔记 · 代码编程 · 通用医学影像 · 多图联合分析 |
-| **PubMed 文献检索** | 集成 NCBI E-utilities API | 8 级证据等级排序 · 与本地 ChromaDB 知识库互补 |
-| **代码辅助开发** | 面向医学生的代码工具 | 代码生成 · 执行沙箱 · 错误诊断 · 实操案例生成 |
+| **代码辅助开发** | 医学数据分析编程助手 | 代码补全 · 错误诊断 · 优化建议 · 沙箱执行(python -I + 资源上限) |
 
 > 所有资源生成与辅导接口均支持 **SSE 流式输出** 和 **图片输入**。
 
 ---
 
 ## 🚀 快速开始
+
+### 方式一：Docker Compose 一键启动（推荐）
+
+```bash
+cp .env.example .env   # 填写 DASHSCOPE_API_KEY 等必需密钥
+docker compose up -d --build
+```
+
+- 前端：`http://localhost:5173`（MySQL/Redis/后端/模型层自动编排启动）
+- 课程 PDF 放入 `model/data/documents/` 后重启 model 服务即可自动构建向量库
+
+### 方式二：本地手动启动
 
 ### 环境要求
 
@@ -371,12 +385,14 @@ MEDICAL_DOCS_DIR="/path/to/your/pdf/documents"
 | 画像 | `/api/profile` | GET | 获取当前画像 |
 | 画像 | `/model/profile/extract` | POST | 抽取画像维度 |
 | 资源 | `/api/resources/generate` | POST (SSE) | 综合资源生成 |
-| 资源 | `/model/resources/generate/*` | POST (SSE) | 7 种资源类型独立生成 |
+| 资源 | `/api/resources/generate/*` | POST (SSE) | 8 种资源类型独立生成 |
 | 路径 | `/api/learning-path/generate` | POST | 生成学习路径 |
-| 路径 | `/model/learning-path/recommend` | POST | 个性化资源推送 |
+| 路径 | `/api/learning-path/recommend` | POST | 个性化资源推送 |
 | 辅导 | `/api/tutor/chat` | POST (SSE) | 智能辅导对话 |
 | 评估 | `/api/assessment/generate` | POST (SSE) | 生成评估报告 |
 | 评估 | `/model/evaluation/optimize` | POST | 触发学习方案优化 |
+| 代码 | `/api/code/assist` | POST (SSE) | 代码补全 / 诊断 / 优化 |
+| 代码 | `/api/code/execute` | POST | 沙箱执行 Python 代码 |
 
 ### 前端路由
 
@@ -388,6 +404,7 @@ MEDICAL_DOCS_DIR="/path/to/your/pdf/documents"
 | `/learning-path` | learning-path.vue | 学习路径规划 |
 | `/tutor` | tutor.vue | 智能辅导 |
 | `/assessment` | assessment.vue | 学习效果评估 |
+| `/code-assist` | code-assist.vue | 代码辅助开发 |
 
 ---
 
@@ -434,7 +451,6 @@ MEDICAL_DOCS_DIR="/path/to/your/pdf/documents"
 | MyBatis-Plus | ORM 框架 | Apache 2.0 |
 | Redisson | 分布式锁与限流 | Apache 2.0 |
 | 阿里云 OSS | 对象存储 | 阿里云协议 |
-| PubMed E-utilities | 医学文献检索 API | NLM 公共 API |
 
 > 本项目开发过程中使用了 AI 辅助编程工具，所有 AI 生成内容均经过人工审核与测试验证。
 

@@ -22,7 +22,7 @@ from app.config.config_loader import (
     get_validation_manager,
 )
 from app.rag.retrieve import CONFIG, UnifiedSearchEngine
-from app.routers import admin, evaluation, profile, stream
+from app.routers import admin, code, evaluation, profile, stream
 from app.runtime import resources
 from app.services.vision_service import VisionAnalysisService
 from app.utils.context_summary import ConversationSummaryService
@@ -204,6 +204,7 @@ app.include_router(stream.router)
 app.include_router(profile.router)
 app.include_router(evaluation.router)
 app.include_router(admin.router)
+app.include_router(code.router)
 
 
 if __name__ == "__main__":
