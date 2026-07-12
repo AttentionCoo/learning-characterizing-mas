@@ -38,44 +38,78 @@ CONFIG = {
 }
 
 
-class DashScopeEmbeddings(Embeddings):
-    def __init__(self, model: str = "text-embedding-v2"):
-        self.model = model
-        self.api_key = os.getenv("DASHSCOPE_API_KEY")
+class XfyunEmbeddings(Embeddings):
+    """讯飞文本向量化（2560 维）。
+
+    文档入库走 Embeddingp（domain=para），查询走 Embeddingq（domain=query）。
+    单次输入上限 2K token，且免费档 QPS 较低，故逐条请求并对限流重试。
+    """
+
+    URL_PARA = "https://cn-huabei-1.xf-yun.com/v1/private/sa8a05c27"
+    URL_QUERY = "https://cn-huabei-1.xf-yun.com/v1/private/s50d55a16"
+    MAX_CHARS = 2500  # 2K token 输入上限的保守字符近似
+
+    def __init__(self):
+        from app.utils.xfyun_auth import get_xfyun_credentials
+        self.app_id, self.api_key, self.api_secret = get_xfyun_credentials()
+        if not all([self.app_id, self.api_key, self.api_secret]):
+            logger.warning("⚠️ 未配置 XFYUN_APP_ID/XFYUN_API_KEY/XFYUN_API_SECRET，向量化功能将不可用")
+
+    def _embed_once(self, text: str, url: str, domain: str) -> List[float]:
+        import base64 as _b64
+        import json as _json
+
+        import numpy as np
+        import requests as _requests
+
+        from app.utils.xfyun_auth import assemble_auth_url
+
+        content = text[: self.MAX_CHARS]
+        body = {
+            "header": {"app_id": self.app_id, "status": 3},
+            "parameter": {"emb": {"domain": domain, "feature": {"encoding": "utf8"}}},
+            "payload": {
+                "messages": {
+                    "text": _b64.b64encode(
+                        _json.dumps({"messages": [{"content": content, "role": "user"}]},
+                                    ensure_ascii=False).encode("utf-8")
+                    ).decode("utf-8")
+                }
+            },
+        }
+
+        last_err = None
+        for attempt in range(4):
+            signed_url = assemble_auth_url(url, self.api_key, self.api_secret, method="POST")
+            resp = _requests.post(
+                signed_url, json=body,
+                headers={"Content-Type": "application/json;charset=UTF-8"},
+                timeout=30,
+            )
+            data = resp.json()
+            code = data.get("header", {}).get("code", -1)
+            if code == 0:
+                vec_b64 = data["payload"]["feature"]["text"]
+                return np.frombuffer(_b64.b64decode(vec_b64), dtype=np.float32).tolist()
+            last_err = f"code={code} message={data.get('header', {}).get('message', '')}"
+            # 鉴权与并发限流类错误统一退避重试
+            time.sleep(1.5 * (attempt + 1))
+        raise ValueError(f"讯飞 embedding 失败: {last_err}")
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        result = []
-        for i in range(0, len(texts), 25):
-            batch = texts[i:i + 25]
-            resp = dashscope.TextEmbedding.call(
-                model=self.model,
-                input=batch,
-                api_key=self.api_key,
-            )
-            if resp.status_code == HTTPStatus.OK:
-                for item in resp.output["embeddings"]:
-                    result.append(item["embedding"])
-            else:
-                raise ValueError(f"DashScope embedding 失败: {resp.code} - {resp.message}")
-        return result
+        return [self._embed_once(t, self.URL_PARA, "para") for t in texts]
 
     def embed_query(self, text: str) -> List[float]:
-        resp = dashscope.TextEmbedding.call(
-            model=self.model,
-            input=text,
-            api_key=self.api_key,
-        )
-        if resp.status_code == HTTPStatus.OK:
-            return resp.output["embeddings"][0]["embedding"]
-        else:
-            raise ValueError(f"DashScope embedding 失败: {resp.code} - {resp.message}")
+        return self._embed_once(text, self.URL_QUERY, "query")
 
 
 class BGEReranker:
     def __init__(self, top_k: int = 5):
         self.api_key = os.getenv("DASHSCOPE_API_KEY")
         if not self.api_key:
-            logger.warning("⚠️ 未找到 DASHSCOPE_API_KEY，Rerank 功能已禁用")
+            # 讯飞暂无公开 rerank 服务；不配 DashScope Key 时精排层自动关闭，
+            # 检索质量由前两阶（混合检索 + RRF 融合）保障
+            logger.info("ℹ️ 未配置 DASHSCOPE_API_KEY，Rerank 精排已禁用（可选功能）")
         self.top_k = top_k
         self.candidate_models = [
             "qwen-rerank-v1",
@@ -210,7 +244,7 @@ def reciprocal_rank_fusion(
 
 def build_or_load_vectorstore(chunks, persist_dir: str, enable_qa: bool = False):
     logger.info(f"🔌 [VectorStore] 连接: {persist_dir}")
-    embeddings = DashScopeEmbeddings(model="text-embedding-v2")
+    embeddings = XfyunEmbeddings()
     vectordb = Chroma(
         persist_directory=persist_dir,
         embedding_function=embeddings,

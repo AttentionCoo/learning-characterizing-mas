@@ -8,15 +8,16 @@ from langchain_core.prompts import ChatPromptTemplate
 logger = logging.getLogger(__name__)
 
 class QAGenerator:
-    def __init__(self, model_name="qwen-turbo"):
+    def __init__(self, model_name=None):
         """
-        初始化大模型调用。项目里主要用的是阿里云 DashScope (qwen-turbo)。
+        初始化大模型调用。使用讯飞星火 OpenAI 兼容接口（默认 lite 档）。
         """
-        api_key = os.getenv("DASHSCOPE_API_KEY")
-        base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-        
+        model_name = model_name or os.getenv("SPARK_MODEL_LITE") or "lite"
+        api_key = os.getenv("SPARK_API_PASSWORD_LITE") or os.getenv("SPARK_API_PASSWORD")
+        base_url = "https://spark-api-open.xf-yun.com/v1"
+
         if not api_key:
-            logger.warning("⚠️ 未找到 DASHSCOPE_API_KEY，QA生成可能失败。")
+            logger.warning("⚠️ 未找到 SPARK_API_PASSWORD，QA生成可能失败。")
             
         self.llm = ChatOpenAI(
             model=model_name,

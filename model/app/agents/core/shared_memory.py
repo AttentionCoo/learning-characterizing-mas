@@ -193,10 +193,10 @@ class SharedMemoryStore:
         if self._initialized:
             return
         try:
-            from app.rag.retrievers import DashScopeEmbeddings
+            from app.rag.retrievers import XfyunEmbeddings
             import chromadb
 
-            self._embeddings = DashScopeEmbeddings(model="text-embedding-v2")
+            self._embeddings = XfyunEmbeddings()
 
             client = chromadb.PersistentClient(path=self.persist_dir)
             self._collection = client.get_or_create_collection(
