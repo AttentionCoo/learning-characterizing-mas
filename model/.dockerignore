@@ -1,0 +1,8 @@
+__pycache__
+*.pyc
+app/chroma_db_unified
+data
+tests
+.env
+*.log
+Dockerfile

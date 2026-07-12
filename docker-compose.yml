@@ -1,0 +1,74 @@
+version: "3.9"
+
+# 一键启动：cp .env.example .env 并填写密钥后执行 docker compose up -d --build
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:?请在 .env 中设置 DB_PASSWORD}
+      MYSQL_DATABASE: learningo-agents
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./backend/ai/MyServer/learningo-agents.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${DB_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  model:
+    build: ./model
+    environment:
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:?请在 .env 中设置 DASHSCOPE_API_KEY}
+      SECRET_KEY: ${AI_API_SHARED_JWT_SECRET:?请在 .env 中设置 AI_API_SHARED_JWT_SECRET}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      MEDICAL_DOCS_DIR: /app/data/documents
+    volumes:
+      - ./model/data:/app/data
+      - chroma-data:/app/app/chroma_db_unified
+
+  backend:
+    build: ./backend/ai/MyServer
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: learningo-agents
+      DB_USERNAME: root
+      DB_PASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ""
+      AI_API_URL: http://model:8000
+      AI_API_SHARED_JWT_SECRET: ${AI_API_SHARED_JWT_SECRET}
+      OSS_ENDPOINT: ${OSS_ENDPOINT:-https://oss-cn-beijing.aliyuncs.com}
+      OSS_BUCKET: ${OSS_BUCKET:-darkside}
+      OSS_REGION: ${OSS_REGION:-cn-beijing}
+      OSS_ACCESS_KEY_ID: ${OSS_ACCESS_KEY_ID:?请在 .env 中设置 OSS_ACCESS_KEY_ID}
+      OSS_ACCESS_KEY_SECRET: ${OSS_ACCESS_KEY_SECRET:?请在 .env 中设置 OSS_ACCESS_KEY_SECRET}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      model:
+        condition: service_started
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+volumes:
+  mysql-data:
+  chroma-data:
