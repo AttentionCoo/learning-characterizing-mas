@@ -1,4 +1,4 @@
-﻿package com.learnagent.param;
+package com.learnagent.po.uo;
 
 import lombok.Data;
 
@@ -7,5 +7,6 @@ public class CodeExecuteParam {
     private String code;
     private String language;
     private Integer timeout;
-    private java.util.Map<String, String> inputData;
+    /** 标准输入内容，逐行喂给沙箱内程序的 stdin */
+    private String inputData;
 }

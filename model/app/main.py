@@ -22,7 +22,7 @@ from app.config.config_loader import (
     get_validation_manager,
 )
 from app.rag.retrieve import CONFIG, UnifiedSearchEngine
-from app.routers import admin, evaluation, medical, profile, stream
+from app.routers import admin, code, evaluation, medical, profile, stream
 from app.runtime import resources
 from app.agents.orchestrators.nodes.vision_node import VisionAnalysisNode
 from app.services.medical_ocr_service import MedicalOCRService
@@ -231,6 +231,7 @@ app.include_router(profile.router)
 app.include_router(evaluation.router)
 app.include_router(admin.router)
 app.include_router(medical.router)
+app.include_router(code.router)
 
 
 if __name__ == "__main__":

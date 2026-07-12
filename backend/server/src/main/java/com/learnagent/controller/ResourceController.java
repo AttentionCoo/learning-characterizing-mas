@@ -450,6 +450,48 @@ public class ResourceController {
         return buildSSEStream(userId, quesParam, upstreamToken, lastEventId, persistCallback, "plan_generate");
     }
 
+    @PostMapping(value = "/generate/code-practice", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @SuppressWarnings("unchecked")
+    public Flux<ServerSentEvent<String>> generateCodePractice(
+            @RequestBody Map<String, Object> body,
+            @RequestHeader(value = "token", required = false) String token,
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestHeader(value = "Last-Event-ID", required = false) String lastEventId,
+            HttpServletResponse response
+    ) {
+        response.setHeader("X-Accel-Buffering", "no");
+        response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        if (ThreadLocalUtil.getCurrentUser() == null) {
+            return Flux.just(sse("error", json("error", mapOf("message", "未登录"))));
+        }
+        String upstreamToken = resolveToken(token, authorization);
+        Long userId = ThreadLocalUtil.getCurrentUser().getId();
+
+        StringBuilder questionBuilder = new StringBuilder("请生成医学数据分析代码实操案例：");
+        appendIfNotNull(questionBuilder, "课程", body.get("courseName"));
+        appendListIfNotNull(questionBuilder, "知识点", (List<String>) body.get("knowledgePoints"));
+        appendIfNotNull(questionBuilder, "代码类型", body.get("codeType"));
+        appendIfNotNull(questionBuilder, "难度", body.get("difficulty"));
+        appendIfNotNull(questionBuilder, "补充说明", body.get("message"));
+        questionBuilder.append("\n请包含：案例背景、环境准备、分步实现、完整代码、运行结果解读和拓展练习。");
+
+        QuesParam quesParam = new QuesParam();
+        quesParam.setTalkId((String) body.get("talkId"));
+        quesParam.setQuestion(questionBuilder.toString());
+
+        String courseName = body.get("courseName") != null ? body.get("courseName").toString() : "";
+        String knowledgePoints = body.get("knowledgePoints") != null
+                ? String.join(",", (List<String>) body.get("knowledgePoints")) : null;
+        String difficulty = body.get("difficulty") != null ? body.get("difficulty").toString() : null;
+
+        BiConsumer<String, Long> persistCallback = (fullAnswer, talkId) ->
+                persistResource(userId, buildTitle(courseName, "代码实操案例"), "code_practice",
+                        courseName, knowledgePoints, difficulty, fullAnswer, talkId);
+
+        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId, persistCallback, "code_generate");
+    }
+
+
     @PostMapping(value = "/generate/assessment", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @SuppressWarnings("unchecked")
     public Flux<ServerSentEvent<String>> generateAssessment(

@@ -15,6 +15,7 @@ const resourceTypes = [
   { value: 'case_study', label: '临床案例', icon: '🏥', color: '#f97316' },
   { value: 'plan', label: '资源设计方案', icon: '📋', color: '#14b8a6' },
   { value: 'assessment', label: '学习评估报告', icon: '📊', color: '#ef4444' },
+  { value: 'code_practice', label: '代码实操案例', icon: '💻', color: '#6366f1' },
 ]
 
 const selectedTypes = ref([])
@@ -83,6 +84,7 @@ const typeEndpointMap = {
   case_study: '/api/resources/generate/case-study',
   plan: '/api/resources/generate/plan',
   assessment: '/api/resources/generate/assessment',
+  code_practice: '/api/resources/generate/code-practice',
 }
 
 async function handleGenerate() {

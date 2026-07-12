@@ -375,7 +375,7 @@ learning-multi-agent-system/
 | 模块 | 功能 | 关键特性 |
 |:---|:---|:---|
 | **对话式学习画像** | 自然语言对话自动抽取特征，构建 8 维度动态画像 | 知识基础 · 认知风格 · 学习目标 · 易错点 · 学习节奏 · 资源偏好 · 临床经验 · 情绪状态 |
-| **多智能体资源生成** | 7 种个性化资源类型 | 课程讲解文档 · 思维导图 · 练习题目 · 拓展阅读 · 视频脚本 · 代码实操 · 综合批量生成 |
+| **多智能体资源生成** | 8 种个性化资源类型 | 课程讲解文档 · 思维导图 · 练习题目 · 拓展阅读 · 临床案例 · 设计方案 · 评估报告 · 代码实操案例 |
 | **学习路径规划** | 根据画像生成 5-15 步学习路径 | 前置步骤依赖 · 精准资源推送 · 路径动态调整 · 步骤进度追踪 |
 | **智能辅导** | 即时多模态答疑 | 文字解答 · 图片识别(qwen-vl-max) · 上下文感知 · 偏好回答形式 |
 | **学习效果评估** | 5 维度评估 + 闭环优化 | 知识掌握度 · 学习效率 · 技能应用 · 学习一致性 · 进度对齐度 |
@@ -385,7 +385,7 @@ learning-multi-agent-system/
 | **医学 OCR 提取** | 检验报告/处方/文档结构化 | 检验指标数值提取 · 处方药品信息解析 · 流式识别 |
 | **Vision-RAG 桥接** | 影像发现 → 循证检索 | 自动从影像分析结果生成 PubMed + 本地知识库检索 |
 | **PubMed 文献检索** | 集成 NCBI E-utilities API | 8 级证据等级排序 · 与本地 ChromaDB 知识库互补 |
-| **代码辅助开发** | 面向医学生的代码工具 | 代码生成 · 在线执行 · 错误诊断 · 实操案例生成 |
+| **代码辅助开发** | 医学数据分析编程助手 | 代码补全 · 错误诊断 · 优化建议 · 沙箱执行(python -I + 资源上限) |
 | **学习风险评估** | 百炼平台集成 | 风险等级判定 · 学习干预建议 · 异步评估 |
 | **系统监控** | 限流熔断器状态监控 | 登录失败/成功统计 · 熔断器状态查询 |
 
@@ -672,7 +672,7 @@ MEDICAL_DOCS_DIR="/path/to/your/pdf/documents"
 | 画像 | `/api/profile` | GET | 获取当前画像 |
 | 画像 | `/model/profile/extract` | POST | 抽取画像维度 |
 | 资源 | `/api/resources/generate` | POST (SSE) | 综合资源生成 |
-| 资源 | `/model/resources/generate/*` | POST (SSE) | 7 种资源类型独立生成 |
+| 资源 | `/api/resources/generate/*` | POST (SSE) | 8 种资源类型独立生成 |
 | 路径 | `/api/learning-path/generate` | POST | 生成学习路径 |
 | 路径 | `/model/learning-path/recommend` | POST | 个性化资源推送 |
 | 路径 | `/model/learning-path/{path_id}/adjust` | POST | 动态调整学习路径 |
@@ -692,7 +692,7 @@ MEDICAL_DOCS_DIR="/path/to/your/pdf/documents"
 | 课程 | `/model/courses` | GET | 课程列表 |
 | 课程 | `/model/courses/{course_id}/knowledge-tree` | GET | 课程知识体系树 |
 | 代码 | `/api/code/execute` | POST | 代码执行沙箱 |
-| 代码 | `/api/code/assist` | POST | 代码辅助开发 |
+| 代码 | `/api/code/assist` | POST (SSE) | 代码补全 / 诊断 / 优化 |
 | 任务 | `/model/tasks/{task_id}` | GET | 查询异步任务状态 |
 | 任务 | `/model/tasks/{task_id}/stream` | GET (SSE) | SSE 流式重连 |
 | 管理 | `/admin/reload_config` | POST | 配置热更新 |
@@ -710,6 +710,7 @@ MEDICAL_DOCS_DIR="/path/to/your/pdf/documents"
 | `/learning-path` | learning-path.vue | 学习路径规划 |
 | `/tutor` | tutor.vue | 智能辅导 |
 | `/assessment` | assessment.vue | 学习效果评估 |
+| `/code-assist` | code-assist.vue | 代码辅助开发 |
 
 ---
 
