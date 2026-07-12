@@ -1,4 +1,4 @@
-﻿package com.learnagent.controller;
+package com.learnagent.controller;
 
 import com.learnagent.utils.AliOssUpload;
 import com.learnagent.entity.Result;
@@ -42,7 +42,7 @@ public class UploadController {
         String originalFilename = StringUtils.cleanPath(file.getOriginalFilename() == null ? "" : file.getOriginalFilename());
         String extension = getExtension(originalFilename);
         if (!ALLOWED_EXTENSIONS.contains(extension)) {
-            return Result.error("仅支�?jpg、png、webp、gif 图片");
+            return Result.error("仅支持 jpg、png、webp、gif 图片");
         }
 
         try {

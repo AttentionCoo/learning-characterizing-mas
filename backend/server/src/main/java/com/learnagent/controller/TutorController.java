@@ -1,4 +1,4 @@
-﻿package com.learnagent.controller;
+package com.learnagent.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.learnagent.cache.SSEEventCache;
@@ -49,7 +49,7 @@ public class TutorController {
         response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
 
         if (ThreadLocalUtil.getCurrentUser() == null) {
-            return Flux.just(sse("error", json("error", mapOf("message", "未登�?))));
+            return Flux.just(sse("error", json("error", mapOf("message", "未登录"))));
         }
 
         String upstreamToken = resolveToken(token, authorization);
@@ -57,17 +57,17 @@ public class TutorController {
 
         StringBuilder questionBuilder = new StringBuilder(param.getMessage());
         if (param.getMode() != null) {
-            questionBuilder.append("\n辅导模式�?).append(param.getMode());
+            questionBuilder.append("\n辅导模式：").append(param.getMode());
         }
         if (param.getResponseFormat() != null) {
-            questionBuilder.append("\n回复格式�?).append(param.getResponseFormat());
+            questionBuilder.append("\n回复格式：").append(param.getResponseFormat());
         }
         if (param.getContext() != null) {
             if (param.getContext().getCourseName() != null) {
-                questionBuilder.append("\n课程�?).append(param.getContext().getCourseName());
+                questionBuilder.append("\n课程：").append(param.getContext().getCourseName());
             }
             if (param.getContext().getKnowledgePoints() != null) {
-                questionBuilder.append("\n知识点：").append(String.join("�?, param.getContext().getKnowledgePoints()));
+                questionBuilder.append("\n知识点：").append(String.join("、", param.getContext().getKnowledgePoints()));
             }
         }
         if (param.getCodeSnippet() != null) {
@@ -94,7 +94,7 @@ public class TutorController {
         response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
 
         if (ThreadLocalUtil.getCurrentUser() == null) {
-            return Flux.just(sse("error", json("error", mapOf("message", "未登�?))));
+            return Flux.just(sse("error", json("error", mapOf("message", "未登录"))));
         }
 
         String upstreamToken = resolveToken(token, authorization);
@@ -105,8 +105,8 @@ public class TutorController {
         if (message != null) {
             questionBuilder.append(message.toString());
         }
-        if (body.get("mode") != null) questionBuilder.append("\n辅导模式�?).append(body.get("mode"));
-        if (body.get("courseName") != null) questionBuilder.append("\n课程�?).append(body.get("courseName"));
+        if (body.get("mode") != null) questionBuilder.append("\n辅导模式：").append(body.get("mode"));
+        if (body.get("courseName") != null) questionBuilder.append("\n课程：").append(body.get("courseName"));
         if (body.get("knowledgePoint") != null) questionBuilder.append("\n知识点：").append(body.get("knowledgePoint"));
 
         QuesParam quesParam = new QuesParam();
@@ -216,12 +216,12 @@ public class TutorController {
 
     private Flux<ServerSentEvent<String>> handleReconnect(String idTalkId, long lastSeq, Long finalTalkId, String finalTalkIdStr) {
         if (!finalTalkIdStr.equals(idTalkId)) {
-            return Flux.just(sse("error", json("error", mapOf("code", "E2004", "message", "talkId 不匹�?))));
+            return Flux.just(sse("error", json("error", mapOf("code", "E2004", "message", "talkId 不匹配"))));
         }
         Flux<SSEEventCache.SequencedEvent> replayStream = eventCache.getReplayStream(finalTalkIdStr, lastSeq);
         if (replayStream == null) {
             return Flux.just(
-                    sseWithId(finalTalkIdStr + ":0", "error", json("error", mapOf("code", "E2003", "message", "会话缓存已过�?))),
+                    sseWithId(finalTalkIdStr + ":0", "error", json("error", mapOf("code", "E2003", "message", "会话缓存已过期"))),
                     sse("done", json("done", mapOf("talkId", finalTalkIdStr, "name", "")))
             );
         }

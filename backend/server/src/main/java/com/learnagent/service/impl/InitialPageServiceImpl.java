@@ -1,4 +1,4 @@
-﻿package com.learnagent.service.impl;
+package com.learnagent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -24,22 +24,22 @@ import java.util.stream.Collectors;
 public class InitialPageServiceImpl extends ServiceImpl<InitialPageMapper, Talk> implements IInitialPageService {
 
     /**
-     * 注意�?
-     * 1.这里绝对不能注入 IInitialPageService initialPageService，否则会报错“循环依赖”�?
-     * 2.Controller 中调用的方法�?getPage，所以这里方法名必须�?getPage�?
+     * 注意：
+     * 1.这里绝对不能注入 IInitialPageService initialPageService，否则会报错“循环依赖”。
+     * 2.Controller 中调用的方法是 getPage，所以这里方法名必须是 getPage。
      */
     private final StringRedisTemplate stringRedisTemplate;
     private final IContService contService;
 
     @Override
     public List<InitialPageVO> getPage(Long userId) {
-        // 使用 MyBatis-Plus �?LambdaQuery 查询 Talk �?
+        // 使用 MyBatis-Plus 的 LambdaQuery 查询 Talk 表
         List<Talk> talks = this.lambdaQuery()
                 .eq(Talk::getUserId, userId)
                 .orderByDesc(Talk::getUpdateTime)
                 .list();
 
-        // �?Entity (Talk) 转换�?VO (InitialPageVO)
+        // 将 Entity (Talk) 转换为 VO (InitialPageVO)
         // 确保 InitialPageVO 加了 @AllArgsConstructor 注解
         return talks.stream()
                 .map(talk -> new InitialPageVO(talk.getId(), talk.getTitle(), talk.getCreateTime(), talk.getUpdateTime()))
@@ -49,10 +49,10 @@ public class InitialPageServiceImpl extends ServiceImpl<InitialPageMapper, Talk>
     @Override
     @Transactional
     public void deleteTalk(Long userId, Long talkId) {
-        // 1. 验证权限：确保这个对话属于当前用�?
+        // 1. 验证权限：确保这个对话属于当前用户
         Talk talk = this.getById(talkId);
         if (talk == null || !talk.getUserId().equals(userId)) {
-            throw new RuntimeException("无权删除此对�?);
+            throw new RuntimeException("无权删除此对话");
         }
 
         // 2. 删除 Redis 缓存
@@ -71,7 +71,7 @@ public class InitialPageServiceImpl extends ServiceImpl<InitialPageMapper, Talk>
         contWrapper.eq(Cont::getUserId, userId)
                 .eq(Cont::getTalkId, talkId);
 
-        // 注入 ContService 或直接使�?baseMapper
+        // 注入 ContService 或直接使用 baseMapper
         int contDeleted = contService.remove(contWrapper) ? 1 : 0;
         log.info("删除对话内容: talkId={}, 删除条数={}", talkId, contDeleted);
 

@@ -31,7 +31,7 @@ public class AliOssUpload {
         // 创建OSSClient实例（修改这里）
         OSS ossClient;
         if (accessKeyId != null && !accessKeyId.isEmpty()) {
-            // 使用配置文件�?Key
+            // 使用配置文件的 Key
              ossClient = new OSSClientBuilder().build(endpoint, accessKeyId, accessKeySecret);
         } else {
             // 从环境变量中获取访问凭证

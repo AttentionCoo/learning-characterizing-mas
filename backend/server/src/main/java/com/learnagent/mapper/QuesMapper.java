@@ -1,4 +1,4 @@
-﻿package com.learnagent.mapper;
+package com.learnagent.mapper;
 
 import com.learnagent.entity.Talk;
 import org.apache.ibatis.annotations.Mapper;

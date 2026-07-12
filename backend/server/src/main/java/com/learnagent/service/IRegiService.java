@@ -1,4 +1,4 @@
-﻿package com.learnagent.service;
+package com.learnagent.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.learnagent.entity.Result;

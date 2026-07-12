@@ -1,4 +1,4 @@
-﻿package com.learnagent.controller;
+package com.learnagent.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -56,7 +56,7 @@ public class ResourceController {
         response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
 
         if (ThreadLocalUtil.getCurrentUser() == null) {
-            return Flux.just(sse("error", json("error", mapOf("message", "未登�?))));
+            return Flux.just(sse("error", json("error", mapOf("message", "未登录"))));
         }
 
         String upstreamToken = resolveToken(token, authorization);
@@ -66,19 +66,19 @@ public class ResourceController {
         questionBuilder.append("【任务类型：学习资源内容生成】\n");
         questionBuilder.append("请为以下学习需求生成具体的教学内容和知识点讲解。\n\n");
         questionBuilder.append("【学生资源需求】\n");
-        questionBuilder.append(param.getMessage() != null ? param.getMessage() : "请生成相关学习资�?);
+        questionBuilder.append(param.getMessage() != null ? param.getMessage() : "请生成相关学习资料");
         questionBuilder.append("\n\n【课程信息】\n");
         if (param.getCourseName() != null && !param.getCourseName().isEmpty()) {
-            questionBuilder.append("- 课程名称�?).append(param.getCourseName()).append("\n");
+            questionBuilder.append("- 课程名称：").append(param.getCourseName()).append("\n");
         }
         if (param.getKnowledgePoints() != null && !param.getKnowledgePoints().isEmpty()) {
-            questionBuilder.append("- 目标知识点：").append(String.join("�?, param.getKnowledgePoints())).append("\n");
+            questionBuilder.append("- 目标知识点：").append(String.join("、", param.getKnowledgePoints())).append("\n");
         }
         if (param.getDifficulty() != null && !param.getDifficulty().isEmpty()) {
-            questionBuilder.append("- 难度级别�?).append(param.getDifficulty()).append("\n");
+            questionBuilder.append("- 难度级别：").append(param.getDifficulty()).append("\n");
         }
         if (param.getResourceTypes() != null && !param.getResourceTypes().isEmpty()) {
-            questionBuilder.append("- 资源格式要求�?).append(String.join("�?, param.getResourceTypes())).append("\n");
+            questionBuilder.append("- 资源格式要求：").append(String.join("、", param.getResourceTypes())).append("\n");
         }
         questionBuilder.append("\n【输出要求】\n");
         questionBuilder.append("1. 生成具体的知识内容，包括定义、要点、临床应用等\n");
@@ -151,7 +151,7 @@ public class ResourceController {
     public Result getResourceDetail(@PathVariable Long id) {
         LearningResource r = learningResourceMapper.selectById(id);
         if (r == null) {
-            return Result.error("资源不存�?);
+            return Result.error("资源不存在");
         }
         Map<String, Object> data = new HashMap<>();
         data.put("resourceId", r.getId());
@@ -172,7 +172,7 @@ public class ResourceController {
     public Result downloadResource(@PathVariable Long id) {
         LearningResource r = learningResourceMapper.selectById(id);
         if (r == null) {
-            return Result.error("资源不存�?);
+            return Result.error("资源不存在");
         }
         Map<String, Object> data = new HashMap<>();
         data.put("resourceId", r.getId());
@@ -186,7 +186,7 @@ public class ResourceController {
         Long userId = ThreadLocalUtil.getCurrentUser().getId();
         LearningResource r = learningResourceMapper.selectById(id);
         if (r == null || !r.getUserId().equals(userId)) {
-            return Result.error("资源不存在或无权�?);
+            return Result.error("资源不存在或无权限");
         }
         learningResourceMapper.deleteById(id);
         return Result.success();
@@ -217,14 +217,14 @@ public class ResourceController {
         response.setHeader("X-Accel-Buffering", "no");
         response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
         if (ThreadLocalUtil.getCurrentUser() == null) {
-            return Flux.just(sse("error", json("error", mapOf("message", "未登�?))));
+            return Flux.just(sse("error", json("error", mapOf("message", "未登录"))));
         }
         String upstreamToken = resolveToken(token, authorization);
         Long userId = ThreadLocalUtil.getCurrentUser().getId();
 
         StringBuilder questionBuilder = new StringBuilder("请生成课程讲解文档：");
         appendIfNotNull(questionBuilder, "课程", body.get("courseName"));
-        appendListIfNotNull(questionBuilder, "知识�?, (List<String>) body.get("knowledgePoints"));
+        appendListIfNotNull(questionBuilder, "知识点", (List<String>) body.get("knowledgePoints"));
         appendIfNotNull(questionBuilder, "难度", body.get("difficulty"));
         appendIfNotNull(questionBuilder, "风格", body.get("style"));
         appendIfNotNull(questionBuilder, "补充说明", body.get("message"));
@@ -261,14 +261,14 @@ public class ResourceController {
         response.setHeader("X-Accel-Buffering", "no");
         response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
         if (ThreadLocalUtil.getCurrentUser() == null) {
-            return Flux.just(sse("error", json("error", mapOf("message", "未登�?))));
+            return Flux.just(sse("error", json("error", mapOf("message", "未登录"))));
         }
         String upstreamToken = resolveToken(token, authorization);
         Long userId = ThreadLocalUtil.getCurrentUser().getId();
 
-        StringBuilder questionBuilder = new StringBuilder("请生成知识点思维导图�?);
+        StringBuilder questionBuilder = new StringBuilder("请生成知识点思维导图：");
         appendIfNotNull(questionBuilder, "课程", body.get("courseName"));
-        appendListIfNotNull(questionBuilder, "知识�?, (List<String>) body.get("knowledgePoints"));
+        appendListIfNotNull(questionBuilder, "知识点", (List<String>) body.get("knowledgePoints"));
         appendIfNotNull(questionBuilder, "格式", body.get("format"));
         appendIfNotNull(questionBuilder, "展开层级", body.get("depth"));
         appendIfNotNull(questionBuilder, "补充说明", body.get("message"));
@@ -300,14 +300,14 @@ public class ResourceController {
         response.setHeader("X-Accel-Buffering", "no");
         response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
         if (ThreadLocalUtil.getCurrentUser() == null) {
-            return Flux.just(sse("error", json("error", mapOf("message", "未登�?))));
+            return Flux.just(sse("error", json("error", mapOf("message", "未登录"))));
         }
         String upstreamToken = resolveToken(token, authorization);
         Long userId = ThreadLocalUtil.getCurrentUser().getId();
 
         StringBuilder questionBuilder = new StringBuilder("请生成练习题目：");
         appendIfNotNull(questionBuilder, "课程", body.get("courseName"));
-        appendListIfNotNull(questionBuilder, "知识�?, (List<String>) body.get("knowledgePoints"));
+        appendListIfNotNull(questionBuilder, "知识点", (List<String>) body.get("knowledgePoints"));
         appendIfNotNull(questionBuilder, "难度", body.get("difficulty"));
         appendListIfNotNull(questionBuilder, "题目类型", (List<String>) body.get("quizTypes"));
         appendIfNotNull(questionBuilder, "题目数量", body.get("count"));
@@ -342,14 +342,14 @@ public class ResourceController {
         response.setHeader("X-Accel-Buffering", "no");
         response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
         if (ThreadLocalUtil.getCurrentUser() == null) {
-            return Flux.just(sse("error", json("error", mapOf("message", "未登�?))));
+            return Flux.just(sse("error", json("error", mapOf("message", "未登录"))));
         }
         String upstreamToken = resolveToken(token, authorization);
         Long userId = ThreadLocalUtil.getCurrentUser().getId();
 
         StringBuilder questionBuilder = new StringBuilder("请生成拓展阅读材料：");
         appendIfNotNull(questionBuilder, "课程", body.get("courseName"));
-        appendListIfNotNull(questionBuilder, "知识�?, (List<String>) body.get("knowledgePoints"));
+        appendListIfNotNull(questionBuilder, "知识点", (List<String>) body.get("knowledgePoints"));
         appendIfNotNull(questionBuilder, "阅读类型", body.get("readingType"));
         appendIfNotNull(questionBuilder, "语言", body.get("language"));
         appendIfNotNull(questionBuilder, "数量", body.get("count"));
@@ -382,17 +382,17 @@ public class ResourceController {
         response.setHeader("X-Accel-Buffering", "no");
         response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
         if (ThreadLocalUtil.getCurrentUser() == null) {
-            return Flux.just(sse("error", json("error", mapOf("message", "未登�?))));
+            return Flux.just(sse("error", json("error", mapOf("message", "未登录"))));
         }
         String upstreamToken = resolveToken(token, authorization);
         Long userId = ThreadLocalUtil.getCurrentUser().getId();
 
         StringBuilder questionBuilder = new StringBuilder("请生成临床案例分析：");
         appendIfNotNull(questionBuilder, "课程", body.get("courseName"));
-        appendListIfNotNull(questionBuilder, "知识�?, (List<String>) body.get("knowledgePoints"));
+        appendListIfNotNull(questionBuilder, "知识点", (List<String>) body.get("knowledgePoints"));
         appendIfNotNull(questionBuilder, "难度", body.get("difficulty"));
         appendIfNotNull(questionBuilder, "补充说明", body.get("message"));
-        questionBuilder.append("\n请包含：完整病例描述、诊断思路分析、治疗方案选择和要点总结�?);
+        questionBuilder.append("\n请包含：完整病例描述、诊断思路分析、治疗方案选择和要点总结。");
 
         QuesParam quesParam = new QuesParam();
         quesParam.setTalkId((String) body.get("talkId"));
@@ -422,17 +422,17 @@ public class ResourceController {
         response.setHeader("X-Accel-Buffering", "no");
         response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
         if (ThreadLocalUtil.getCurrentUser() == null) {
-            return Flux.just(sse("error", json("error", mapOf("message", "未登�?))));
+            return Flux.just(sse("error", json("error", mapOf("message", "未登录"))));
         }
         String upstreamToken = resolveToken(token, authorization);
         Long userId = ThreadLocalUtil.getCurrentUser().getId();
 
         StringBuilder questionBuilder = new StringBuilder("请生成资源学习方案：");
         appendIfNotNull(questionBuilder, "课程", body.get("courseName"));
-        appendListIfNotNull(questionBuilder, "知识�?, (List<String>) body.get("knowledgePoints"));
+        appendListIfNotNull(questionBuilder, "知识点", (List<String>) body.get("knowledgePoints"));
         appendIfNotNull(questionBuilder, "难度", body.get("difficulty"));
         appendIfNotNull(questionBuilder, "补充说明", body.get("message"));
-        questionBuilder.append("\n请包含：学习路径规划、阶段时间安排、推荐学习资源和自评检查点�?);
+        questionBuilder.append("\n请包含：学习路径规划、阶段时间安排、推荐学习资源和自评检查点。");
 
         QuesParam quesParam = new QuesParam();
         quesParam.setTalkId((String) body.get("talkId"));
@@ -504,17 +504,17 @@ public class ResourceController {
         response.setHeader("X-Accel-Buffering", "no");
         response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
         if (ThreadLocalUtil.getCurrentUser() == null) {
-            return Flux.just(sse("error", json("error", mapOf("message", "未登�?))));
+            return Flux.just(sse("error", json("error", mapOf("message", "未登录"))));
         }
         String upstreamToken = resolveToken(token, authorization);
         Long userId = ThreadLocalUtil.getCurrentUser().getId();
 
         StringBuilder questionBuilder = new StringBuilder("请生成学习评估报告：");
         appendIfNotNull(questionBuilder, "课程", body.get("courseName"));
-        appendListIfNotNull(questionBuilder, "知识�?, (List<String>) body.get("knowledgePoints"));
+        appendListIfNotNull(questionBuilder, "知识点", (List<String>) body.get("knowledgePoints"));
         appendIfNotNull(questionBuilder, "难度", body.get("difficulty"));
         appendIfNotNull(questionBuilder, "补充说明", body.get("message"));
-        questionBuilder.append("\n请包含：综合评估、各维度分析、优势分析、薄弱环节和改进建议�?);
+        questionBuilder.append("\n请包含：综合评估、各维度分析、优势分析、薄弱环节和改进建议。");
 
         QuesParam quesParam = new QuesParam();
         quesParam.setTalkId((String) body.get("talkId"));
@@ -601,7 +601,7 @@ public class ResourceController {
                         try {
                             persistCallback.accept(fullAnswer.toString(), finalTalkId);
                         } catch (Exception e) {
-                            log.error("资源持久化失�? talkId={}", finalTalkId, e);
+                            log.error("资源持久化失败: talkId={}", finalTalkId, e);
                         }
                     }
                     doneSink.tryEmitEmpty();
@@ -621,12 +621,12 @@ public class ResourceController {
 
     private Flux<ServerSentEvent<String>> handleReconnect(String idTalkId, long lastSeq, Long finalTalkId, String finalTalkIdStr) {
         if (!finalTalkIdStr.equals(idTalkId)) {
-            return Flux.just(sse("error", json("error", mapOf("code", "E2004", "message", "talkId 不匹�?))));
+            return Flux.just(sse("error", json("error", mapOf("code", "E2004", "message", "talkId 不匹配"))));
         }
         Flux<SSEEventCache.SequencedEvent> replayStream = eventCache.getReplayStream(finalTalkIdStr, lastSeq);
         if (replayStream == null) {
             return Flux.just(
-                    sseWithId(finalTalkIdStr + ":0", "error", json("error", mapOf("code", "E2003", "message", "会话缓存已过�?))),
+                    sseWithId(finalTalkIdStr + ":0", "error", json("error", mapOf("code", "E2003", "message", "会话缓存已过期"))),
                     sse("done", json("done", mapOf("talkId", finalTalkIdStr, "name", "")))
             );
         }
@@ -678,13 +678,13 @@ public class ResourceController {
     private Map<String, Object> mapOf(Object k1, Object v1) { Map<String, Object> m = new HashMap<>(); m.put(String.valueOf(k1), v1); return m; }
     private Map<String, Object> mapOf(Object k1, Object v1, Object k2, Object v2) { Map<String, Object> m = new HashMap<>(); m.put(String.valueOf(k1), v1); m.put(String.valueOf(k2), v2); return m; }
     private void appendIfNotNull(StringBuilder sb, String label, Object value) {
-        if (value != null && !value.toString().isBlank()) sb.append("\n").append(label).append("�?).append(value);
+        if (value != null && !value.toString().isBlank()) sb.append("\n").append(label).append("：").append(value);
     }
     private void appendIfNotNull(StringBuilder sb, String label, Boolean value) {
-        if (value != null) sb.append("\n").append(label).append("�?).append(value);
+        if (value != null) sb.append("\n").append(label).append("：").append(value);
     }
     private void appendListIfNotNull(StringBuilder sb, String label, List<String> list) {
-        if (list != null && !list.isEmpty()) sb.append("\n").append(label).append("�?).append(String.join("�?, list));
+        if (list != null && !list.isEmpty()) sb.append("\n").append(label).append("：").append(String.join("、", list));
     }
 
     private void appendContent(StringBuilder sb, String data) {
@@ -719,9 +719,9 @@ public class ResourceController {
             resource.setCreateTime(LocalDateTime.now());
             resource.setUpdateTime(LocalDateTime.now());
             learningResourceMapper.insert(resource);
-            log.info("资源持久化成�? resourceId={}, talkId={}, type={}", resource.getId(), talkId, type);
+            log.info("资源持久化成功: resourceId={}, talkId={}, type={}", resource.getId(), talkId, type);
         } catch (Exception e) {
-            log.error("资源持久化失�? talkId={}, type={}", talkId, type, e);
+            log.error("资源持久化失败: talkId={}, type={}", talkId, type, e);
         }
     }
 

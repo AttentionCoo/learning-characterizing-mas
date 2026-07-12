@@ -8,12 +8,12 @@ import java.util.Date;
 import java.util.Map;
 
 public class JWT {
-    // �?JwtConfig �?Spring 启动时通过 setSecretKey() 注入，禁止在此处硬编码密�?
+    // 由 JwtConfig 在 Spring 启动时通过 setSecretKey() 注入，禁止在此处硬编码密钥
     private static String secretKey;
 
     /**
-     * �?JwtConfig#init() 调用，将配置文件中的密钥注入到静态字段�?
-     * 应用启动后仅调用一次�?
+     * 由 JwtConfig#init() 调用，将配置文件中的密钥注入到静态字段。
+     * 应用启动后仅调用一次。
      */
     public static void setSecretKey(String key) {
         secretKey = key;
@@ -21,7 +21,7 @@ public class JWT {
 
     private static byte[] keyBytes() {
         if (secretKey == null || secretKey.isBlank()) {
-            throw new IllegalStateException("JWT 密钥未初始化，请检�?ai.security.shared-jwt-secret 配置�?);
+            throw new IllegalStateException("JWT 密钥未初始化，请检查 ai.security.shared-jwt-secret 配置项");
         }
         return secretKey.getBytes(StandardCharsets.UTF_8);
     }
@@ -45,7 +45,7 @@ public class JWT {
         return Long.valueOf(parseToken(token).get("id").toString());
     }
 
-    // --- 新增：从 Token 中获�?JTI ---
+    // --- 新增：从 Token 中获取 JTI ---
     public static String getJtiFromToken(String token) {
         return parseToken(token).get("jti").toString();
     }

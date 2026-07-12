@@ -1,4 +1,4 @@
-﻿package com.learnagent.config;
+package com.learnagent.config;
 
 import com.learnagent.utils.AliOssUpload;
 import com.learnagent.config.AliOssProperties;

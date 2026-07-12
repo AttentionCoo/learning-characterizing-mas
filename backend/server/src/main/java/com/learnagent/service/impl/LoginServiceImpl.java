@@ -1,4 +1,4 @@
-﻿package com.learnagent.service.impl;
+package com.learnagent.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.bean.copier.CopyOptions;
@@ -38,8 +38,8 @@ import java.util.concurrent.TimeUnit;
 public class LoginServiceImpl extends ServiceImpl<LoginMapper, User> implements ILoginService {
 
     // ===== 登录限流参数 =====
-    private static final int MAX_IP_ATTEMPTS = 5;        // 单IP最大次�?
-    private static final int MAX_USER_ATTEMPTS = 5;      // 单账号最大次�?
+    private static final int MAX_IP_ATTEMPTS = 5;        // 单IP最大次数
+    private static final int MAX_USER_ATTEMPTS = 5;      // 单账号最大次数
     private static final int WINDOW_SECONDS = 300;       // 5分钟窗口
     private final StringRedisTemplate stringRedisTemplate;
     private final RedissonClient redissonClient;
@@ -79,12 +79,12 @@ public class LoginServiceImpl extends ServiceImpl<LoginMapper, User> implements 
 
         Long ipCount = incrWithExpire(ipKey, WINDOW_SECONDS);
         if (ipCount != null && ipCount > MAX_IP_ATTEMPTS) {
-            return Result.error("IP登录过于频繁，请5分钟后再�?);
+            return Result.error("IP登录过于频繁，请5分钟后再试");
         }
 
         Long userCount = incrWithExpire(userKey, WINDOW_SECONDS);
         if (userCount != null && userCount > MAX_USER_ATTEMPTS) {
-            return Result.error("账号登录过于频繁，请5分钟后再�?);
+            return Result.error("账号登录过于频繁，请5分钟后再试");
         }
 
         Long comboCount = incrWithExpire(comboKey, WINDOW_SECONDS);
@@ -109,7 +109,7 @@ public class LoginServiceImpl extends ServiceImpl<LoginMapper, User> implements 
         }
 
         try {
-            // 查询用户信息（先�?Redis 缓存�?
+            // 查询用户信息（先查 Redis 缓存）
             String userCacheKey = "cache:user:" + username;
             String userJson = stringRedisTemplate.opsForValue().get(userCacheKey);
 
@@ -129,17 +129,17 @@ public class LoginServiceImpl extends ServiceImpl<LoginMapper, User> implements 
                 // bcrypt 存储
                 matched = passwordEncoder.matches(inputPassword, dbPassword);
             } else {
-                // 兼容明文旧数据：如果明文匹配则把密码升级�?bcrypt
+                // 兼容明文旧数据：如果明文匹配则把密码升级为 bcrypt
                 if (dbPassword != null && dbPassword.equals(inputPassword)) {
                     matched = true;
                     try {
                         String newHash = passwordEncoder.encode(inputPassword);
                         dbUser.setPassword(newHash);
-                        updateById(dbUser); // 更新数据库中的加密密�?
+                        updateById(dbUser); // 更新数据库中的加密密码
                         // 刷新缓存
                         stringRedisTemplate.opsForValue().set(userCacheKey, JSONUtil.toJsonStr(dbUser), 30, TimeUnit.MINUTES);
                     } catch (Exception e) {
-                        log.warn("密码升级�?bcrypt 失败: {}", e.getMessage());
+                        log.warn("密码升级为 bcrypt 失败: {}", e.getMessage());
                     }
                 } else {
                     matched = false;
@@ -155,11 +155,11 @@ public class LoginServiceImpl extends ServiceImpl<LoginMapper, User> implements 
             stringRedisTemplate.delete(userKey);
             stringRedisTemplate.delete(comboKey);
 
-            // 生成 JTI 并存�?Redis
+            // 生成 JTI 并存入 Redis
             String jti = UUID.randomUUID().toString();
             String loginKey = "login:user:" + dbUser.getId();
             stringRedisTemplate.opsForValue().set(loginKey, jti, 3, TimeUnit.DAYS);
-            log.info("用户 {} 登录，生�?JTI: {}", dbUser.getId(), jti);
+            log.info("用户 {} 登录，生成 JTI: {}", dbUser.getId(), jti);
 
             Map<String, Object> claims = new HashMap<>();
             claims.put("id", dbUser.getId());
@@ -167,7 +167,7 @@ public class LoginServiceImpl extends ServiceImpl<LoginMapper, User> implements 
             claims.put("jti", jti);
             String token = JWT.generateToken(claims);
 
-            // �?token -> user 映射供拦截器使用
+            // 存 token -> user 映射供拦截器使用
             UserDTO userDTO = BeanUtil.copyProperties(dbUser, UserDTO.class);
             Map<String, Object> userMap = BeanUtil.beanToMap(userDTO, new HashMap<>(),
                     new CopyOptions()
@@ -204,6 +204,6 @@ public class LoginServiceImpl extends ServiceImpl<LoginMapper, User> implements 
         } catch (Exception e) {
             log.error("注销异常", e);
         }
-        return Result.success("退出成�?);
+        return Result.success("退出成功");
     }
 }

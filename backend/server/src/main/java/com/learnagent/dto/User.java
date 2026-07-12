@@ -1,4 +1,4 @@
-﻿package com.learnagent.dto;
+package com.learnagent.dto;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;

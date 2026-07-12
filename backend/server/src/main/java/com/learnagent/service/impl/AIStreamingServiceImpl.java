@@ -1,4 +1,4 @@
-﻿package com.learnagent.service.impl;
+package com.learnagent.service.impl;
 
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -67,18 +67,18 @@ public class AIStreamingServiceImpl implements AIStreamingService {
     private static final String DEFAULT_REPORT_MODE = "emergency";
     private static final boolean DEFAULT_SHOW_THINKING = true;
 
-    /** 发送给模型的历史上下文最大字符数，防止超出模�?Token 上限 */
+    /** 发送给模型的历史上下文最大字符数，防止超出模型 Token 上限 */
     private static final int MAX_HISTORY_CHARS = 8000;
     /** 流式响应逐块最大等待时间，超时视为模型挂起 */
     private static final Duration CHUNK_TIMEOUT = Duration.ofSeconds(300);
-    /** 单行 SSE 数据最大字符数�? MB），超过此限制的行将被截断并发�?warning 事件 */
+    /** 单行 SSE 数据最大字符数（1 MB），超过此限制的行将被截断并发送 warning 事件 */
     private static final int MAX_LINE_LENGTH = 1_048_576;
     /** 单个持久化任务最大重试次数，超过后永久丢弃（可接入告警） */
     private static final int MAX_PERSIST_RETRIES = 3;
 
     /**
-     * 持久化失败重试任务，记录一次对话的完整上下文及当前重试次数�?
-     * 应用重启后队列清空，生产环境可替换为 Redis Stream 实现跨实例持久化�?
+     * 持久化失败重试任务，记录一次对话的完整上下文及当前重试次数。
+     * 应用重启后队列清空，生产环境可替换为 Redis Stream 实现跨实例持久化。
      */
     private record PersistenceTask(
             Long userId,
@@ -89,7 +89,7 @@ public class AIStreamingServiceImpl implements AIStreamingService {
             List<String> images,
             int retryCount) {}
 
-    /** 持久化失败重试队列（内存级，线程安全�?*/
+    /** 持久化失败重试队列（内存级，线程安全） */
     private final ConcurrentLinkedQueue<PersistenceTask> retryQueue = new ConcurrentLinkedQueue<>();
 
     @PostConstruct
@@ -97,9 +97,9 @@ public class AIStreamingServiceImpl implements AIStreamingService {
         try {
             RSemaphore semaphore = redissonClient.getSemaphore(SEMAPHORE_KEY);
             semaphore.trySetPermits(SEMAPHORE_PERMITS);
-            log.info("初始�?semaphore 完成: key={}, permits={}", SEMAPHORE_KEY, SEMAPHORE_PERMITS);
+            log.info("初始化 semaphore 完成: key={}, permits={}", SEMAPHORE_KEY, SEMAPHORE_PERMITS);
         } catch (Exception e) {
-            log.warn("初始�?semaphore 失败: {}", e.getMessage(), e);
+            log.warn("初始化 semaphore 失败: {}", e.getMessage(), e);
         }
     }
 
@@ -111,7 +111,7 @@ public class AIStreamingServiceImpl implements AIStreamingService {
         Talk talk = Talk.builder()
                 .id(talkId)
                 .userId(userId)
-                .title("新对�?)
+                .title("新对话")
                 .content("")
                 .createTime(now)
                 .updateTime(now)
@@ -123,7 +123,7 @@ public class AIStreamingServiceImpl implements AIStreamingService {
             boolean saved = talkService.save(talk);
             log.info("talkService.save 返回: {} (talkId={})", saved, talkId);
             if (!saved) {
-                throw new RuntimeException("创建新对话失�?);
+                throw new RuntimeException("创建新对话失败");
             }
         } catch (Exception e) {
             log.error("保存 Talk 异常: {}", e.getMessage(), e);
@@ -153,9 +153,9 @@ public class AIStreamingServiceImpl implements AIStreamingService {
     @Transactional(readOnly = true)
     @Override
     public List<ContDTO> getPreContent(Long userId, Long talkId) {
-        // 直接查数据库，不�?Redis 缓存
-        // 原因：Redis 缓存�?images 字段已被剔除（避免大字段膨胀），
-        //       前端加载历史记录时需要完整的图片数据，必须从 DB �?
+        // 直接查数据库，不走 Redis 缓存
+        // 原因：Redis 缓存中 images 字段已被剔除（避免大字段膨胀），
+        //       前端加载历史记录时需要完整的图片数据，必须从 DB 取
         List<Cont> history = contService.list(
                 new LambdaQueryWrapper<Cont>()
                         .eq(Cont::getUserId, userId)
@@ -166,13 +166,13 @@ public class AIStreamingServiceImpl implements AIStreamingService {
 
         return history.stream()
                 .map(cont -> {
-                    // �?images JSON 字符串反序列化回 List<String>，失败时降级为空列表
+                    // 将 images JSON 字符串反序列化回 List<String>，失败时降级为空列表
                     List<String> imageList = Collections.emptyList();
                     if (cont.getImages() != null && !cont.getImages().isEmpty()) {
                         try {
                             imageList = objectMapper.readValue(cont.getImages(), new TypeReference<>() {});
                         } catch (Exception e) {
-                            log.warn("图片列表反序列化失败，降级为空列�? contId={}", cont.getId());
+                            log.warn("图片列表反序列化失败，降级为空列表: contId={}", cont.getId());
                         }
                     }
                     return ContDTO.builder()
@@ -192,7 +192,7 @@ public class AIStreamingServiceImpl implements AIStreamingService {
             log.debug("限流 tryAcquire: key={}, rate={}, seconds={}, result={}", key, rate, seconds, ok);
             return ok;
         } catch (Exception e) {
-            log.warn("限流器操作失�? key={}, err={}", key, e.getMessage(), e);
+            log.warn("限流器操作失败: key={}, err={}", key, e.getMessage(), e);
             return false;
         }
     }
@@ -229,25 +229,25 @@ public class AIStreamingServiceImpl implements AIStreamingService {
                                    String reportMode) {
 
         if (userId == null) {
-            return Flux.just(buildError("未登�?));
+            return Flux.just(buildError("未登录"));
         }
         if (StrUtil.isBlank(token)) {
             return Flux.just(buildError("缺少登录令牌"));
         }
         if (!allowAICircuit()) {
-            return Flux.just(buildError("AI 服务当前不可用，请稍后重�?));
+            return Flux.just(buildError("AI 服务当前不可用，请稍后重试"));
         }
 
         // ========= 1️⃣ 自动创建对话 =========
         if (talkId != null) {
             Talk existingTalk = talkService.getById(talkId);
             if (existingTalk == null || !userId.equals(existingTalk.getUserId())) {
-                log.warn("talkId={} 不存在或不属�?userId={}，自动创建新对话", talkId, userId);
+                log.warn("talkId={} 不存在或不属于 userId={}，自动创建新对话", talkId, userId);
                 talkId = createNewTalk(userId);
             }
         } else {
             talkId = createNewTalk(userId);
-            log.info("talkId �?null，自动创建新对话: userId={}", userId);
+            log.info("talkId 为 null，自动创建新对话: userId={}", userId);
         }
 
         final Long finalTalkId = talkId;
@@ -257,10 +257,10 @@ public class AIStreamingServiceImpl implements AIStreamingService {
         final String finalReportMode = (reportMode != null && !reportMode.isBlank()) ? reportMode : DEFAULT_REPORT_MODE;
         final boolean showThinking = DEFAULT_SHOW_THINKING;
 
-        // 图片校验：最�?3 张，单张 Base64 解码后不超过 10MB
+        // 图片校验：最多 3 张，单张 Base64 解码后不超过 10MB
         if (images != null && !images.isEmpty()) {
             if (images.size() > 3) {
-                return Flux.just(buildError("最多上�?3 张图�?));
+                return Flux.just(buildError("最多上传 3 张图片"));
             }
             for (String img : images) {
                 try {
@@ -282,7 +282,7 @@ public class AIStreamingServiceImpl implements AIStreamingService {
         request.put("token", requestToken);
         request.put("report_mode", finalReportMode);
         request.put("show_thinking", showThinking);
-        // 影像识别：有图片时传�?images 列表，Python 层据此走 vision 分支
+        // 影像识别：有图片时传入 images 列表，Python 层据此走 vision 分支
         if (images != null && !images.isEmpty()) {
             request.put("images", images);
         }
@@ -300,12 +300,12 @@ public class AIStreamingServiceImpl implements AIStreamingService {
                 .bodyToFlux(String.class)
                 // 背压控制：限制每次向上游请求的元素数量，防止 Python 推流速度远超 Java 处理能力
                 .limitRate(32)
-                // 每个数据块最多等�?CHUNK_TIMEOUT，防止模型中途挂起导致连接永久卡�?
+                // 每个数据块最多等待 CHUNK_TIMEOUT，防止模型中途挂起导致连接永久卡死
                 .timeout(CHUNK_TIMEOUT)
 
                 .filter(line -> line != null && !line.trim().isEmpty())
                 .map(String::trim)
-                // 过滤 SSE 协议层心跳注释帧（sse-starlette 发出�?": ping"），不作为业务数据处�?
+                // 过滤 SSE 协议层心跳注释帧（sse-starlette 发出的 ": ping"），不作为业务数据处理
                 .filter(line -> !line.startsWith(":"))
                 .map(line -> line.startsWith("data:")
                         ? line.substring(5).trim()
@@ -334,18 +334,18 @@ public class AIStreamingServiceImpl implements AIStreamingService {
                     return objectMapper.writeValueAsString(done);
                 }))
 
-                // done 事件先发给前端，doOnNext 随即�?boundedElastic 线程池中异步持久�?
+                // done 事件先发给前端，doOnNext 随即在 boundedElastic 线程池中异步持久化
                 // 即使持久化失败，SSE 流也已正常关闭，不影响用户侧体验
                 .doOnNext(eventJson -> {
                     try {
                         JsonNode node = objectMapper.readTree(eventJson);
                         if (!"done".equalsIgnoreCase(node.path("type").asText())) return;
 
-                        // done 事件发出�?fullAnswer / generatedTitle 已稳定，可安全快�?
+                        // done 事件发出时 fullAnswer / generatedTitle 已稳定，可安全快照
                         final String snapshotAnswer = fullAnswer.toString();
                         final String snapshotTitle = generatedTitle[0];
                         if (StrUtil.isBlank(question) || snapshotAnswer.isEmpty()) {
-                            log.debug("跳过持久�? question �?answer 为空, talkId={}", finalTalkId);
+                            log.debug("跳过持久化: question 或 answer 为空, talkId={}", finalTalkId);
                             return;
                         }
 
@@ -370,8 +370,8 @@ public class AIStreamingServiceImpl implements AIStreamingService {
                     log.error("调用 AI 服务失败: status={}, body={}", e.getStatusCode(), e.getResponseBodyAsString(), e);
                     // 401 说明两端 JWT 密钥不一致，给出明确提示；其余返回通用消息，不暴露内部细节
                     String msg = e.getStatusCode().value() == 401
-                            ? "AI 服务认证失败，请检�?AI_JWT_SECRET 配置是否与后�?AI_API_SHARED_JWT_SECRET 一�?
-                            : "AI 服务暂时不可用，请稍后重�?;
+                            ? "AI 服务认证失败，请检查 AI_JWT_SECRET 配置是否与后端 AI_API_SHARED_JWT_SECRET 一致"
+                            : "AI 服务暂时不可用，请稍后重试";
                     return buildErrorAndDone(finalTalkId, msg);
                 })
                 .onErrorResume(e -> {
@@ -385,21 +385,21 @@ public class AIStreamingServiceImpl implements AIStreamingService {
                     return buildErrorAndDone(finalTalkId, "AI 服务异常，请稍后重试");
                 })
 
-                .doFinally(signal -> log.info("流完�? signal={}", signal));
+                .doFinally(signal -> log.info("流完成: signal={}", signal));
     }
 
     /**
-     * 解析 Python 模型层单�?SSE 事件 JSON，映射为 Java 侧标准事件字符串�?
+     * 解析 Python 模型层单行 SSE 事件 JSON，映射为 Java 侧标准事件字符串。
      *
      * <p>错误码约定（来自 Python error_codes.py）：
      * <ul>
-     *   <li>E1001 �?模型推理超时，retryable=true</li>
-     *   <li>E1002 �?模型拒绝回答（安全限制），retryable=false</li>
-     *   <li>E1003 �?模型 OOM，retryable=true</li>
-     *   <li>E1099 �?模型层未知错误，retryable=false</li>
-     *   <li>E2xxx �?Java 服务层错误（当前�?onErrorResume 中产生）</li>
+     *   <li>E1001 — 模型推理超时，retryable=true</li>
+     *   <li>E1002 — 模型拒绝回答（安全限制），retryable=false</li>
+     *   <li>E1003 — 模型 OOM，retryable=true</li>
+     *   <li>E1099 — 模型层未知错误，retryable=false</li>
+     *   <li>E2xxx — Java 服务层错误（当前在 onErrorResume 中产生）</li>
      * </ul>
-     * E1xxx 记录�?WARN（模型侧问题），E2xxx 记录�?ERROR（本层问题）�?
+     * E1xxx 记录为 WARN（模型侧问题），E2xxx 记录为 ERROR（本层问题）。
      */
     private Flux<String> parseModelLine(String line,
                                         Long talkId,
@@ -408,13 +408,13 @@ public class AIStreamingServiceImpl implements AIStreamingService {
                                         StringBuilder fullAnswer) {
         // ── 超长行保护：解析前先检查长度，防止 OOM ──────────────────────────────
         if (line.length() > MAX_LINE_LENGTH) {
-            log.error("接收到超�?SSE 行，已截断拒绝解�? length={}, talkId={}, preview={}",
+            log.error("接收到超长 SSE 行，已截断拒绝解析: length={}, talkId={}, preview={}",
                     line.length(), talkId, line.substring(0, 200));
             try {
                 Map<String, Object> warning = new HashMap<>();
                 warning.put("type", "warning");
                 warning.put("talkId", talkId.toString());
-                warning.put("message", "单条消息超长已截�?);
+                warning.put("message", "单条消息超长已截断");
                 return Flux.just(objectMapper.writeValueAsString(warning));
             } catch (Exception ex) {
                 return Flux.empty();
@@ -425,7 +425,7 @@ public class AIStreamingServiceImpl implements AIStreamingService {
             JsonNode json = objectMapper.readTree(line);
             String type = json.path("type").asText("");
 
-            // done 事件：提�?name/all_info/profile_dimensions 后结束流
+            // done 事件：提取 name/all_info/profile_dimensions 后结束流
             if ("done".equalsIgnoreCase(type)) {
                 String name = json.path("name").asText("");
                 if (StrUtil.isNotBlank(name)) {
@@ -438,10 +438,10 @@ public class AIStreamingServiceImpl implements AIStreamingService {
                     updatedAllInfo[0] = allInfo;
                 }
 
-                // 提取 profile_dimensions 并透传给前端（用于自动保存学习画像�?
+                // 提取 profile_dimensions 并透传给前端（用于自动保存学习画像）
                 JsonNode profileDimensionsNode = json.path("profile_dimensions");
                 if (!profileDimensionsNode.isMissingNode() && !profileDimensionsNode.isNull()) {
-                    log.info("�?检测到画像维度数据，透传给前�? talkId={}", talkId);
+                    log.info("✅ 检测到画像维度数据，透传给前端, talkId={}", talkId);
                     Map<String, Object> doneResp = baseResponse(talkId, generatedTitle[0], "done");
                     doneResp.put("profile_dimensions", objectMapper.convertValue(
                             profileDimensionsNode,
@@ -456,45 +456,45 @@ public class AIStreamingServiceImpl implements AIStreamingService {
             // error 事件：解析结构化错误码，分级日志，透传完整 error 对象
             if ("error".equalsIgnoreCase(type)) {
                 JsonNode errorNode = json.path("error");
-                // 提取结构化字段，�?error 对象缺失则降级到旧版 content 字段
+                // 提取结构化字段，若 error 对象缺失则降级到旧版 content 字段
                 String errorCode = errorNode.path("code").asText("");
                 boolean retryable = errorNode.path("retryable").asBoolean(false);
                 String detail = errorNode.path("detail").asText("");
-                // 优先�?error.message，降级到顶层 content（旧�?Python 兼容�?
+                // 优先取 error.message，降级到顶层 content（旧版 Python 兼容）
                 String errorMessage = errorNode.isMissingNode()
                         ? json.path("content").asText("AI服务异常")
                         : errorNode.path("message").asText(
                                 json.path("content").asText("AI服务异常"));
 
-                // 按错误码前缀分级日志：E1xxx=模型�?WARN) / E2xxx=服务�?ERROR) / 其他(ERROR)
+                // 按错误码前缀分级日志：E1xxx=模型层(WARN) / E2xxx=服务层(ERROR) / 其他(ERROR)
                 if (errorCode.startsWith("E1")) {
-                    log.warn("模型层错误事�? talkId={}, code={}, retryable={}, message={}, detail={}",
+                    log.warn("模型层错误事件: talkId={}, code={}, retryable={}, message={}, detail={}",
                             talkId, errorCode, retryable, errorMessage, detail);
                 } else if (errorCode.startsWith("E2")) {
-                    log.error("服务层错误事�? talkId={}, code={}, retryable={}, message={}, detail={}",
+                    log.error("服务层错误事件: talkId={}, code={}, retryable={}, message={}, detail={}",
                             talkId, errorCode, retryable, errorMessage, detail);
                 } else {
-                    // 无结构化 code（旧�?Python 或未知来源）
-                    log.error("错误事件（无结构�?code�? talkId={}, message={}", talkId, errorMessage);
+                    // 无结构化 code（旧版 Python 或未知来源）
+                    log.error("错误事件（无结构化 code）: talkId={}, message={}", talkId, errorMessage);
                 }
 
-                // 构�?SSE error 输出：保留旧�?message 字段（前端向后兼容），附加完�?error 对象
+                // 构造 SSE error 输出：保留旧版 message 字段（前端向后兼容），附加完整 error 对象
                 Map<String, Object> errorResp = new HashMap<>();
                 errorResp.put("type", "error");
                 errorResp.put("talkId", talkId.toString());
-                errorResp.put("message", errorMessage);   // 旧前端读此字�?
+                errorResp.put("message", errorMessage);   // 旧前端读此字段
                 if (!errorNode.isMissingNode()) {
-                    // 透传完整结构�?error 对象，新前端/运维可直接读�?code/retryable
+                    // 透传完整结构化 error 对象，新前端/运维可直接读取 code/retryable
                     errorResp.put("error", objectMapper.convertValue(
                             errorNode, new TypeReference<Map<String, Object>>() {}));
                 }
                 return Flux.just(objectMapper.writeValueAsString(errorResp));
             }
 
-            // meta 事件：提�?all_info_update 中的汇总信息，透传给前�?
+            // meta 事件：提取 all_info_update 中的汇总信息，透传给前端
             if ("meta".equalsIgnoreCase(type)) {
                 JsonNode content = json.path("content");
-                // 提取 all_info_update 中的 all_info �?name
+                // 提取 all_info_update 中的 all_info 和 name
                 JsonNode allInfoUpdate = content.path("all_info_update");
                 if (!allInfoUpdate.isMissingNode()) {
                     String allInfo = allInfoUpdate.path("all_info").asText("");
@@ -532,7 +532,7 @@ public class AIStreamingServiceImpl implements AIStreamingService {
                 return Flux.just(objectMapper.writeValueAsString(chunkResp));
             }
 
-            // result 事件：非流式完整答案（irrelevant/knowledge 路径），追加全文并转发前�?
+            // result 事件：非流式完整答案（irrelevant/knowledge 路径），追加全文并转发前端
             if ("result".equalsIgnoreCase(type)) {
                 String chunk = json.path("content").asText("");
                 fullAnswer.append(chunk);
@@ -543,17 +543,17 @@ public class AIStreamingServiceImpl implements AIStreamingService {
 
             // ── 新事件格式（Python 重构后，LangGraph astream_events 翻译层输出）────────
 
-            // token 事件：LLM 流式输出每个 token（替代旧�?chunk/result），追加全文并透传前端
+            // token 事件：LLM 流式输出每个 token（替代旧版 chunk/result），追加全文并透传前端
             if ("token".equalsIgnoreCase(type)) {
                 String tokenContent = json.path("content").asText("");
                 fullAnswer.append(tokenContent);
-                // 映射为前端已有的 chunk 事件，保�?Vue 层向后兼�?
+                // 映射为前端已有的 chunk 事件，保持 Vue 层向后兼容
                 Map<String, Object> tokenResp = baseResponse(talkId, generatedTitle[0], "chunk");
                 tokenResp.put("content", tokenContent);
                 return Flux.just(objectMapper.writeValueAsString(tokenResp));
             }
 
-            // node_start 事件：LangGraph 节点开始执行（替代旧版 thinking），透传�?thinking 事件
+            // node_start 事件：LangGraph 节点开始执行（替代旧版 thinking），透传为 thinking 事件
             if ("node_start".equalsIgnoreCase(type)) {
                 String node = json.path("node").asText("");
                 String label = json.path("label").asText("");
@@ -578,8 +578,8 @@ public class AIStreamingServiceImpl implements AIStreamingService {
                 return Flux.empty();
             }
 
-            // 未知 type 兜底：包装为 meta 事件透传，不丢弃数据，log.info 方便未来扩展时发�?
-            log.info("收到未知 type 事件，透传�?meta: type={}, talkId={}", type, talkId);
+            // 未知 type 兜底：包装为 meta 事件透传，不丢弃数据，log.info 方便未来扩展时发现
+            log.info("收到未知 type 事件，透传为 meta: type={}, talkId={}", type, talkId);
             Map<String, Object> unknownResp = baseResponse(talkId, generatedTitle[0], "meta");
             unknownResp.put("originalType", type);
             unknownResp.put("content", objectMapper.convertValue(
@@ -588,8 +588,8 @@ public class AIStreamingServiceImpl implements AIStreamingService {
 
         } catch (Exception e) {
             // JSON 解析失败或事件处理异常：warn 级别 + 截断原始行，跳过本条，不终止 Flux
-            String preview = line.length() > 200 ? line.substring(0, 200) + "�? : line;
-            log.warn("解析 SSE 行失败，已跳�? talkId={}, err={}, preview={}",
+            String preview = line.length() > 200 ? line.substring(0, 200) + "…" : line;
+            log.warn("解析 SSE 行失败，已跳过: talkId={}, err={}, preview={}",
                     talkId, e.getMessage(), preview);
             return Flux.empty();
         }
@@ -660,7 +660,7 @@ public class AIStreamingServiceImpl implements AIStreamingService {
             if (talk == null) return;
 
             // 只在还是“新对话”时更新，避免覆盖用户修改的标题
-            if ("新对�?.equals(talk.getTitle())) {
+            if ("新对话".equals(talk.getTitle())) {
                 talk.setTitle(title.trim());
                 talkService.updateById(talk);
             }
@@ -670,22 +670,22 @@ public class AIStreamingServiceImpl implements AIStreamingService {
     }
 
     /**
-     * 执行持久化并清理 Redis 历史缓存�?
-     * �?doOnNext 的异�?Mono �?@Scheduled 重试任务共同调用�?
+     * 执行持久化并清理 Redis 历史缓存。
+     * 供 doOnNext 的异步 Mono 和 @Scheduled 重试任务共同调用。
      */
     private void persistAndCleanCache(Long userId, Long talkId,
                                       String question, String answer, String title, List<String> images) {
-        log.info("异步持久化开�? talkId={}, answerLen={}", talkId, answer.length());
+        log.info("异步持久化开始: talkId={}, answerLen={}", talkId, answer.length());
         conversationPersistenceService.persistConversation(
                 userId, talkId, question, answer, "", title, images);
-        // 持久化成功后清理历史缓存，保证下一轮对话能重新加载最新记�?
+        // 持久化成功后清理历史缓存，保证下一轮对话能重新加载最新记录
         stringRedisTemplate.delete("chat:history:" + userId + ":" + talkId);
-        log.info("异步持久化完成，已清理历史缓�? talkId={}", talkId);
+        log.info("异步持久化完成，已清理历史缓存: talkId={}", talkId);
     }
 
     /**
-     * 定时重试失败的持久化任务，每 30 秒执行一次�?
-     * 超过 MAX_PERSIST_RETRIES 次的任务将被永久丢弃并记�?ERROR 日志（可对接告警）�?
+     * 定时重试失败的持久化任务，每 30 秒执行一次。
+     * 超过 MAX_PERSIST_RETRIES 次的任务将被永久丢弃并记录 ERROR 日志（可对接告警）。
      */
     @Scheduled(fixedDelay = 30_000)
     public void retryFailedPersistence() {
@@ -693,24 +693,24 @@ public class AIStreamingServiceImpl implements AIStreamingService {
 
         // 快照当前队列大小，只重试本批次任务，避免无限循环处理新入队的任务
         int batchSize = retryQueue.size();
-        log.info("持久化重试定时任务启�? 当前队列 {} 个任�?, batchSize);
+        log.info("持久化重试定时任务启动: 当前队列 {} 个任务", batchSize);
 
         for (int i = 0; i < batchSize; i++) {
             PersistenceTask task = retryQueue.poll();
             if (task == null) break;
 
             if (task.retryCount() >= MAX_PERSIST_RETRIES) {
-                log.error("持久化重试已达上�?({} �?，永久丢�? talkId={}", MAX_PERSIST_RETRIES, task.talkId());
+                log.error("持久化重试已达上限 ({} 次)，永久丢弃: talkId={}", MAX_PERSIST_RETRIES, task.talkId());
                 continue;
             }
 
             try {
                 persistAndCleanCache(task.userId(), task.talkId(),
                         task.question(), task.answer(), task.title(), task.images());
-                log.info("持久化重试成�? talkId={}, retryCount={}", task.talkId(), task.retryCount());
+                log.info("持久化重试成功: talkId={}, retryCount={}", task.talkId(), task.retryCount());
             } catch (Exception e) {
                 int nextRetry = task.retryCount() + 1;
-                log.warn("持久化重试失�?({}/{}): talkId={}, err={}",
+                log.warn("持久化重试失败 ({}/{}): talkId={}, err={}",
                         nextRetry, MAX_PERSIST_RETRIES, task.talkId(), e.getMessage(), e);
                 // 重新入队，retryCount + 1
                 retryQueue.offer(new PersistenceTask(
@@ -732,7 +732,7 @@ public class AIStreamingServiceImpl implements AIStreamingService {
         if (history == null || history.isEmpty()) return "";
 
         if (history.size() % 2 != 0) {
-            log.warn("历史记录数量为奇�?({})，丢弃末尾孤立条目以保持角色对齐: userId={}, talkId={}",
+            log.warn("历史记录数量为奇数 ({})，丢弃末尾孤立条目以保持角色对齐: userId={}, talkId={}",
                     history.size(), userId, talkId);
             history = history.subList(0, history.size() - 1);
         }
@@ -743,22 +743,22 @@ public class AIStreamingServiceImpl implements AIStreamingService {
         }
         String result = sb.toString();
 
-        // 超出上限时从头部截断，保留最近的对话轮次，避免超过模�?Token 上限
+        // 超出上限时从头部截断，保留最近的对话轮次，避免超过模型 Token 上限
         if (result.length() > MAX_HISTORY_CHARS) {
             result = result.substring(result.length() - MAX_HISTORY_CHARS);
-            // 截到第一个完整行，避免从行中间截�?
+            // 截到第一个完整行，避免从行中间截断
             int firstNewline = result.indexOf('\n');
             if (firstNewline >= 0 && firstNewline < result.length() - 1) {
                 result = result.substring(firstNewline + 1);
             }
-            log.warn("历史上下文超�?{} 字符限制已截�? userId={}, talkId={}", MAX_HISTORY_CHARS, userId, talkId);
+            log.warn("历史上下文超过 {} 字符限制已截断: userId={}, talkId={}", MAX_HISTORY_CHARS, userId, talkId);
         }
         return result;
     }
 
     private boolean allowAICircuit() {
         String state = stringRedisTemplate.opsForValue().get("ai:circuit");
-        log.debug("检查熔断开关状�? {}", state);
+        log.debug("检查熔断开关状态: {}", state);
         return !"open".equals(state);
     }
 
@@ -772,10 +772,10 @@ public class AIStreamingServiceImpl implements AIStreamingService {
                 log.debug("历史缓存命中: key={}, size={}", key, cached == null ? 0 : cached.size());
                 return cached;
             } catch (Exception e) {
-                log.error("解析历史记录缓存失败，将降级查询数据�?, e);
+                log.error("解析历史记录缓存失败，将降级查询数据库", e);
             }
         } else {
-            log.debug("历史缓存未命�? key={}", key);
+            log.debug("历史缓存未命中: key={}", key);
         }
 
         return reloadHistoryToCache(userId, talkId);
@@ -789,7 +789,7 @@ public class AIStreamingServiceImpl implements AIStreamingService {
                         .orderByAsc(Cont::getId)
         );
 
-        log.debug("�?DB 加载历史记录: userId={}, talkId={}, size={}", userId, talkId, history == null ? 0 : history.size());
+        log.debug("从 DB 加载历史记录: userId={}, talkId={}, size={}", userId, talkId, history == null ? 0 : history.size());
 
         if (history == null) {
             history = Collections.emptyList();
@@ -797,8 +797,8 @@ public class AIStreamingServiceImpl implements AIStreamingService {
 
         try {
             String key = buildHistoryKey(userId, talkId);
-            // 存入缓存前将 images 字段置空，避�?Base64 大字段撑�?Redis
-            // images 仅在前端请求历史记录时从数据库实时读取（getPreContent �?DB 查询�?
+            // 存入缓存前将 images 字段置空，避免 Base64 大字段撑爆 Redis
+            // images 仅在前端请求历史记录时从数据库实时读取（getPreContent 走 DB 查询）
             List<Cont> cacheList = history.stream()
                     .map(c -> Cont.builder()
                             .id(c.getId())
@@ -847,13 +847,13 @@ public class AIStreamingServiceImpl implements AIStreamingService {
                     .timeout(Duration.ofSeconds(120))
                     .block();
         } catch (Exception e) {
-            log.error("同步调用模型层失�? uri={}, err={}", uri, e.getMessage(), e);
-            throw new RuntimeException("模型层调用失�? " + e.getMessage(), e);
+            log.error("同步调用模型层失败: uri={}, err={}", uri, e.getMessage(), e);
+            throw new RuntimeException("模型层调用失败: " + e.getMessage(), e);
         }
     }
 
     /**
-     * 流式转发�?Python 模型层（SSE 代理，用于医学多模态病例分析等流式接口�?
+     * 流式转发到 Python 模型层（SSE 代理，用于医学多模态病例分析等流式接口）
      */
     @Override
     public Flux<ServerSentEvent<String>> streamToModel(String uri, Map<String, Object> body, String token) {
@@ -886,7 +886,7 @@ public class AIStreamingServiceImpl implements AIStreamingService {
                 .onErrorResume(e -> {
                     log.error("SSE流式转发失败: uri={}, err={}", uri, e.getMessage());
                     return Flux.just(ServerSentEvent.<String>builder()
-                            .data("{\"type\":\"error\",\"content\":\"模型服务暂时不可�? " + e.getMessage() + "\"}")
+                            .data("{\"type\":\"error\",\"content\":\"模型服务暂时不可用: " + e.getMessage() + "\"}")
                             .build());
                 });
     }

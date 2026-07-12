@@ -1,4 +1,4 @@
-﻿package com.learnagent.service.impl;
+package com.learnagent.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.bean.copier.CopyOptions;
@@ -10,6 +10,7 @@ import com.learnagent.dto.UserDTO;
 import com.learnagent.dto.User;
 import com.learnagent.entity.Result;
 import com.learnagent.service.AIStreamingService;
+import com.learnagent.service.IRegiService;
 import com.learnagent.utils.IpUtil;
 import com.learnagent.utils.JWT;
 import lombok.RequiredArgsConstructor;
@@ -41,7 +42,7 @@ public class RegiServiceImpl extends ServiceImpl<RegiMapper, User> implements IR
     private final AIStreamingService aiStreamingService; // 新增注入
 
     /**
-     * 使用 redisson �?rate limiter 尝试获取许可
+     * 使用 redisson 的 rate limiter 尝试获取许可
      */
     private boolean tryAcquire(String key, int rate, int seconds) {
         var limiter = redissonClient.getRateLimiter(key);
@@ -127,7 +128,7 @@ public class RegiServiceImpl extends ServiceImpl<RegiMapper, User> implements IR
                 return Result.error("用户名已存在");
             }
 
-            // 让数据库自动填充时间（若你的�?实体支持�?
+            // 让数据库自动填充时间（若你的表/实体支持）
             u.setCreateTime(null);
             u.setUpdateTime(null);
 
@@ -137,7 +138,7 @@ public class RegiServiceImpl extends ServiceImpl<RegiMapper, User> implements IR
                 return Result.error("注册失败");
             }
 
-            // 注册成功，删除限�?key（避免后续被误锁�?
+            // 注册成功，删除限流 key（避免后续被误锁）
             stringRedisTemplate.delete(registerKey);
 
             // 缓存 user（备用）
@@ -148,23 +149,23 @@ public class RegiServiceImpl extends ServiceImpl<RegiMapper, User> implements IR
             Long newId = u.getId();
             log.info("用户注册成功: username={}, id={}", username, newId);
 
-            // 新增：在注册时创建默认对�?
+            // 新增：在注册时创建默认对话
             Long defaultTalkId = aiStreamingService.createNewTalk(newId);
-            log.info("注册时创建默认对�? userId={}, talkId={}", newId, defaultTalkId);
+            log.info("注册时创建默认对话: userId={}, talkId={}", newId, defaultTalkId);
 
             // 生成 jti 并保存在 login:user:<id> 供后续会话管理使用（3天）
             String jti = UUID.randomUUID().toString();
             String loginKey = "login:user:" + newId;
             stringRedisTemplate.opsForValue().set(loginKey, jti, 3, TimeUnit.DAYS);
 
-            // 生成 JWT（包�?id、name、jti�?
+            // 生成 JWT（包括 id、name、jti）
             Map<String, Object> claims = new HashMap<>();
             claims.put("id", newId);
             claims.put("name", username);
             claims.put("jti", jti);
             String token = JWT.generateToken(claims);
 
-            // �?user DTO 转为 map，并�?hash 存入 redis，key = user:token:<token>
+            // 将 user DTO 转为 map，并以 hash 存入 redis，key = user:token:<token>
             UserDTO userDTO = BeanUtil.copyProperties(u, UserDTO.class);
             Map<String, Object> userMap = BeanUtil.beanToMap(userDTO, new HashMap<>(),
                     new CopyOptions()
@@ -178,7 +179,7 @@ public class RegiServiceImpl extends ServiceImpl<RegiMapper, User> implements IR
                 stringRedisTemplate.expire(tokenKey, 120, TimeUnit.MINUTES);
             }
 
-            // 直接返回 token、userId �?talkId 给前�?
+            // 直接返回 token、userId 和 talkId 给前端
             Map<String, Object> resp = new HashMap<>();
             resp.put("token", token);
             resp.put("userId", newId);

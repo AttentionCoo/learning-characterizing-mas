@@ -1,4 +1,4 @@
-﻿package com.learnagent.controller;
+package com.learnagent.controller;
 
 import com.learnagent.entity.Result;
 import lombok.RequiredArgsConstructor;
@@ -32,13 +32,13 @@ public class MonitorController {
             String successCountStr = stringRedisTemplate.opsForValue().get("login:success:count");
             long successCount = successCountStr != null ? Long.parseLong(successCountStr) : 0;
             
-            // 获取熔断器状�?
+            // 获取熔断器状态
             String circuitBreakerState = stringRedisTemplate.opsForValue().get("login:circuit:breaker");
             if (circuitBreakerState == null) {
                 circuitBreakerState = "closed";
             }
             
-            // 计算失败�?
+            // 计算失败率
             long totalRequests = failureCount + successCount;
             double failureRate = totalRequests > 0 ? (double) failureCount / totalRequests * 100 : 0;
             
@@ -50,8 +50,8 @@ public class MonitorController {
             
             return Result.success(status);
         } catch (Exception e) {
-            log.error("获取限流状态异�?, e);
-            return Result.error("获取状态失�?);
+            log.error("获取限流状态异常", e);
+            return Result.error("获取状态失败");
         }
     }
     
@@ -69,7 +69,7 @@ public class MonitorController {
             
             return Result.success("重置成功");
         } catch (Exception e) {
-            log.error("重置限流状态异�?, e);
+            log.error("重置限流状态异常", e);
             return Result.error("重置失败");
         }
     }

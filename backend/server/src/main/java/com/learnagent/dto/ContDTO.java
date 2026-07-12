@@ -1,4 +1,4 @@
-﻿package com.learnagent.dto;
+package com.learnagent.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -8,10 +8,10 @@ import lombok.NoArgsConstructor;
 import java.util.List;
 
 /**
- * 历史消息返回前端的数据结构�?
- * role: "user" �?"assistant"
+ * 历史消息返回前端的数据结构。
+ * role: "user" 或 "assistant"
  * content: 消息文本
- * images: 用户上传图片�?Base64 列表，assistant 消息为空列表
+ * images: 用户上传图片的 Base64 列表，assistant 消息为空列表
  */
 @Data
 @Builder

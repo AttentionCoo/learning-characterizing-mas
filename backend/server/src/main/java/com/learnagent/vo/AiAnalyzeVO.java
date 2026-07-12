@@ -1,4 +1,4 @@
-﻿package com.learnagent.vo;
+package com.learnagent.vo;
 
 import lombok.Data;
 

@@ -1,4 +1,4 @@
-﻿package com.learnagent.controller;
+package com.learnagent.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -63,21 +63,21 @@ public class LearningPathController {
         response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
 
         if (ThreadLocalUtil.getCurrentUser() == null) {
-            return Flux.just(sse("error", json("error", mapOf("message", "未登�?))));
+            return Flux.just(sse("error", json("error", mapOf("message", "未登录"))));
         }
 
         String upstreamToken = resolveToken(token, authorization);
         Long userId = ThreadLocalUtil.getCurrentUser().getId();
 
         StringBuilder questionBuilder = new StringBuilder("请为我规划学习路径：");
-        if (param.getCourseName() != null) questionBuilder.append("\n课程�?).append(param.getCourseName());
-        if (param.getGoalDescription() != null) questionBuilder.append("\n学习目标�?).append(param.getGoalDescription());
-        if (param.getDeadline() != null) questionBuilder.append("\n截止日期�?).append(param.getDeadline());
+        if (param.getCourseName() != null) questionBuilder.append("\n课程：").append(param.getCourseName());
+        if (param.getGoalDescription() != null) questionBuilder.append("\n学习目标：").append(param.getGoalDescription());
+        if (param.getDeadline() != null) questionBuilder.append("\n截止日期：").append(param.getDeadline());
         if (param.getWeeklyHours() != null) questionBuilder.append("\n每周可投入学时：").append(param.getWeeklyHours());
         if (param.getExistingKnowledge() != null && !param.getExistingKnowledge().isEmpty())
-            questionBuilder.append("\n已掌握知识点�?).append(String.join("�?, param.getExistingKnowledge()));
+            questionBuilder.append("\n已掌握知识点：").append(String.join("、", param.getExistingKnowledge()));
         if (param.getTargetKnowledge() != null && !param.getTargetKnowledge().isEmpty())
-            questionBuilder.append("\n目标知识点：").append(String.join("�?, param.getTargetKnowledge()));
+            questionBuilder.append("\n目标知识点：").append(String.join("、", param.getTargetKnowledge()));
 
         QuesParam quesParam = new QuesParam();
         quesParam.setQuestion(questionBuilder.toString());
@@ -135,7 +135,7 @@ public class LearningPathController {
         try {
             String courseName = Optional.ofNullable(param.getCourseName())
                     .filter(s -> !s.isBlank())
-                    .orElse("脑卒中诊�?);
+                    .orElse("脑卒中诊疗");
             String goal = Optional.ofNullable(param.getGoalDescription())
                     .filter(s -> !s.isBlank())
                     .orElse("个性化学习路径");
@@ -175,7 +175,7 @@ public class LearningPathController {
                 step.setUpdateTime(now);
                 learningPathStepMapper.insert(step);
             }
-            log.info("学习路径已落�? userId={}, pathId={}, steps={}", userId, path.getId(), titles.size());
+            log.info("学习路径已落库: userId={}, pathId={}, steps={}", userId, path.getId(), titles.size());
         } catch (Exception e) {
             log.error("学习路径落库失败", e);
         }
@@ -185,15 +185,15 @@ public class LearningPathController {
         if (content == null || content.isBlank()) return List.of("基础梳理", "专题突破", "案例训练", "综合复盘");
         List<String> titles = Arrays.stream(content.split("\\R"))
                 .map(String::trim)
-                .filter(line -> line.matches("^(#{1,6}\\s*)?((第[一二三四五六七八九�?-9]+[阶段步章节])|([0-9]+[.�?]))\\s*.*"))
+                .filter(line -> line.matches("^(#{1,6}\\s*)?((第[一二三四五六七八九十0-9]+[阶段步章节])|([0-9]+[.、)]))\\s*.*"))
                 .map(line -> line.replaceFirst("^#{1,6}\\s*", ""))
-                .map(line -> line.replaceFirst("^(第[一二三四五六七八九�?-9]+[阶段步章节]|[0-9]+[.�?])\\s*", ""))
-                .map(line -> line.replaceAll("^[�?、\\-\\s]+", "").trim())
+                .map(line -> line.replaceFirst("^(第[一二三四五六七八九十0-9]+[阶段步章节]|[0-9]+[.、)])\\s*", ""))
+                .map(line -> line.replaceAll("^[：:、\\-\\s]+", "").trim())
                 .filter(line -> !line.isBlank())
                 .limit(8)
                 .toList();
         if (!titles.isEmpty()) return titles;
-        return List.of("基础知识梳理", "核心知识点突�?, "临床案例训练", "学习效果复盘");
+        return List.of("基础知识梳理", "核心知识点突破", "临床案例训练", "学习效果复盘");
     }
 
     private String extractNearbyDescription(String content, String title) {
@@ -264,7 +264,7 @@ public class LearningPathController {
         Long userId = ThreadLocalUtil.getCurrentUser().getId();
         LearningPath path = learningPathMapper.selectById(pathId);
         if (path == null || !path.getUserId().equals(userId)) {
-            return Result.error("学习路径不存�?);
+            return Result.error("学习路径不存在");
         }
 
         Map<String, Object> data = buildPathDetail(path, userId);
@@ -277,12 +277,12 @@ public class LearningPathController {
         Long userId = ThreadLocalUtil.getCurrentUser().getId();
         LearningPath path = learningPathMapper.selectById(pathId);
         if (path == null || !path.getUserId().equals(userId)) {
-            return Result.error("学习路径不存�?);
+            return Result.error("学习路径不存在");
         }
 
         LearningPathStepEntity step = learningPathStepMapper.selectById(stepId);
         if (step == null || !step.getPathId().equals(pathId)) {
-            return Result.error("步骤不存�?);
+            return Result.error("步骤不存在");
         }
 
         if (param.getStatus() != null) step.setStatus(param.getStatus());
@@ -312,7 +312,7 @@ public class LearningPathController {
     public Result updateTaskProgress(@PathVariable Long taskId, @RequestBody StepProgressParam param) {
         LearningPathStepEntity step = learningPathStepMapper.selectById(taskId);
         if (step == null) {
-            return Result.error("步骤不存�?);
+            return Result.error("步骤不存在");
         }
         return updateStepProgress(step.getPathId(), taskId, param);
     }
@@ -322,7 +322,7 @@ public class LearningPathController {
         Long userId = ThreadLocalUtil.getCurrentUser().getId();
         LearningPath path = learningPathMapper.selectById(pathId);
         if (path == null || !path.getUserId().equals(userId)) {
-            return Result.error("学习路径不存�?);
+            return Result.error("学习路径不存在");
         }
 
         Map<String, Object> data = new HashMap<>();

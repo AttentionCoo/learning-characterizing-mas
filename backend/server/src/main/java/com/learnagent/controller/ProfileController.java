@@ -1,4 +1,4 @@
-﻿package com.learnagent.controller;
+package com.learnagent.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.learnagent.cache.SSEEventCache;
@@ -57,7 +57,7 @@ public class ProfileController {
         response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
 
         if (ThreadLocalUtil.getCurrentUser() == null) {
-            return Flux.just(sse("error", json("error", mapOf("message", "未登�?))));
+            return Flux.just(sse("error", json("error", mapOf("message", "未登录"))));
         }
 
         String upstreamToken = resolveToken(token, authorization);
@@ -240,12 +240,12 @@ public class ProfileController {
 
     private Flux<ServerSentEvent<String>> handleReconnect(String idTalkId, long lastSeq, Long finalTalkId, String finalTalkIdStr) {
         if (!finalTalkIdStr.equals(idTalkId)) {
-            return Flux.just(sse("error", json("error", mapOf("code", "E2004", "message", "talkId 不匹�?))));
+            return Flux.just(sse("error", json("error", mapOf("code", "E2004", "message", "talkId 不匹配"))));
         }
         Flux<SSEEventCache.SequencedEvent> replayStream = eventCache.getReplayStream(finalTalkIdStr, lastSeq);
         if (replayStream == null) {
             return Flux.just(
-                    sseWithId(finalTalkIdStr + ":0", "error", json("error", mapOf("code", "E2003", "message", "会话缓存已过�?))),
+                    sseWithId(finalTalkIdStr + ":0", "error", json("error", mapOf("code", "E2003", "message", "会话缓存已过期"))),
                     sse("done", json("done", mapOf("talkId", finalTalkIdStr, "name", "")))
             );
         }
@@ -324,7 +324,7 @@ public class ProfileController {
             try {
                 List<ContDTO> history = streamingService.getPreContent(userId, talkId);
                 if (history == null || history.isEmpty()) {
-                    log.info("[profile_update] 对话历史为空，跳过画像更�? userId={}, talkId={}", userId, talkId);
+                    log.info("[profile_update] 对话历史为空，跳过画像更新: userId={}, talkId={}", userId, talkId);
                     return;
                 }
                 StringBuilder conversationText = new StringBuilder();
@@ -346,20 +346,20 @@ public class ProfileController {
                         .block(Duration.ofSeconds(60));
 
                 if (responseJson == null || responseJson.isEmpty()) {
-                    log.warn("[profile_update] Python 画像解析返回�? userId={}", userId);
+                    log.warn("[profile_update] Python 画像解析返回空: userId={}", userId);
                     return;
                 }
 
                 com.fasterxml.jackson.databind.JsonNode root = objectMapper.readTree(responseJson);
                 com.fasterxml.jackson.databind.JsonNode dimensionsNode = root.path("data").path("dimensions");
                 if (dimensionsNode.isMissingNode() || !dimensionsNode.isObject()) {
-                    log.warn("[profile_update] Python 画像解析返回无维度数�? userId={}", userId);
+                    log.warn("[profile_update] Python 画像解析返回无维度数据: userId={}", userId);
                     return;
                 }
 
                 Map<String, Object> dimensions = objectMapper.convertValue(dimensionsNode, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
                 updateDimensionsInternal(userId, dimensions);
-                log.info("[profile_update] 画像自动更新成功: userId={}, 维度�?{}", userId, dimensions.size());
+                log.info("[profile_update] 画像自动更新成功: userId={}, 维度数={}", userId, dimensions.size());
             } catch (Exception e) {
                 log.error("[profile_update] 画像自动更新失败: userId={}, talkId={}, err={}", userId, talkId, e.getMessage(), e);
             }
@@ -390,7 +390,7 @@ public class ProfileController {
                 studentProfileMapper.updateById(profile);
             }
         } catch (Exception e) {
-            log.error("[profile_update] 维度持久化失�? userId={}", userId, e);
+            log.error("[profile_update] 维度持久化失败: userId={}", userId, e);
         }
     }
 }

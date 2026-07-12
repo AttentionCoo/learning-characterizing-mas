@@ -1,4 +1,4 @@
-﻿package com.learnagent.param;
+package com.learnagent.param;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;

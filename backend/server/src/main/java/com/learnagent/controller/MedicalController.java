@@ -1,4 +1,4 @@
-﻿package com.learnagent.controller;
+package com.learnagent.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -20,7 +20,8 @@ import java.util.Map;
  * 医学多模态影像分析控制器
  * Medical Multimodal Image Analysis Controller
  *
- * 代理前端请求�?Python FastAPI 模型推理层（/model/medical/*�? */
+ * 代理前端请求到 Python FastAPI 模型推理层（/model/medical/*）
+ */
 @Slf4j
 @RestController
 @CrossOrigin("*")
@@ -32,7 +33,8 @@ public class MedicalController {
     private final ObjectMapper objectMapper;
 
     /**
-     * 医学影像结构化分析（非流式，代理�?Python /model/medical/analyze-image�?     */
+     * 医学影像结构化分析（非流式，代理到 Python /model/medical/analyze-image）
+     */
     @PostMapping("/analyze-image")
     public Result analyzeImage(@RequestBody MedicalImageParam param) {
         log.info("[Medical] 收到影像分析请求 - 图片数量: {}, 问题: {}",
@@ -40,7 +42,8 @@ public class MedicalController {
                 param.getQuestion() != null ? param.getQuestion().substring(0, Math.min(50, param.getQuestion().length())) : "");
 
         try {
-            // 通过 streamingService 转发�?Python 模型�?            Map<String, Object> requestBody = Map.of(
+            // 通过 streamingService 转发到 Python 模型层
+            Map<String, Object> requestBody = Map.of(
                     "images", param.getImages() != null ? param.getImages() : java.util.Collections.emptyList(),
                     "question", param.getQuestion() != null ? param.getQuestion() : "",
                     "all_info", param.getAllInfo() != null ? param.getAllInfo() : "",
@@ -57,7 +60,8 @@ public class MedicalController {
     }
 
     /**
-     * 多模态病例综合分析（SSE 流式，代理到 Python /model/medical/analyze-case�?     */
+     * 多模态病例综合分析（SSE 流式，代理到 Python /model/medical/analyze-case）
+     */
     @PostMapping(value = "/analyze-case", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<String>> analyzeCase(
             @RequestBody MedicalImageParam param,
@@ -84,7 +88,8 @@ public class MedicalController {
     }
 
     /**
-     * 多图对比分析（代理到 Python /model/medical/compare-images�?     */
+     * 多图对比分析（代理到 Python /model/medical/compare-images）
+     */
     @PostMapping("/compare-images")
     public Result compareImages(@RequestBody MedicalImageParam param) {
         log.info("[Medical] 收到多图对比请求 - 图片数量: {}",
@@ -107,10 +112,11 @@ public class MedicalController {
     }
 
     /**
-     * DICOM元数据提取（代理�?Python /model/medical/dicom-metadata�?     */
+     * DICOM元数据提取（代理到 Python /model/medical/dicom-metadata）
+     */
     @PostMapping("/dicom-metadata")
     public Result extractDICOMMetadata(@RequestBody MedicalImageParam param) {
-        log.info("[Medical] 收到DICOM元数据提取请�?);
+        log.info("[Medical] 收到DICOM元数据提取请求");
 
         try {
             if (param.getImages() == null || param.getImages().isEmpty()) {
@@ -125,20 +131,21 @@ public class MedicalController {
             JsonNode jsonNode = objectMapper.readTree(response);
             return Result.success(jsonNode.get("data"));
         } catch (Exception e) {
-            log.error("[Medical] DICOM元数据提取失�? {}", e.getMessage(), e);
-            return Result.error("DICOM元数据提取失�? " + e.getMessage());
+            log.error("[Medical] DICOM元数据提取失败: {}", e.getMessage(), e);
+            return Result.error("DICOM元数据提取失败: " + e.getMessage());
         }
     }
 
     /**
-     * 检验报告OCR提取（代理到 Python /model/medical/ocr/lab-report�?     */
+     * 检验报告OCR提取（代理到 Python /model/medical/ocr/lab-report）
+     */
     @PostMapping("/ocr/lab-report")
     public Result extractLabReport(@RequestBody MedicalImageParam param) {
         log.info("[Medical] 收到检验报告OCR请求");
 
         try {
             if (param.getImages() == null || param.getImages().isEmpty()) {
-                return Result.error("需要检验报告图�?);
+                return Result.error("需要检验报告图片");
             }
 
             Map<String, Object> requestBody = Map.of(
@@ -157,14 +164,15 @@ public class MedicalController {
     }
 
     /**
-     * 处方OCR提取（代理到 Python /model/medical/ocr/prescription�?     */
+     * 处方OCR提取（代理到 Python /model/medical/ocr/prescription）
+     */
     @PostMapping("/ocr/prescription")
     public Result extractPrescription(@RequestBody MedicalImageParam param) {
         log.info("[Medical] 收到处方OCR请求");
 
         try {
             if (param.getImages() == null || param.getImages().isEmpty()) {
-                return Result.error("需要处方图�?);
+                return Result.error("需要处方图片");
             }
 
             Map<String, Object> requestBody = Map.of(
@@ -182,7 +190,9 @@ public class MedicalController {
     }
 
     /**
-     * DICOM �?PNG 预览转换（代理到 Python /model/medical/dicom-to-png�?     * 用于前端无法直接渲染 DICOM 文件时的缩略图预�?     */
+     * DICOM 转 PNG 预览转换（代理到 Python /model/medical/dicom-to-png）
+     * 用于前端无法直接渲染 DICOM 文件时的缩略图预览
+     */
     @PostMapping("/dicom-to-png")
     public Result dicomToPng(@RequestBody MedicalImageParam param) {
         log.info("[Medical] 收到DICOM转PNG请求");

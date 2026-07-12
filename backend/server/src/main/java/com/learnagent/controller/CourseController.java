@@ -1,4 +1,4 @@
-﻿package com.learnagent.controller;
+package com.learnagent.controller;
 
 import com.learnagent.entity.Result;
 import lombok.RequiredArgsConstructor;
@@ -22,7 +22,7 @@ public class CourseController {
         List<Map<String, Object>> courses = new ArrayList<>();
         Map<String, Object> course = new HashMap<>();
         course.put("courseId", 1);
-        course.put("name", "脑卒中诊�?);
+        course.put("name", "脑卒中诊疗");
         course.put("category", "临床医学");
         course.put("description", "涵盖脑卒中的诊断、治疗与预防");
         course.put("knowledgePointCount", 45);
@@ -39,17 +39,17 @@ public class CourseController {
     public Result getKnowledgeTree(@PathVariable Long courseId) {
         Map<String, Object> tree = new HashMap<>();
         tree.put("courseId", courseId);
-        tree.put("name", "脑卒中诊�?);
+        tree.put("name", "脑卒中诊疗");
 
         Map<String, Object> rootNode = new HashMap<>();
         rootNode.put("id", "root");
-        rootNode.put("name", "脑卒中诊�?);
+        rootNode.put("name", "脑卒中诊疗");
         rootNode.put("children", List.of(
-                Map.of("id", "ch1", "name", "神经解剖�?, "children", List.of(
-                        Map.of("id", "k1", "name", "脑的血液供�?, "difficulty", "intermediate"),
-                        Map.of("id", "k2", "name", "Willis�?, "difficulty", "advanced")
+                Map.of("id", "ch1", "name", "神经解剖学", "children", List.of(
+                        Map.of("id", "k1", "name", "脑的血液供应", "difficulty", "intermediate"),
+                        Map.of("id", "k2", "name", "Willis环", "difficulty", "advanced")
                 )),
-                Map.of("id", "ch2", "name", "脑血管疾�?, "children", List.of(
+                Map.of("id", "ch2", "name", "脑血管疾病", "children", List.of(
                         Map.of("id", "k3", "name", "缺血性脑卒中", "difficulty", "intermediate"),
                         Map.of("id", "k4", "name", "静脉溶栓", "difficulty", "advanced")
                 ))

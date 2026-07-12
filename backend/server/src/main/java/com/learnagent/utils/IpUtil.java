@@ -10,10 +10,10 @@ import java.net.UnknownHostException;
 public class IpUtil {
 
     /**
-     * 更严格的 getIp 实现�?
+     * 更严格的 getIp 实现：
      * - 仅在请求来自可信代理时才信任 X-Forwarded-For
-     * - 处理回环地址�?IPv6 ::1
-     * - 过滤�?unknown，尽量返回可�?IP
+     * - 处理回环地址和 IPv6 ::1
+     * - 过滤空/unknown，尽量返回可用 IP
      */
     public static String getIp() {
         ServletRequestAttributes attributes =
@@ -53,12 +53,12 @@ public class IpUtil {
             ip = "127.0.0.1";
         }
 
-        // 防止返回私网/loopback 被滥用时返回�?
+        // 防止返回私网/loopback 被滥用时返回空
         if (ip == null || ip.isEmpty()) {
             return "unknown";
         }
 
-        // 保证返回一个合法的字符串（不抛异常�?
+        // 保证返回一个合法的字符串（不抛异常）
         try {
             InetAddress.getByName(ip);
         } catch (UnknownHostException e) {
@@ -70,7 +70,7 @@ public class IpUtil {
 
     private static boolean isTrustedProxy(String remoteAddr) {
         if (remoteAddr == null) return false;
-        // 常见的内�?代理段判断（可按需扩展�?
+        // 常见的内网/代理段判断（可按需扩展）
         return remoteAddr.startsWith("127.")
                 || remoteAddr.startsWith("10.")
                 || remoteAddr.startsWith("192.168.")

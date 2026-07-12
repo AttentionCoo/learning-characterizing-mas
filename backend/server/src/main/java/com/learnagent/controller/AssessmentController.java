@@ -1,4 +1,4 @@
-﻿package com.learnagent.controller;
+package com.learnagent.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -67,7 +67,7 @@ public class AssessmentController {
         response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
 
         if (ThreadLocalUtil.getCurrentUser() == null) {
-            return Flux.just(sse("error", json("error", mapOf("message", "未登�?))));
+            return Flux.just(sse("error", json("error", mapOf("message", "未登录"))));
         }
 
         String upstreamToken = resolveToken(token, authorization);
@@ -77,14 +77,14 @@ public class AssessmentController {
 
         StringBuilder questionBuilder = new StringBuilder("请为我生成学习效果评估报告：\n");
         questionBuilder.append(learningDataContext);
-        if (param.getPathId() != null) questionBuilder.append("\n指定学习路径ID�?).append(param.getPathId());
-        if (param.getMessage() != null && !param.getMessage().isBlank()) questionBuilder.append("\n补充说明�?).append(param.getMessage());
-        if (param.getAssessmentType() != null) questionBuilder.append("\n评估类型�?).append(param.getAssessmentType());
-        if (param.getCourseName() != null) questionBuilder.append("\n课程�?).append(param.getCourseName());
+        if (param.getPathId() != null) questionBuilder.append("\n指定学习路径ID：").append(param.getPathId());
+        if (param.getMessage() != null && !param.getMessage().isBlank()) questionBuilder.append("\n补充说明：").append(param.getMessage());
+        if (param.getAssessmentType() != null) questionBuilder.append("\n评估类型：").append(param.getAssessmentType());
+        if (param.getCourseName() != null) questionBuilder.append("\n课程：").append(param.getCourseName());
         if (param.getTimeRange() != null) {
-            questionBuilder.append("\n时间范围�?).append(param.getTimeRange().getStart()).append(" �?").append(param.getTimeRange().getEnd());
+            questionBuilder.append("\n时间范围：").append(param.getTimeRange().getStart()).append(" 至 ").append(param.getTimeRange().getEnd());
         }
-        questionBuilder.append("\n\n请严格基于以上真实学习数据进行分析评估，不要编造数据。请给出综合评分�?-100分），并在报告中明确标注「综合评分：XX�?100」�?);
+        questionBuilder.append("\n\n请严格基于以上真实学习数据进行分析评估，不要编造数据。请给出综合评分（0-100分），并在报告中明确标注「综合评分：XX分/100」。");
 
         Long talkId = streamingService.createNewTalk(userId);
         final String finalTalkIdStr = String.valueOf(talkId);
@@ -224,15 +224,15 @@ public class AssessmentController {
             int engagementScore = Math.min(100, (completedSteps + inProgressSteps) * 15);
             dimensions.put("学习投入", engagementScore);
 
-            if (progressRate > 0.6) strengths.add("学习进度良好，已完成超过60%的学习步�?);
-            if (avgRating >= 4) strengths.add("自我评估较高，知识掌握扎�?);
-            if (progressRate < 0.3) weaknesses.add("学习进度偏慢，需要加快节�?);
-            if (avgRating > 0 && avgRating < 3) weaknesses.add("部分知识点掌握不牢，需要重点复�?);
+            if (progressRate > 0.6) strengths.add("学习进度良好，已完成超过60%的学习步骤");
+            if (avgRating >= 4) strengths.add("自我评估较高，知识掌握扎实");
+            if (progressRate < 0.3) weaknesses.add("学习进度偏慢，需要加快节奏");
+            if (avgRating > 0 && avgRating < 3) weaknesses.add("部分知识点掌握不牢，需要重点复习");
             if (completedSteps == 0) weaknesses.add("尚未完成任何学习步骤");
 
-            if (progressRate < 0.5) suggestions.add("建议按学习路径逐步推进，每天至少完成一个步�?);
+            if (progressRate < 0.5) suggestions.add("建议按学习路径逐步推进，每天至少完成一个步骤");
             if (avgRating > 0 && avgRating < 3) suggestions.add("建议对自评较低的步骤进行重点复盘");
-            suggestions.add("建议定期进行学习评估，跟踪学习效果变�?);
+            suggestions.add("建议定期进行学习评估，跟踪学习效果变化");
 
             int overallScore = (int) Math.round(progressScore * 0.4 + masteryScore * 0.4 + engagementScore * 0.2);
             data.put("overallScore", overallScore);
@@ -251,7 +251,7 @@ public class AssessmentController {
                     .mapToInt(LearningBehaviorRecord::getDuration)
                     .sum();
             int activityScore = Math.min(100, recentBehaviors.size() * 5 + totalDuration / 60);
-            dimensions.put("学习活跃�?, activityScore);
+            dimensions.put("学习活跃度", activityScore);
 
             List<LearningBehaviorRecord> quizAttempts = recentBehaviors.stream()
                     .filter(b -> "quiz_attempt".equals(b.getBehaviorType()) && b.getScore() != null)
@@ -262,20 +262,20 @@ public class AssessmentController {
                         .average().orElse(0);
                 int quizScore = (int) Math.round(avgQuizScore * 100);
                 dimensions.put("测验表现", quizScore);
-                if (avgQuizScore >= 0.8) strengths.add("测验成绩优秀，知识掌握牢�?);
+                if (avgQuizScore >= 0.8) strengths.add("测验成绩优秀，知识掌握牢固");
                 if (avgQuizScore < 0.6) {
-                    weaknesses.add("测验成绩偏低，需要加强练�?);
-                    suggestions.add("建议多做练习题，巩固薄弱知识�?);
+                    weaknesses.add("测验成绩偏低，需要加强练习");
+                    suggestions.add("建议多做练习题，巩固薄弱知识点");
                 }
             }
 
             long activeDays = recentBehaviors.stream()
                     .map(b -> b.getCreateTime().toLocalDate())
                     .distinct().count();
-            if (activeDays >= 15) strengths.add("学习频率较高，近30天活�? + activeDays + "�?);
+            if (activeDays >= 15) strengths.add("学习频率较高，近30天活跃" + activeDays + "天");
             if (activeDays < 5) {
-                weaknesses.add("学习频率偏低，近30天仅活跃" + activeDays + "�?);
-                suggestions.add("建议保持每天至少30分钟的学习时�?);
+                weaknesses.add("学习频率偏低，近30天仅活跃" + activeDays + "天");
+                suggestions.add("建议保持每天至少30分钟的学习时间");
             }
         }
 
@@ -328,7 +328,7 @@ public class AssessmentController {
     public Result getReportDetail(@PathVariable Long id) {
         EvalReport report = evalReportMapper.selectById(id);
         if (report == null) {
-            return Result.error("报告不存�?);
+            return Result.error("报告不存在");
         }
         Map<String, Object> data = new HashMap<>();
         data.put("reportId", report.getId());
@@ -395,13 +395,13 @@ public class AssessmentController {
             if (firstPath != null) {
                 param.setPathId(firstPath.getId());
             } else {
-                return Result.error("暂无学习路径，请先生成学习路径后再优�?);
+                return Result.error("暂无学习路径，请先生成学习路径后再优化");
             }
         }
 
         LearningPath path = learningPathMapper.selectById(param.getPathId());
         if (path == null || !path.getUserId().equals(userId)) {
-            return Result.error("学习路径不存�?);
+            return Result.error("学习路径不存在");
         }
 
         if (param.getEvaluationData() == null || param.getEvaluationData().isEmpty()) {
@@ -427,7 +427,7 @@ public class AssessmentController {
                     }
                     param.setEvaluationData(evalData);
                 } catch (Exception e) {
-                    log.warn("解析最新评估报告数据失�?, e);
+                    log.warn("解析最新评估报告数据失败", e);
                 }
             }
         }
@@ -488,7 +488,7 @@ public class AssessmentController {
             fallback.put("pathId", param.getPathId());
             fallback.put("optimizationApplied", false);
             fallback.put("changes", List.of());
-            fallback.put("reason", "优化服务暂时不可�?);
+            fallback.put("reason", "优化服务暂时不可用");
             return Result.success(fallback);
         }
     }
@@ -588,7 +588,7 @@ public class AssessmentController {
             report.setSuggestions(objectMapper.writeValueAsString(extractSectionItems(content, List.of("建议", "改进", "推荐", "优化"))));
             report.setCreateTime(LocalDateTime.now());
             evalReportMapper.insert(report);
-            log.info("学习评估报告已落�? userId={}, reportId={}, score={}", userId, report.getId(), score);
+            log.info("学习评估报告已落库: userId={}, reportId={}, score={}", userId, report.getId(), score);
         } catch (Exception e) {
             log.error("学习评估报告落库失败", e);
         }
@@ -613,7 +613,7 @@ public class AssessmentController {
                       .append(objectMapper.writeValueAsString(entry.getValue())).append("\n");
                 }
             } catch (Exception e) {
-                log.warn("序列化画像维度失�?, e);
+                log.warn("序列化画像维度失败", e);
             }
         } else {
             sb.append("\n【学生画像维度】暂无画像数据\n");
@@ -636,12 +636,12 @@ public class AssessmentController {
                 double progress = p.getTotalSteps() != null && p.getTotalSteps() > 0
                         ? (double) (p.getCompletedSteps() != null ? p.getCompletedSteps() : 0) / p.getTotalSteps()
                         : 0;
-                sb.append("- 路径�?).append(p.getCourseName() != null ? p.getCourseName() : "未命�?).append("�?)
-                  .append(": 目标=").append(p.getGoalDescription() != null ? p.getGoalDescription() : "�?)
+                sb.append("- 路径「").append(p.getCourseName() != null ? p.getCourseName() : "未命名").append("」")
+                  .append(": 目标=").append(p.getGoalDescription() != null ? p.getGoalDescription() : "无")
                   .append(", 进度=").append(String.format("%.0f%%", progress * 100))
                   .append("(").append(p.getCompletedSteps() != null ? p.getCompletedSteps() : 0)
-                  .append("/").append(p.getTotalSteps() != null ? p.getTotalSteps() : 0).append("�?")
-                  .append(", 状�?").append(p.getStatus()).append("\n");
+                  .append("/").append(p.getTotalSteps() != null ? p.getTotalSteps() : 0).append("步)")
+                  .append(", 状态=").append(p.getStatus()).append("\n");
 
                 List<LearningPathStepEntity> steps = learningPathStepMapper.selectList(
                         new LambdaQueryWrapper<LearningPathStepEntity>()
@@ -654,7 +654,7 @@ public class AssessmentController {
                         sb.append("  ").append(step.getOrderIndex()).append(". ")
                           .append(step.getTitle())
                           .append(" [").append(step.getStatus() != null ? step.getStatus() : "unknown").append("]")
-                          .append(" 难度=").append(step.getDifficulty() != null ? step.getDifficulty() : "未设�?);
+                          .append(" 难度=").append(step.getDifficulty() != null ? step.getDifficulty() : "未设定");
                         if (step.getSelfRating() != null) {
                             sb.append(" 自评=").append(step.getSelfRating()).append("/5");
                         }
@@ -685,7 +685,7 @@ public class AssessmentController {
         );
 
         if (!behaviors.isEmpty()) {
-            sb.append("\n【学习行为记录�?�?0天共").append(behaviors.size()).append("�?\n");
+            sb.append("\n【学习行为记录】(近30天共").append(behaviors.size()).append("条)\n");
 
             Map<String, Long> typeCount = behaviors.stream()
                     .collect(Collectors.groupingBy(
@@ -699,7 +699,7 @@ public class AssessmentController {
                     .filter(b -> b.getDuration() != null)
                     .mapToInt(LearningBehaviorRecord::getDuration)
                     .sum();
-            sb.append(" 总学习时�? ").append(String.format("%.1f", totalDuration / 3600.0)).append("小时\n");
+            sb.append(" 总学习时长: ").append(String.format("%.1f", totalDuration / 3600.0)).append("小时\n");
 
             List<LearningBehaviorRecord> quizAttempts = behaviors.stream()
                     .filter(b -> "quiz_attempt".equals(b.getBehaviorType()) && b.getScore() != null)
@@ -708,8 +708,8 @@ public class AssessmentController {
                 double avgScore = quizAttempts.stream()
                         .mapToDouble(b -> b.getScore().doubleValue())
                         .average().orElse(0);
-                sb.append(" 测验平均�? ").append(String.format("%.1f%%", avgScore * 100))
-                  .append("(�?).append(quizAttempts.size()).append("次测�?\n");
+                sb.append(" 测验平均分: ").append(String.format("%.1f%%", avgScore * 100))
+                  .append("(共").append(quizAttempts.size()).append("次测验)\n");
             }
 
             List<LearningBehaviorRecord> codeSubmits = behaviors.stream()
@@ -719,9 +719,9 @@ public class AssessmentController {
                 long passed = codeSubmits.stream()
                         .filter(b -> b.getScore() != null && b.getScore().compareTo(BigDecimal.ONE) >= 0)
                         .count();
-                sb.append(" 代码提交通过�? ")
+                sb.append(" 代码提交通过率: ")
                   .append(String.format("%.0f%%", (double) passed / codeSubmits.size() * 100))
-                  .append("(�?).append(codeSubmits.size()).append("次提�?\n");
+                  .append("(共").append(codeSubmits.size()).append("次提交)\n");
             }
 
             long uniqueDays = behaviors.stream()
@@ -729,7 +729,7 @@ public class AssessmentController {
                     .distinct().count();
             sb.append(" 活跃学习天数: ").append(uniqueDays).append("天\n");
 
-            sb.append(" 近期行为明细(最�?0�?:\n");
+            sb.append(" 近期行为明细(最近10条):\n");
             behaviors.stream().limit(10).forEach(b -> {
                 sb.append("  - ").append(b.getCreateTime().toString())
                   .append(" ").append(b.getBehaviorType());
@@ -751,7 +751,7 @@ public class AssessmentController {
             sb.append("\n【历史评估记录】\n");
             for (EvalReport r : recentReports) {
                 sb.append("- ").append(r.getCreateTime().toString())
-                  .append(" 综合�?").append(r.getOverallScore())
+                  .append(" 综合分=").append(r.getOverallScore())
                   .append(" 等级=").append(r.getLevel()).append("\n");
             }
         }
@@ -762,7 +762,7 @@ public class AssessmentController {
 
     private Map<String, Object> extractDimensionsFromContent(String content, int overallScore) {
         Map<String, Object> dimensions = new LinkedHashMap<>();
-        String[] dimensionKeywords = {"知识掌握", "临床应用", "学习效率", "学习进度", "技能应�?, "复盘质量", "自主学习", "学习投入"};
+        String[] dimensionKeywords = {"知识掌握", "临床应用", "学习效率", "学习进度", "技能应用", "复盘质量", "自主学习", "学习投入"};
         int[] baseOffsets = {0, -5, 3, 5, -3, -8, 2, -2};
 
         for (int i = 0; i < dimensionKeywords.length; i++) {
@@ -800,13 +800,13 @@ public class AssessmentController {
                 if (i == 0) { inSection = true; continue; }
                 if (!inSection) continue;
 
-                if (line.startsWith("#") || line.matches("^[一二三四五六七八九十]+[�?．].*")) break;
+                if (line.startsWith("#") || line.matches("^[一二三四五六七八九十]+[、.．].*")) break;
 
                 if (line.matches("^[-*•]\\s+.*")) {
                     String item = line.replaceFirst("^[-*•]\\s+", "").trim();
                     if (!item.isBlank()) items.add(item);
-                } else if (line.matches("^\\d+[.�?）]\\s+.*")) {
-                    String item = line.replaceFirst("^\\d+[.�?）]\\s+", "").trim();
+                } else if (line.matches("^\\d+[.、)）]\\s+.*")) {
+                    String item = line.replaceFirst("^\\d+[.、)）]\\s+", "").trim();
                     if (!item.isBlank()) items.add(item);
                 } else if (line.isBlank()) {
                     if (!items.isEmpty()) continue;
@@ -850,10 +850,10 @@ public class AssessmentController {
     private String buildReportContent(EvalReport report) {
         StringBuilder sb = new StringBuilder();
         sb.append("# 学习评估报告\n\n");
-        sb.append("综合得分�?).append(report.getOverallScore() == null ? 0 : report.getOverallScore()).append("分\n\n");
-        sb.append("等级�?).append(report.getLevel()).append("\n\n");
+        sb.append("综合得分：").append(report.getOverallScore() == null ? 0 : report.getOverallScore()).append("分\n\n");
+        sb.append("等级：").append(report.getLevel()).append("\n\n");
         appendJsonSection(sb, "优势", report.getStrengths());
-        appendJsonSection(sb, "薄弱�?, report.getWeaknesses());
+        appendJsonSection(sb, "薄弱点", report.getWeaknesses());
         appendJsonSection(sb, "改进建议", report.getSuggestions());
         return sb.toString();
     }

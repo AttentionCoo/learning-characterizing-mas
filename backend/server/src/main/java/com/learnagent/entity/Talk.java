@@ -1,4 +1,4 @@
-﻿package com.learnagent.entity;
+package com.learnagent.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
 import lombok.AllArgsConstructor;

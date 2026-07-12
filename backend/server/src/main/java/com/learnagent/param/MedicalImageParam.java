@@ -1,16 +1,17 @@
-﻿package com.learnagent.param;
+package com.learnagent.param;
 
 import lombok.Data;
 
 import java.util.List;
 
 /**
- * 医学多模态影像分析请求参�? * Medical Multimodal Image Analysis Request Param
+ * 医学多模态影像分析请求参数
+ * Medical Multimodal Image Analysis Request Param
  */
 @Data
 public class MedicalImageParam {
 
-    /** Base64编码的医学影像列�?*/
+    /** Base64编码的医学影像列表 */
     private List<String> images;
 
     /** 用户问题/病例描述 */
@@ -25,12 +26,12 @@ public class MedicalImageParam {
     /** 病例类型: stroke/neuro/general */
     private String caseType = "general";
 
-    /** 是否检索循证证�?*/
+    /** 是否检索循证证据 */
     private Boolean includeEvidence = true;
 
     /** 对话ID（可选） */
     private String talkId;
 
-    /** 用户问题（同question，兼容旧接口�?*/
+    /** 用户问题（同question，兼容旧接口） */
     private String message;
 }

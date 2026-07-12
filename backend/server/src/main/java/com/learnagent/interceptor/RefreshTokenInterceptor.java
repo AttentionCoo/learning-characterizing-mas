@@ -1,4 +1,4 @@
-﻿package com.learnagent.interceptor;
+package com.learnagent.interceptor;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.StrUtil;

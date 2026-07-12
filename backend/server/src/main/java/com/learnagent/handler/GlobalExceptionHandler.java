@@ -1,4 +1,4 @@
-﻿package com.learnagent.handler;
+package com.learnagent.handler;
 
 import com.learnagent.entity.Result;
 import lombok.extern.slf4j.Slf4j;
@@ -17,7 +17,7 @@ public class GlobalExceptionHandler {
         if(msgs.contains("Duplicate entry")){
             String[] split = msgs.split(" ");
             String username = split[2];
-            String mg = username+ "已存�?;
+            String mg = username+ "已存在";
             return Result.error(mg);
         }
         else{

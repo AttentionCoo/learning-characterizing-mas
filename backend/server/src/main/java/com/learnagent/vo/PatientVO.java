@@ -1,8 +1,8 @@
-﻿package com.learnagent.vo;
+package com.learnagent.vo;
 
 import lombok.Data;
 
-/** 病人列表条目（aiOpinion 为摘要字符串�?*/
+/** 病人列表条目（aiOpinion 为摘要字符串） */
 @Data
 public class PatientVO {
 

@@ -1,4 +1,4 @@
-﻿package com.learnagent.interceptor;
+package com.learnagent.interceptor;
 
 import com.learnagent.utils.ThreadLocalUtil;
 import jakarta.servlet.http.HttpServletRequest;

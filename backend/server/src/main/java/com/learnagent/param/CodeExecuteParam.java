@@ -1,4 +1,4 @@
-package com.learnagent.po.uo;
+package com.learnagent.param;
 
 import lombok.Data;
 
