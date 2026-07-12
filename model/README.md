@@ -68,7 +68,6 @@
 | 重排模型 | DashScope gte-rerank | 深度语境重排与证据压缩 |
 | PDF 解析 | pdfplumber + pypdf | 课程文档加载与分块 |
 | 视觉分析 | DashScope MultiModalConversation | 图片识别与多模态分析 |
-| 文献检索 | PubMed NCBI API | 学术文献外部补充检索 |
 | 配置管理 | PyYAML + 动态配置加载器 | 专家角色/规则/参数/Prompt 模板 |
 | 认证安全 | PyJWT | JWT Token 双向认证 |
 
@@ -132,8 +131,7 @@ model/
 │   │   └── limits_config.yaml      # 参数限制配置（子问题数/证据长度/关键词等）
 │   │
 │   ├── services/                   # 外部服务
-│   │   ├── vision_service.py       # 视觉分析服务（DashScope 多模态）
-│   │   └── pubmed_service.py       # PubMed 学术文献检索服务
+│   │   └── vision_service.py       # 视觉分析服务（DashScope 多模态）
 │   │
 │   ├── evaluation/                 # 评估模块
 │   │
@@ -382,7 +380,6 @@ python main.py
 | --- | --- | --- |
 | GET | `/model/courses` | 获取课程列表 |
 | GET | `/model/courses/{id}/knowledge-tree` | 获取课程知识体系 |
-| POST | `/model/pubmed/search` | 学术文献检索 |
 
 #### 辅助接口
 
