@@ -233,43 +233,6 @@ class TestVisionRAGBridge:
     def setup_method(self):
         self.bridge = VisionRAGBridge()
 
-    def test_generate_queries_from_findings(self):
-        """应从异常发现生成检索查询"""
-        findings = MedicalImageFindings(
-            image_type="neuroimaging_ct",
-            anatomical_region="左侧基底节区",
-            key_findings=["左侧基底节区高密度影，提示脑出血"],
-            abnormalities=[
-                Abnormality(
-                    location="左侧基底节",
-                    description="高密度影",
-                    significance="提示急性脑出血",
-                )
-            ],
-            differential_diagnosis=["高血压性脑出血", "脑淀粉样血管病"],
-            recommended_confirmatory_tests=["头颅MRI-SWI"],
-        )
-
-        queries = self.bridge.generate_search_queries(findings)
-        assert len(queries) > 0
-        assert any("hemorrhage" in q.lower() for q in queries)
-
-    def test_generate_queries_empty_findings(self):
-        """空的发现应生成空查询列表"""
-        findings = MedicalImageFindings()
-        queries = self.bridge.generate_search_queries(findings)
-        assert len(queries) == 0
-
-    def test_extract_mesh_terms_ischemic(self):
-        """'缺血' 应映射到正确的 MeSH 术语"""
-        terms = self.bridge._extract_mesh_terms("急性缺血性脑卒中，大脑中动脉供血区")
-        assert any("brain ischemia" in t.lower() or "cerebral infarction" in t.lower() for t in terms)
-
-    def test_extract_mesh_terms_hemorrhagic(self):
-        """'出血' 应映射到正确的 MeSH 术语"""
-        terms = self.bridge._extract_mesh_terms("脑出血破入脑室")
-        assert any("hemorrhage" in t.lower() for t in terms)
-
     def test_format_evidence_text(self):
         """应正确格式化证据文本"""
         findings = MedicalImageFindings(
@@ -280,25 +243,12 @@ class TestVisionRAGBridge:
             confidence=0.85,
             limitations="图像有运动伪影",
         )
-        pubmed = [
-            {
-                "title": "Early CT changes in acute ischemic stroke",
-                "journal": "Stroke",
-                "pub_date": "2023",
-                "authors": "Smith J et al.",
-                "pub_type": ["Practice Guideline"],
-                "abstract": "This guideline describes...",
-                "url": "https://pubmed.ncbi.nlm.nih.gov/12345/",
-            }
-        ]
         local = [{"content": "急性脑梗死CT表现：早期征象包括...", "metadata": {"source": "急性缺血性脑卒中诊治指南"}}]
 
-        text = self.bridge.format_evidence_for_agent(findings, pubmed, local)
+        text = self.bridge.format_evidence_for_agent(findings, local)
 
         assert "医学影像分析结果" in text
         assert "左侧大脑中动脉供血区" in text
-        assert "PubMed 循证文献" in text
-        assert "Early CT changes" in text
         assert "本地卒中指南参考" in text
         assert "AI辅助教育说明" in text
 

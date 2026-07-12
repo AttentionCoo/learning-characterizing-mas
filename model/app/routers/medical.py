@@ -47,27 +47,17 @@ async def medical_analyze_image(request: MedicalImageAnalysisRequest):
             all_info=request.all_info,
         )
 
-        # Vision → PubMed 桥接
-        pubmed_evidence = []
+        # Vision → 本地知识库桥接
         local_evidence = []
         bridge = resources.get("vision_rag_bridge")
         if bridge:
-            import asyncio
-            pubmed_task = asyncio.create_task(
-                bridge.search_pubmed_from_findings(findings, max_results=3)
-            )
             local_evidence = bridge.search_local_knowledge(findings, top_k=3)
-            try:
-                pubmed_evidence = await pubmed_task
-            except Exception as e:
-                logger.warning(f"[medical/analyze-image] PubMed检索失败: {e}")
 
         return {
             "code": 1,
             "msg": "success",
             "data": MedicalImageAnalysisResponse(
                 findings=findings,
-                pubmed_evidence=pubmed_evidence,
                 local_evidence=local_evidence,
                 analysis_text=findings.raw_description,
             ).model_dump(),

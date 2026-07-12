@@ -65,7 +65,6 @@ model/
 │   │   ├── retrieve.py                    - 对外统一导出
 │   │   └── qa_generator.py                - QA 对生成
 │   ├── services/                         ← ⑤ 外部服务层
-│   │   ├── pubmed_service.py              - PubMed 文献检索
 │   │   └── vision_service.py              - 多模态影像分析
 │   ├── utils/                            ← ⑥ 通用工具层
 │   │   ├── context_summary.py             - 对话摘要
@@ -133,9 +132,7 @@ model/
 |------|------|------|
 | 25 | `app/rag/data_loader.py` | PDF 文档加载和切分 |
 | 26 | `app/rag/retrievers.py` | 向量库构建、混合检索器、统一搜索引擎 |
-| 27 | `app/services/pubmed_service.py` | PubMed 文献检索 |
-| 28 | `app/services/vision_service.py` | 多模态影像分析 |
-| 29 | `app/agents/bailian/health_risk_analyzer.py` | 学习风险评估（百炼平台） |
+| 27 | `app/services/vision_service.py` | 多模态影像分析 |
 
 ---
 

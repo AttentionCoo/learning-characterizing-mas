@@ -326,24 +326,13 @@ class VisionAnalysisNode(BaseNode):
             }
 
         # ── RAG 桥接 ──
-        pubmed_papers = []
         local_docs = []
         vision_evidence_text = ""
 
         if findings and self._bridge:
-            import asyncio as _asyncio
-            pubmed_task = _asyncio.create_task(
-                self._bridge.search_pubmed_from_findings(findings, max_results=3)
-            )
             local_docs = self._bridge.search_local_knowledge(findings, top_k=3)
-            try:
-                pubmed_papers = await pubmed_task
-            except Exception as e:
-                logger.warning(f"[vision_node] PubMed 检索失败: {e}")
-
-        if findings and self._bridge:
             vision_evidence_text = self._bridge.format_evidence_for_agent(
-                findings=findings, pubmed_papers=pubmed_papers, local_docs=local_docs,
+                findings=findings, local_docs=local_docs,
             )
 
         merged_evidence = existing_evidence
@@ -356,7 +345,7 @@ class VisionAnalysisNode(BaseNode):
         vision_questions = self._generate_vision_questions(findings) if findings else []
         merged_questions = vision_questions + list(state.get("learning_questions", []))
 
-        logger.info(f"[vision_node] ✅ 完成 | 证据: {len(vision_evidence_text)} 字 | PubMed: {len(pubmed_papers)} 篇")
+        logger.info(f"[vision_node] ✅ 完成 | 证据: {len(vision_evidence_text)} 字 | 本地文献: {len(local_docs)} 条")
         return {
             self.OUTPUT_FINDINGS_KEY: findings.model_dump() if findings else None,
             self.OUTPUT_EVIDENCE_KEY: vision_evidence_text,

@@ -141,7 +141,7 @@ class TestMedicalAnalyzeImageAPI:
 
     @pytest.mark.asyncio
     async def test_analyze_image_with_evidence(self):
-        """应返回 PubMed 循证文献"""
+        """应返回本地知识库循证文献"""
         test_img = _create_test_image_base64()
 
         async with httpx.AsyncClient(timeout=TEST_TIMEOUT) as client:
@@ -155,8 +155,7 @@ class TestMedicalAnalyzeImageAPI:
                 )
                 assert resp.status_code == 200
                 data = resp.json()
-                # PubMed 证据字段应存在（可能为空如果 PubMed 不可达）
-                assert "pubmed_evidence" in data["data"]
+                # 本地知识库证据字段应存在
                 assert "local_evidence" in data["data"]
             except httpx.ConnectError:
                 pytest.skip("模型层服务未启动")

@@ -9,7 +9,7 @@ const MODEL_BASE = '/model/medical'
 /**
  * 医学影像结构化分析（非流式）
  * @param {Object} params - { images: string[], question: string, all_info?: string, expected_image_type?: string }
- * @returns {Promise} - { findings, pubmed_evidence, local_evidence, analysis_text }
+ * @returns {Promise} - { findings, local_evidence, analysis_text }
  */
 export function analyzeMedicalImageAPI(params) {
   return request.post(`${MODEL_BASE}/analyze-image`, params)

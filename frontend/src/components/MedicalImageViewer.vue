@@ -131,15 +131,6 @@
           <p>⚠️ {{ findings.limitations }}</p>
         </div>
 
-        <!-- PubMed证据 -->
-        <div class="finding-section pubmed" v-if="pubmedEvidence?.length">
-          <h4>📚 PubMed 循证文献</h4>
-          <div class="pubmed-card" v-for="(paper, i) in pubmedEvidence" :key="i">
-            <a :href="paper.url" target="_blank" class="pubmed-title">{{ paper.title }}</a>
-            <div class="pubmed-meta">{{ paper.authors }} | {{ paper.journal }} | {{ paper.pub_date }}</div>
-            <div class="pubmed-abstract">{{ paper.abstract?.substring(0, 150) }}...</div>
-          </div>
-        </div>
       </div>
     </div>
 
@@ -156,7 +147,6 @@ import { ref, computed } from 'vue'
 const props = defineProps({
   images: { type: Array, default: () => [] },
   findings: { type: Object, default: null },
-  pubmedEvidence: { type: Array, default: () => [] },
   imageType: { type: String, default: '' },
 })
 
@@ -445,46 +435,6 @@ function onImageError() { loadError.value = true }
   color: var(--color-text-medium);
 }
 .disclaimer p { margin: 0; }
-
-/* ── PubMed 文献区 ── */
-.pubmed {
-  background: var(--color-bg-light);
-  padding: 10px 14px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--color-border-light);
-}
-.pubmed-card {
-  margin-bottom: 10px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--color-border-light);
-}
-.pubmed-card:last-child {
-  margin-bottom: 0;
-  padding-bottom: 0;
-  border-bottom: none;
-}
-.pubmed-title {
-  color: var(--color-primary-dark);
-  font-weight: 600;
-  text-decoration: none;
-  font-size: 0.88rem;
-  transition: color var(--transition-fast);
-}
-.pubmed-title:hover {
-  color: var(--color-primary);
-  text-decoration: underline;
-}
-.pubmed-meta {
-  font-size: 0.78rem;
-  color: var(--color-text-weak);
-  margin-top: 2px;
-}
-.pubmed-abstract {
-  font-size: 0.83rem;
-  color: var(--color-text-medium);
-  margin-top: 4px;
-  line-height: 1.5;
-}
 
 /* ── 底部免责声明 ── */
 .viewer-disclaimer {

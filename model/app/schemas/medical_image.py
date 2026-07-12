@@ -177,7 +177,6 @@ class MedicalImageAnalysisRequest(BaseModel):
 class MedicalImageAnalysisResponse(BaseModel):
     """医学影像分析响应"""
     findings: MedicalImageFindings = Field(default_factory=MedicalImageFindings)
-    pubmed_evidence: List[Dict[str, Any]] = Field(default_factory=list, description="相关PubMed文献")
     local_evidence: List[Dict[str, Any]] = Field(default_factory=list, description="本地知识库相关文献")
     analysis_text: str = Field(default="", description="完整的分析文本")
 

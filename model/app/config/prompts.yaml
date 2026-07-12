@@ -408,8 +408,7 @@ multimodal_case_synthesis: |
   - 影像分期与病程判断
 
   ### 三、循证医学证据
-  - 引用PubMed文献中的关键证据
-  - 引用本地卒中指南中的推荐意见
+  - 引用本地卒中指南与教材文献中的推荐意见
   - 标注证据等级和来源
 
   ### 四、鉴别诊断学习
@@ -434,13 +433,12 @@ multimodal_case_synthesis: |
   - 鼓励学生将AI分析与教材、指南和带教老师意见进行对比验证
 
 vision_findings_to_query: |
-  你是医学文献检索专家。请根据以下医学影像的结构化发现，生成3个精准的PubMed检索查询。
+  你是医学文献检索专家。请根据以下医学影像的结构化发现，生成3个精准的本地知识库检索查询。
 
   影像发现：
   {findings_summary}
 
   要求：
-  - 每个查询使用英文MeSH术语
   - 查询应覆盖：影像征象本身、相关的疾病/病理、循证处理方案
   - 每行一个查询
   - 不要输出序号和解释
@@ -452,7 +450,7 @@ vision_debate_evidence: |
   {vision_findings}
 
   ## 循证文献
-  {pubmed_evidence}
+  {local_evidence}
 
   ## 辩论上下文
   {debate_context}

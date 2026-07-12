@@ -29,7 +29,6 @@
 | 💾 **共享记忆系统** | 物理层（ChromaDB 向量存储）+ 逻辑层（信任加权投票共识）+ 元记忆过滤（四维信息熵计算），跨会话保留高价值洞察 |
 | ⚡ **全栈响应式流式管道** | Java WebFlux + Python Asyncio 深度流式融合，AI 思考过程完全透明可视化，SSE 断线续传 |
 | 🖼️ **医学多模态影像分析** | 10 类医学影像自动分类 + qwen-vl-max 结构化分析 + DICOM 元数据提取 + 多图对比 + Vision-RAG 桥接循证检索 |
-| 📚 **循证医学文献检索** | PubMed E-utilities 文献检索（8 级证据等级排序）+ 本地知识库联合检索，图文联合理解 |
 | 🛡️ **防幻觉与质量保障** | 双层校验（规则引擎 + LLM 反思）+ 动态退火修正 + 辩论-仲裁 + 71 条自动化测试用例 |
 | 🩺 **医学 OCR 结构化提取** | 检验报告 + 处方 + 通用医学文档的 OCR 流式识别与结构化提取 |
 | 💻 **代码执行与辅助** | 支持 Python 代码在线执行与 AI 编程辅助，适用于医学数据处理与算法教学场景 |
@@ -52,7 +51,7 @@
 ├──────────────────────────────────────────────────────────────────┤
 │                        模型推理层 Model                           │
 │   Python 3.11 · FastAPI · LangGraph · LangChain · Qwen          │
-│   ChromaDB · gte-rerank · qwen-vl-max · PubMed E-utilities      │
+│   ChromaDB · gte-rerank · qwen-vl-max      │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -190,12 +189,11 @@ learning-multi-agent-system/
 │       │   ├── schemas/             # 数据结构定义
 │       │   └── utils/               # LLM / JSON / 重试 / 文本工具
 │       ├── rag/                     # Hybrid RAG（向量 + BM25 / QA 生成 / 文档加载）
-│       ├── services/                # 多模态影像 & PubMed 文献检索 & OCR
+│       ├── services/                # 多模态影像 & OCR
 │       │   ├── medical_vision_service.py  # 10 类医学影像结构化分析
 │       │   ├── medical_ocr_service.py     # 检验报告/处方/文档 OCR 提取
-│       │   ├── vision_rag_bridge.py       # 影像发现 → PubMed/本地知识库桥接
+│       │   ├── vision_rag_bridge.py       # 影像发现 → 本地知识库桥接
 │       │   ├── vision_service.py          # 通用视觉分析服务
-│       │   └── pubmed_service.py          # PubMed 文献检索
 │       ├── config/                  # YAML 配置（9 专家 / 规则 / 模板 / Prompt / 限额 / 共享记忆）
 │       ├── evaluation/              # 评估模块
 │       └── utils/                   # 任务管理 / 上下文摘要 / Token 聚合 / 错误码 / 命名模型 / 模型下载
@@ -383,8 +381,7 @@ learning-multi-agent-system/
 | **医学影像对比** | 多图对比分析 | 同模态治疗前后对比 · 不同模态交叉对比（CT vs MRI） |
 | **DICOM 元数据提取** | DICOM 文件技术参数提取 | 扫描参数 · 序列信息 · 不提取患者隐私 |
 | **医学 OCR 提取** | 检验报告/处方/文档结构化 | 检验指标数值提取 · 处方药品信息解析 · 流式识别 |
-| **Vision-RAG 桥接** | 影像发现 → 循证检索 | 自动从影像分析结果生成 PubMed + 本地知识库检索 |
-| **PubMed 文献检索** | 集成 NCBI E-utilities API | 8 级证据等级排序 · 与本地 ChromaDB 知识库互补 |
+| **Vision-RAG 桥接** | 影像发现 → 循证检索 | 自动从影像分析结果生成本地知识库检索查询 |
 | **代码辅助开发** | 医学数据分析编程助手 | 代码补全 · 错误诊断 · 优化建议 · 沙箱执行(python -I + 资源上限) |
 | **学习风险评估** | 百炼平台集成 | 风险等级判定 · 学习干预建议 · 异步评估 |
 | **系统监控** | 限流熔断器状态监控 | 登录失败/成功统计 · 熔断器状态查询 |
@@ -420,7 +417,7 @@ learning-multi-agent-system/
       ▼
 ┌─────────────┐    ┌──────────────────┐    ┌─────────────────┐
 │ 影像分类      │───►│ 结构化分析         │───►│ Vision-RAG 桥接  │
-│ (10类自动)    │    │ (JSON Schema约束) │    │ PubMed+本地检索  │
+│ (10类自动)    │    │ (JSON Schema约束) │    │ 本地知识库检索   │
 └─────────────┘    └──────────────────┘    └────────┬────────┘
                                                      │
                     ┌────────────────────────────────┘
@@ -507,7 +504,7 @@ cd frontend && npm install && npm run dev
 | 白盒路径覆盖 | 38 | 核心模块路径覆盖 + 共享记忆系统 + RAG + 迁移验证 | [测试文档 §3](docs/测试文档.md) |
 | 并发性能测试 | 3 级梯度 | 10/50/100 并发 SSE | [测试文档 §4](docs/测试文档.md) |
 | 安全测试 | 16 | JWT/注入/限流/越权/上传 | [测试文档 §5](docs/测试文档.md) |
-| 容灾测试 | 7 | Rerank/PubMed/OSS/SSE 降级 | [测试文档 §6](docs/测试文档.md) |
+| 容灾测试 | 7 | Rerank/OSS/SSE 降级 | [测试文档 §6](docs/测试文档.md) |
 
 ### 并发性能实测数据
 
@@ -681,7 +678,6 @@ MEDICAL_DOCS_DIR="/path/to/your/pdf/documents"
 | 评估 | `/model/evaluation/optimize` | POST | 触发学习方案优化 |
 | 评估 | `/model/evaluation/behavior` | POST | 提交学习行为数据 |
 | 评估 | `/model/evaluation/mastery-heatmap` | GET | 知识点掌握度热力图 |
-| 文献 | `/model/pubmed/search` | POST | PubMed 学术文献检索 |
 | 医学影像 | `/model/medical/analyze-image` | POST | 医学影像结构化分析 |
 | 医学影像 | `/model/medical/analyze-case` | POST (SSE) | 多模态病例综合分析 |
 | 医学影像 | `/model/medical/compare-images` | POST | 多图对比分析 |
@@ -750,7 +746,6 @@ MEDICAL_DOCS_DIR="/path/to/your/pdf/documents"
 | 场景 | 策略 | 降级方案 |
 |:---|:---|:---|
 | Rerank 模型不可用 | 4 模型自动切换 | 原始检索结果兜底 |
-| PubMed API 超时 | 超时熔断 | 仅使用本地 ChromaDB |
 | OSS 上传失败 | 重试 + 降级 | 本地临时存储 |
 | SSE 连接中断 | Last-Event-ID | 缓存事件回放 |
 
