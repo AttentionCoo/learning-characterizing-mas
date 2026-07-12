@@ -1,27 +1,27 @@
 aiserver:
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    host: localhost
-    port: 3306
-    database: medai
-    username: root
-    password: Gongyusong666
+    host: ${DB_HOST:localhost}
+    port: ${DB_PORT:3306}
+    database: ${DB_NAME:medai}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD}
 
   redis:
-    host: 192.168.2.184
-    port: 6379
-    password: "123"
+    host: ${REDIS_HOST:localhost}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:}
 
   ai-api:
-    url: http://localhost:8000
+    url: ${AI_API_URL:http://localhost:8000}
     shared-jwt-secret: ${AI_JWT_SECRET:dev-local-secret}
 
   alioss:
-    endpoint: https://oss-cn-beijing.aliyuncs.com
-    bucketName: darkside
-    region: cn-beijing
-    access-key-id: LTAI5tCsXMzZtiBxnUgqKPNA
-    access-key-secret: Bkp8ixYCRDicOWLeclRqdPvlNoxMiK
+    endpoint: ${OSS_ENDPOINT:https://oss-cn-beijing.aliyuncs.com}
+    bucketName: ${OSS_BUCKET:darkside}
+    region: ${OSS_REGION:cn-beijing}
+    access-key-id: ${OSS_ACCESS_KEY_ID}
+    access-key-secret: ${OSS_ACCESS_KEY_SECRET}
 
 logging:
   level:

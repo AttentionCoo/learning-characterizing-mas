@@ -564,68 +564,6 @@ public class AssessmentController {
         }
     }
 
-    @SuppressWarnings("unchecked")
-    private void recordQuizBehavior(Long userId, Long quizId, Map<String, Object> quizResult) {
-        try {
-            LearningBehaviorRecord record = new LearningBehaviorRecord();
-            record.setUserId(userId);
-            record.setBehaviorType("quiz_attempt");
-            Object scoreObj = quizResult.get("score");
-            if (scoreObj instanceof Number num) {
-                record.setScore(BigDecimal.valueOf(num.doubleValue()));
-            }
-            record.setDetail("quizId=" + quizId);
-            record.setCreateTime(LocalDateTime.now());
-            learningBehaviorRecordMapper.insert(record);
-        } catch (Exception e) {
-            log.warn("记录测验行为失败: {}", e.getMessage());
-        }
-    }
-
-    @PostMapping("/quiz/{quizId}/submit")
-    @SuppressWarnings("unchecked")
-    public Result submitQuiz(@PathVariable Long quizId, @RequestBody Map<String, Object> body) {
-        Long userId = ThreadLocalUtil.getCurrentUser().getId();
-        List<Map<String, Object>> answers = (List<Map<String, Object>>) body.get("answers");
-        if (answers == null || answers.isEmpty()) {
-            return Result.error("答案不能为空");
-        }
-
-        Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("quiz_id", quizId);
-        requestBody.put("answers", answers);
-        requestBody.put("user_id", userId);
-
-        try {
-            String responseStr = webClient.post()
-                    .uri("/model/evaluation/quiz/" + quizId + "/submit")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .bodyValue(requestBody)
-                    .retrieve()
-                    .bodyToMono(String.class)
-                    .timeout(Duration.ofMinutes(2))
-                    .block();
-
-            JsonNode root = objectMapper.readTree(responseStr);
-            JsonNode data = root.path("data");
-            if (!data.isMissingNode()) {
-                Map<String, Object> quizResult = objectMapper.convertValue(data, Map.class);
-                recordQuizBehavior(userId, quizId, quizResult);
-                return Result.success(quizResult);
-            }
-            return Result.success(responseStr);
-        } catch (Exception e) {
-            log.error("测验提交失败: {}", e.getMessage(), e);
-            Map<String, Object> fallback = new HashMap<>();
-            fallback.put("quizId", quizId);
-            fallback.put("totalQuestions", answers.size());
-            fallback.put("correctCount", 0);
-            fallback.put("score", 0);
-            fallback.put("details", List.of());
-            return Result.success(fallback);
-        }
-    }
-
     private ServerSentEvent<String> sse(String event, String data) { return ServerSentEvent.<String>builder().event(event).data(data).build(); }
     private ServerSentEvent<String> sseWithId(String id, String event, String data) { return ServerSentEvent.<String>builder().id(id).event(event).data(data).build(); }
     private String resolveEventName(String data) { if (data == null || data.isBlank()) return "message"; try { return objectMapper.readTree(data).path("type").asText("message"); } catch (Exception e) { return "message"; } }
