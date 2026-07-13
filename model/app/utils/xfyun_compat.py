@@ -39,12 +39,26 @@ def _patched_convert_chunk_to_generation_chunk(
         # 当 chunk["choices"] 为 None 时，langchain_openai <= 0.1.25 会崩溃
         # 将 choices 替换为空列表后重试
         if chunk.get("choices") is None:
-            fixed_chunk = {**chunk, "choices": []}
+            error_code = chunk.get("code", "N/A")
+            error_msg = chunk.get("message", "N/A")
+            sid = chunk.get("sid", "N/A")
+            model = chunk.get("model", "N/A")
+
+            # 提取 usage 中的 token 信息，辅助判断是否因额度/配额问题
+            usage = chunk.get("usage", {}) or {}
+            total_tokens = usage.get("total_tokens", "N/A") if usage else "N/A"
+
             logger.warning(
-                "讯飞星火返回 choices=null，已自动修正为空列表。"
-                "原始 chunk keys: %s",
+                "⚠️ 讯飞星火返回 choices=null —— API 层面异常，已自动修正为空列表避免崩溃。\n"
+                "  模型(model)=%s | 错误码(code)=%s | 错误信息(message)=%s\n"
+                "  会话(sid)=%s | total_tokens=%s\n"
+                "  可能原因: ① 模型名无效/未开通 ② APIKey 无该模型权限 ③ 配额耗尽\n"
+                "  完整 chunk keys: %s",
+                model, error_code, error_msg,
+                sid, total_tokens,
                 list(chunk.keys()),
             )
+            fixed_chunk = {**chunk, "choices": []}
             return _original_convert(fixed_chunk, default_chunk_class, base_generation_info)
         raise
 
