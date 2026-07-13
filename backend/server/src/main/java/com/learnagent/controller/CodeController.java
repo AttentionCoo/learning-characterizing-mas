@@ -92,11 +92,18 @@ public class CodeController {
         response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
 
         if (ThreadLocalUtil.getCurrentUser() == null) {
+            log.warn("[code_assist] SSE 认证失败：未登录, talkId={}", param.getTalkId());
             return Flux.just(sse("error", json("error", mapOf("message", "未登录"))));
         }
 
         String upstreamToken = resolveToken(token, authorization);
         Long userId = ThreadLocalUtil.getCurrentUser().getId();
+
+        log.info("[code_assist] SSE 请求进入: userId={}, assistType={}, promptLen={}, codeLen={}, talkId={}",
+                userId, param.getAssistType(),
+                param.getPrompt() != null ? param.getPrompt().length() : 0,
+                param.getExistingCode() != null ? param.getExistingCode().length() : 0,
+                param.getTalkId());
 
         StringBuilder questionBuilder = new StringBuilder();
         if (param.getAssistType() != null) {
@@ -170,6 +177,9 @@ public class CodeController {
         );
         eventCache.registerStream(finalTalkIdStr);
 
+        log.info("[code_assist] SSE 流建立: talkId={}, userId={}, questionLen={}",
+                finalTalkId, userId, quesParam.getQuestion().length());
+
         Flux<String> chatFlux = streamingService
                 .streamChat(userId, finalTalkId, quesParam.getQuestion(), upstreamToken, quesParam.getImages(), "code_assist")
                 .map(this::wrapChunkIfNeeded);
@@ -190,6 +200,7 @@ public class CodeController {
         Flux<ServerSentEvent<String>> dataStream = initSSE
                 .concatWith(chatSSE)
                 .doFinally(signal -> {
+                    log.info("[code_assist] SSE 流结束: talkId={}, signal={}", finalTalkId, signal);
                     doneSink.tryEmitEmpty();
                     eventCache.completeStream(finalTalkIdStr);
                 });
