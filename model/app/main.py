@@ -31,6 +31,10 @@ from app.services.vision_rag_bridge import VisionRAGBridge
 from app.services.vision_service import VisionAnalysisService
 from app.utils.context_summary import ConversationSummaryService
 from app.utils.naming_model import NamingModel
+from app.utils.xfyun_compat import apply_patches
+
+# 必须在任何 ChatOpenAI 实例化之前应用，修复讯飞星火 choices=null 导致的 TypeError
+apply_patches()
 
 os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 
@@ -82,7 +86,7 @@ def init_all_resources():
     logger.info(f"  ✅ 共享记忆配置: 自动存储={shared_memory_mgr.is_auto_store_enabled()}")
 
     logger.info("🤖 [2/8] 初始化大语言模型（讯飞星火）...")
-    _spark_base = "https://spark-api-open.xf-yun.com/v1"
+    _spark_base_default = os.getenv("SPARK_BASE_URL") or "https://spark-api-open.xf-yun.com/v1"
     _spark_password = os.getenv("SPARK_API_PASSWORD")
 
     if not _spark_password:
@@ -95,18 +99,35 @@ def init_all_resources():
     _pw_pro = os.getenv("SPARK_API_PASSWORD_PRO") or _spark_password
     _pw_lite = os.getenv("SPARK_API_PASSWORD_LITE") or _spark_password
 
-    # 星火档位映射（可用 env 覆盖）：max→Max-32K（长提示词场景），pro→Pro，lite→Lite
+    # Base URL 按档位覆盖（支持不同服务端点如 Spark X 的 /x2）
+    _base_max = os.getenv("SPARK_BASE_URL_MAX") or _spark_base_default
+    _base_pro = os.getenv("SPARK_BASE_URL_PRO") or _spark_base_default
+    _base_lite = os.getenv("SPARK_BASE_URL_LITE") or _spark_base_default
+
+    # 星火档位映射（可用 env 覆盖）：
+    #   max → Ultra-32K（最强模型，Agent proposer 长提示词场景）
+    #   pro → Pro（critic / 反思）
+    #   lite → Pro（原 Lite 已无额度，轻量任务复用 Pro）
     _model_max = os.getenv("SPARK_MODEL_MAX") or "max-32k"
     _model_pro = os.getenv("SPARK_MODEL_PRO") or "generalv3"
-    _model_lite = os.getenv("SPARK_MODEL_LITE") or "lite"
+    _model_lite = os.getenv("SPARK_MODEL_LITE") or "generalv3"
 
     logger.info(f"  ✅ APIPassword: {_spark_password[:6]}...{_spark_password[-4:]}")
 
-    llm_max = ChatOpenAI(model=_model_max, base_url=_spark_base, api_key=_pw_max)
-    llm_plus = ChatOpenAI(model=_model_pro, base_url=_spark_base, api_key=_pw_pro)
-    llm_turbo = ChatOpenAI(model=_model_lite, base_url=_spark_base, api_key=_pw_lite)
+    llm_max = ChatOpenAI(
+        model=_model_max, base_url=_base_max, api_key=_pw_max,
+        max_retries=3, request_timeout=90,
+    )
+    llm_plus = ChatOpenAI(
+        model=_model_pro, base_url=_base_pro, api_key=_pw_pro,
+        max_retries=3, request_timeout=60,
+    )
+    llm_turbo = ChatOpenAI(
+        model=_model_lite, base_url=_base_lite, api_key=_pw_lite,
+        max_retries=2, request_timeout=30,
+    )
 
-    logger.info(f"  ✅ 模型加载完成: {_model_max}, {_model_pro}, {_model_lite}")
+    logger.info(f"  ✅ 模型加载完成: {_model_max}@{_base_max}, {_model_pro}@{_base_pro}, {_model_lite}@{_base_lite}")
 
     logger.info("💬 [3/8] 初始化上下文摘要服务...")
     context_summary = ConversationSummaryService(

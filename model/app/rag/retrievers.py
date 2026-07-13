@@ -23,7 +23,7 @@ from .data_loader import load_pdfs_from_dir, split_documents
 from .qa_generator import QAGenerator
 
 
-load_dotenv()
+load_dotenv(override=True)
 logger = logging.getLogger(__name__)
 
 CONFIG = {
@@ -39,68 +39,224 @@ CONFIG = {
 
 
 class XfyunEmbeddings(Embeddings):
-    """讯飞文本向量化（2560 维）。
+    """讯飞文本向量化（官方 HTTP 接口，2560 维）。
 
-    文档入库走 Embeddingp（domain=para），查询走 Embeddingq（domain=query）。
-    单次输入上限 2K token，且免费档 QPS 较低，故逐条请求并对限流重试。
+    基于讯飞官方 https://emb-cn-huabei-1.xf-yun.com/ 接口，通过 HMAC-SHA256 签名鉴权。
+    通过 domain 参数区分文档入库（para）和查询（query），获得更好的语义检索召回效果。
+    单次输入上限 2K token，免费档 QPS 较低（≈2 QPS），故逐条请求并内置节流。
+    连续失败时自动降级到本地 BGE 模型兜底。
+
+    环境变量：
+    - XFYUN_EMBEDDING_ENABLED=false  可直接跳过讯飞，全程使用本地 BGE
+    - XFYUN_EMBEDDING_URL            覆盖默认服务地址
     """
 
-    URL_PARA = "https://cn-huabei-1.xf-yun.com/v1/private/sa8a05c27"
-    URL_QUERY = "https://cn-huabei-1.xf-yun.com/v1/private/s50d55a16"
+    # 官方 HTTP 接口地址（单一入口，通过 domain 参数区分 para/query）
+    BASE_URL = os.getenv(
+        "XFYUN_EMBEDDING_URL",
+        "https://emb-cn-huabei-1.xf-yun.com/",
+    )
     MAX_CHARS = 2500  # 2K token 输入上限的保守字符近似
+
+    # 免费档 QPS ≈ 2，取保守值 1.5 QPS（即最小间隔 ≈ 0.7s）
+    _MIN_INTERVAL = 0.7
+    _last_request_time: float = 0.0
+
+    # 不可恢复的错误码：重试无意义，应立刻终止
+    _FATAL_ERROR_CODES: dict[int, str] = {
+        11200: "应用未授权该服务或业务量超限",
+        11201: "日流控超限 —— 超过当日最大访问量限制",
+        11202: "秒级/并发流控超限，或 license 校验失败",
+        11203: "并发流控超限 —— 并发路数超过授权限制",
+        10001: "鉴权失败 —— APP_ID / API_KEY / API_SECRET 不正确",
+        10002: "应用未授权该服务",
+        10003: "未知的应用 ID",
+        10163: "请求参数错误",
+    }
 
     def __init__(self):
         from app.utils.xfyun_auth import get_xfyun_credentials
         self.app_id, self.api_key, self.api_secret = get_xfyun_credentials()
-        if not all([self.app_id, self.api_key, self.api_secret]):
-            logger.warning("⚠️ 未配置 XFYUN_APP_ID/XFYUN_API_KEY/XFYUN_API_SECRET，向量化功能将不可用")
+        self._fallback_embeddings = None  # 懒加载本地 BGE 兜底
 
-    def _embed_once(self, text: str, url: str, domain: str) -> List[float]:
+        # 环境变量开关：XFYUN_EMBEDDING_ENABLED=false 时跳过讯飞，直接走 BGE
+        embedding_enabled = os.getenv("XFYUN_EMBEDDING_ENABLED", "true").strip().lower()
+        self._xfyun_dead = embedding_enabled in ("false", "0", "no", "off")
+
+        if self._xfyun_dead:
+            logger.info("ℹ️  XFYUN_EMBEDDING_ENABLED=false，跳过讯飞 embedding，直接使用本地 BGE")
+        elif not all([self.app_id, self.api_key, self.api_secret]):
+            logger.warning("⚠️ 未配置 XFYUN_APP_ID/XFYUN_API_KEY/XFYUN_API_SECRET，向量化功能将不可用")
+            self._xfyun_dead = True
+
+    @classmethod
+    def _throttle(cls):
+        """确保连续两次请求间隔 ≥ _MIN_INTERVAL 秒，防止触发 QPS 限流。"""
+        now = time.time()
+        elapsed = now - cls._last_request_time
+        if elapsed < cls._MIN_INTERVAL:
+            time.sleep(cls._MIN_INTERVAL - elapsed)
+        cls._last_request_time = time.time()
+
+    def _get_fallback_embeddings(self):
+        """懒加载本地 BGE-large-zh-v1.5 模型（1024 维），作为讯飞云端不可用时的兜底。"""
+        if self._fallback_embeddings is None:
+            try:
+                from langchain_community.embeddings import HuggingFaceBgeEmbeddings
+                # 中文优化模型，本地 CPU 推理，无需 GPU
+                self._fallback_embeddings = HuggingFaceBgeEmbeddings(
+                    model_name="BAAI/bge-large-zh-v1.5",
+                    model_kwargs={"device": "cpu"},
+                    encode_kwargs={"normalize_embeddings": True},
+                )
+                logger.info("✅ 本地 BGE 兜底模型已加载 (bge-large-zh-v1.5, 1024d)")
+            except Exception as e:
+                logger.error(f"❌ 本地 BGE 模型加载失败: {e}")
+                self._fallback_embeddings = False  # 标记为不可用
+        return self._fallback_embeddings if self._fallback_embeddings is not False else None
+
+    def _embed_once(self, text: str, domain: str) -> List[float]:
+        """调用讯飞官方文本向量化 HTTP 接口。
+
+        参数:
+            text:   待向量化的文本内容
+            domain: "para"（文档入库）或 "query"（查询检索）
+        """
         import base64 as _b64
         import json as _json
+        import struct as _struct
 
-        import numpy as np
         import requests as _requests
 
         from app.utils.xfyun_auth import assemble_auth_url
 
         content = text[: self.MAX_CHARS]
+
+        # 按讯飞官方 Embedding HTTP 协议构造请求体
+        # domain="para" 用于知识原文/段落, domain="query" 用于用户问题
+        message_data = [{"role": "user", "content": content}]
+        message_str = _json.dumps(message_data, ensure_ascii=False)
+
         body = {
             "header": {"app_id": self.app_id, "status": 3},
-            "parameter": {"emb": {"domain": domain, "feature": {"encoding": "utf8"}}},
+            "parameter": {
+                "emb": {
+                    "domain": domain,
+                    "feature": {
+                        "encoding": "utf8",
+                        "compress": "raw",
+                        "format": "plain",
+                    },
+                }
+            },
             "payload": {
                 "messages": {
-                    "text": _b64.b64encode(
-                        _json.dumps({"messages": [{"content": content, "role": "user"}]},
-                                    ensure_ascii=False).encode("utf-8")
-                    ).decode("utf-8")
+                    "encoding": "utf8",
+                    "compress": "raw",
+                    "format": "json",
+                    "status": 3,
+                    "text": _b64.b64encode(message_str.encode("utf-8")).decode("utf-8"),
                 }
             },
         }
 
         last_err = None
         for attempt in range(4):
-            signed_url = assemble_auth_url(url, self.api_key, self.api_secret, method="POST")
+            self._throttle()  # ← QPS 节流：确保请求间隔 ≥ 0.7s
+            signed_url = assemble_auth_url(
+                self.BASE_URL, self.api_key, self.api_secret, method="POST"
+            )
             resp = _requests.post(
-                signed_url, json=body,
+                signed_url,
+                json=body,
                 headers={"Content-Type": "application/json;charset=UTF-8"},
                 timeout=30,
             )
             data = resp.json()
             code = data.get("header", {}).get("code", -1)
             if code == 0:
+                # 官方接口返回字段为 text（base64 编码的 float32 字节流，2560 维）
                 vec_b64 = data["payload"]["feature"]["text"]
-                return np.frombuffer(_b64.b64decode(vec_b64), dtype=np.float32).tolist()
-            last_err = f"code={code} message={data.get('header', {}).get('message', '')}"
-            # 鉴权与并发限流类错误统一退避重试
+                vec_bytes = _b64.b64decode(vec_b64)
+                return list(_struct.unpack(f"{len(vec_bytes) // 4}f", vec_bytes))
+
+            message = data.get("header", {}).get("message", "")
+            last_err = f"code={code} message={message}"
+
+            # 不可恢复错误（license/auth/参数）：立刻终止，不浪费重试时间
+            if code in self._FATAL_ERROR_CODES:
+                detail = self._FATAL_ERROR_CODES[code]
+                raise ValueError(
+                    f"讯飞 embedding 不可恢复错误: {last_err} — {detail}"
+                )
+
+            # 可恢复错误（限流/网络波动）：退避重试
+            logger.warning(
+                f"⚠️ 讯飞 embedding 可恢复错误（第 {attempt + 1}/4 次重试）: {last_err}"
+            )
             time.sleep(1.5 * (attempt + 1))
-        raise ValueError(f"讯飞 embedding 失败: {last_err}")
+        raise ValueError(f"讯飞 embedding 失败（已重试 4 次）: {last_err}")
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        return [self._embed_once(t, self.URL_PARA, "para") for t in texts]
+        """文档入库 embedding（domain="para"），逐条处理，内置 QPS 节流。
+
+        一旦某条讯飞调用失败，整批统一降级到本地 BGE 模型，
+        避免同一批次内混用讯飞和 BGE 向量导致 ChromaDB 维度冲突。
+        降级后整个会话生命周期内不再重试讯飞。
+        """
+        return self._embed_batch(texts, domain="para")
 
     def embed_query(self, text: str) -> List[float]:
-        return self._embed_once(text, self.URL_QUERY, "query")
+        """查询 embedding（domain="query"），失败时降级到本地 BGE。"""
+        if self._xfyun_dead:
+            fallback = self._get_fallback_embeddings()
+            if fallback:
+                return fallback.embed_query(text)
+            raise ValueError("讯飞不可用且 BGE 兜底加载失败，无法 embedding")
+
+        try:
+            return self._embed_once(text, domain="query")
+        except ValueError as e:
+            logger.warning(f"⚠️ 讯飞 embedding 查询失败: {e}")
+            self._xfyun_dead = True
+            fallback = self._get_fallback_embeddings()
+            if fallback:
+                logger.info("🔄 降级到本地 BGE 模型处理查询...")
+                return fallback.embed_query(text)
+            raise
+
+    def _embed_batch(self, texts: List[str], domain: str) -> List[List[float]]:
+        """批量 embedding 的通用实现，domain="para" 或 "query"。"""
+        # 已降级：直接走 BGE
+        if self._xfyun_dead:
+            fallback = self._get_fallback_embeddings()
+            if fallback:
+                return fallback.embed_documents(texts)
+            raise ValueError("讯飞不可用且 BGE 兜底加载失败，无法 embedding")
+
+        results = []
+        for i, t in enumerate(texts):
+            try:
+                results.append(self._embed_once(t, domain))
+            except ValueError as e:
+                err_msg = str(e)
+                logger.warning(f"⚠️ 讯飞 embedding 第 {i} 条失败: {e}")
+                # 打印排查指引
+                if "11202" in err_msg:
+                    logger.warning(
+                        "💡 解决方案：前往讯飞开放平台控制台 → 我的应用 → 服务管理 → "
+                        "开通「文本向量化」服务；或设置环境变量 XFYUN_EMBEDDING_ENABLED=false 直接使用本地 BGE"
+                    )
+                self._xfyun_dead = True
+                fallback = self._get_fallback_embeddings()
+                if fallback:
+                    logger.info(
+                        f"🔄 整批降级到本地 BGE 模型（{len(texts)} 条，1024d），"
+                        f"后续批次不再重试讯飞"
+                    )
+                    return fallback.embed_documents(texts)
+                raise
+        return results
 
 
 class BGEReranker:
@@ -254,8 +410,8 @@ def build_or_load_vectorstore(chunks, persist_dir: str, enable_qa: bool = False)
         if count == 0 and chunks:
             docs_to_insert = chunks
             if enable_qa:
-                logger.info(f"⚠️ 向量库为空，准备为 {len(chunks)} 条切片生成扩展QA对...")
-                qa_gen = QAGenerator()
+                logger.info(f"⚠️ 向量库为空，准备为 {len(chunks)} 条切片生成扩展QA对（使用 Lite 档模型）...")
+                qa_gen = QAGenerator(tier="lite")
                 qa_docs = qa_gen.generate_qa_for_chunks(chunks)
                 docs_to_insert = chunks + qa_docs
                 logger.info(f"入库总计：{len(chunks)}条原文 + {len(qa_docs)}条QA对 = {len(docs_to_insert)}条")
@@ -264,6 +420,7 @@ def build_or_load_vectorstore(chunks, persist_dir: str, enable_qa: bool = False)
 
             batch_size = 32
             total_docs = len(docs_to_insert)
+            xfyun_failed = False
             for i in range(0, total_docs, batch_size):
                 batch = docs_to_insert[i:i + batch_size]
                 try:
@@ -272,8 +429,42 @@ def build_or_load_vectorstore(chunks, persist_dir: str, enable_qa: bool = False)
                     # 每 5 个批次或是最后一批时打印进度
                     if (i // batch_size + 1) % 5 == 0 or current_processed == total_docs:
                         logger.info(f"  ⏳ 正在写入向量库... 已完成: {current_processed} / {total_docs} 条")
+                except ValueError as e:
+                    # 讯飞 embedding 失败 → 后续批次已自动降级到 BGE
+                    if "讯飞 embedding 失败" in str(e):
+                        xfyun_failed = True
+                        if i == 0:
+                            # 第一批就失败，BGE 从零开始建库，无维度冲突
+                            logger.warning("⚠️ 讯飞 embedding 首轮即失败，后续批次自动降级到本地 BGE")
+                            # 重新尝试当前批次（此时 embedding 内部已触发 BGE 降级）
+                            try:
+                                vectordb.add_documents(documents=batch)
+                                current_processed = min(i + batch_size, total_docs)
+                                logger.info(f"  ⏳ [BGE兜底] 已完成: {current_processed} / {total_docs} 条")
+                            except Exception as e2:
+                                logger.error(f"❌ BGE 兜底也失败 (起始索引 {i}): {e2}")
+                        else:
+                            # 中间批次失败：已有 Xfyun 2560d 数据入库，BGE 1024d 会维度冲突
+                            logger.error(
+                                f"❌ 讯飞 embedding 在第 {i} 条处失败，但前 {i} 条已用 2560d 入库。\n"
+                                f"   BGE 兜底（1024d）与已有向量维度不兼容，无法继续。\n"
+                                f"   建议：删除向量库目录后重新运行，或联系讯飞开通 embedding 服务额度。\n"
+                                f"   向量库路径: {persist_dir}"
+                            )
+                    else:
+                        logger.error(f"❌ 批次写入失败 (起始索引 {i}): {e}")
                 except Exception as e:
-                    logger.error(f"❌ 批次写入失败 (起始索引 {i}): {e}")
+                    error_msg = str(e)
+                    # 检测 ChromaDB 维度不匹配错误
+                    if "dimensionality" in error_msg.lower() or "dimension" in error_msg.lower():
+                        logger.error(
+                            f"❌ 向量维度冲突 (起始索引 {i}): {error_msg}\n"
+                            f"   原因：前序批次使用讯飞 2560d，当前批次降级为 BGE 1024d。\n"
+                            f"   解决：删除向量库目录后重新运行，统一使用一种 embedding 模型。\n"
+                            f"   向量库路径: {persist_dir}"
+                        )
+                    else:
+                        logger.error(f"❌ 批次写入失败 (起始索引 {i}): {e}")
             logger.info("✅ 向量库写入完成")
         else:
             logger.info(f"✅ 向量库已有 {count} 条数据")

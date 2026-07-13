@@ -41,13 +41,13 @@ class TestAuthUrl:
         assert sig == expected
 
     def test_post_method_in_request_line(self):
-        signed = assemble_auth_url("https://cn-huabei-1.xf-yun.com/v1/private/sa8a05c27",
+        signed = assemble_auth_url("https://emb-cn-huabei-1.xf-yun.com/",
                                    "k", "s", method="POST")
         auth = base64.b64decode(parse_qs(urlparse(signed).query)["authorization"][0]).decode()
         # 签名对象含 POST request-line：换 secret 复算 GET 版本应不相等
         sig = auth.split('signature="')[1].rstrip('"')
         date = parse_qs(urlparse(signed).query)["date"][0]
-        get_origin = f"host: cn-huabei-1.xf-yun.com\ndate: {date}\nGET /v1/private/sa8a05c27 HTTP/1.1"
+        get_origin = f"host: emb-cn-huabei-1.xf-yun.com\ndate: {date}\nGET / HTTP/1.1"
         get_sig = base64.b64encode(hmac.new(b"s", get_origin.encode(), hashlib.sha256).digest()).decode()
         assert sig != get_sig
 
@@ -57,16 +57,17 @@ class TestXfyunEmbeddings:
         monkeypatch.setenv("XFYUN_APP_ID", "app1")
         monkeypatch.setenv("XFYUN_API_KEY", "key1")
         monkeypatch.setenv("XFYUN_API_SECRET", "sec1")
+        monkeypatch.setenv("XFYUN_EMBEDDING_URL", "https://emb-cn-huabei-1.xf-yun.com/")
         from app.rag.retrievers import XfyunEmbeddings
         return XfyunEmbeddings()
 
     def _mock_response(self, vector):
-        import numpy as np
+        import struct
         resp = MagicMock()
+        vec_bytes = struct.pack(f"{len(vector)}f", *vector)
         resp.json.return_value = {
             "header": {"code": 0, "message": "success"},
-            "payload": {"feature": {"text": base64.b64encode(
-                np.array(vector, dtype=np.float32).tobytes()).decode()}},
+            "payload": {"feature": {"text": base64.b64encode(vec_bytes).decode()}},
         }
         return resp
 
@@ -76,12 +77,12 @@ class TestXfyunEmbeddings:
             vec = emb.embed_query("脑卒中")
         assert len(vec) == 3
         assert abs(vec[1] - 0.2) < 1e-6
-        # 查询走 Embeddingq 服务
-        assert "s50d55a16" in mock_post.call_args[0][0]
+        # 官方 HTTP 接口使用单一地址，通过 domain 参数区分 query/para
+        assert "emb-cn-huabei-1.xf-yun.com" in mock_post.call_args[0][0]
         body = mock_post.call_args[1]["json"]
         assert body["parameter"]["emb"]["domain"] == "query"
         inner = json.loads(base64.b64decode(body["payload"]["messages"]["text"]))
-        assert inner["messages"][0]["content"] == "脑卒中"
+        assert inner[0]["content"] == "脑卒中"
 
     def test_embed_documents_uses_para_domain(self, monkeypatch):
         emb = self._make(monkeypatch)
@@ -89,8 +90,17 @@ class TestXfyunEmbeddings:
             vecs = emb.embed_documents(["文档一", "文档二"])
         assert len(vecs) == 2
         assert mock_post.call_count == 2
-        assert "sa8a05c27" in mock_post.call_args[0][0]
-        assert mock_post.call_args[1]["json"]["parameter"]["emb"]["domain"] == "para"
+        assert "emb-cn-huabei-1.xf-yun.com" in mock_post.call_args[0][0]
+        body = mock_post.call_args[1]["json"]
+        assert body["parameter"]["emb"]["domain"] == "para"
+
+    def test_error_code_raises_after_retries(self, monkeypatch):
+        emb = self._make(monkeypatch)
+        bad = MagicMock()
+        bad.json.return_value = {"header": {"code": 11202, "message": "licc failed"}}
+        with patch("requests.post", return_value=bad), patch("time.sleep"):
+            with pytest.raises(ValueError, match="11202"):
+                emb.embed_query("x")
 
     def test_error_code_raises_after_retries(self, monkeypatch):
         emb = self._make(monkeypatch)

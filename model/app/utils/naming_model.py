@@ -5,22 +5,33 @@ from dotenv import load_dotenv
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_openai import ChatOpenAI
 
+# 独立运行时也需要讯飞兼容性补丁（main.py 中也会执行，幂等安全）
+from app.utils.xfyun_compat import apply_patches
+apply_patches()
 
-load_dotenv()
+load_dotenv(override=True)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
 class NamingModel(object):
     def __init__(self):
-        api_key = os.environ.get("SPARK_API_PASSWORD_LITE") or os.environ.get("SPARK_API_PASSWORD")
+        # 默认使用 PRO 档（原 Lite 服务已无额度，轻量任务复用 Pro）
+        api_key = os.environ.get("SPARK_API_PASSWORD_PRO") or os.environ.get("SPARK_API_PASSWORD")
+        model = os.environ.get("SPARK_MODEL_PRO") or "generalv3"
+        base_url = (
+            os.environ.get("SPARK_BASE_URL_PRO")
+            or os.environ.get("SPARK_BASE_URL")
+            or "https://spark-api-open.xf-yun.com/v1"
+        )
+
         if not api_key:
             logger.warning("未找到环境变量 SPARK_API_PASSWORD，标题生成功能将不可用")
             self.llm = None
         else:
             self.llm = ChatOpenAI(
-                model=os.environ.get("SPARK_MODEL_LITE") or "lite",
-                base_url="https://spark-api-open.xf-yun.com/v1",
+                model=model,
+                base_url=base_url,
                 api_key=api_key,
                 temperature=0.3,
                 max_tokens=300,

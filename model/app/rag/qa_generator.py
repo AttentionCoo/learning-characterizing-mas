@@ -8,21 +8,54 @@ from langchain_core.prompts import ChatPromptTemplate
 logger = logging.getLogger(__name__)
 
 class QAGenerator:
-    def __init__(self, model_name=None):
+    def __init__(self, model_name=None, tier: str = "lite"):
         """
-        初始化大模型调用。使用讯飞星火 OpenAI 兼容接口（默认 lite 档）。
+        初始化大模型调用。使用讯飞星火 OpenAI 兼容接口。
+
+        参数:
+            model_name: 直接指定模型名（优先于 tier）
+            tier: 档位选择 "lite" / "pro" / "max"，默认 "lite"（轻量任务无需强力模型）
         """
-        model_name = model_name or os.getenv("SPARK_MODEL_LITE") or "lite"
-        api_key = os.getenv("SPARK_API_PASSWORD_LITE") or os.getenv("SPARK_API_PASSWORD")
-        base_url = "https://spark-api-open.xf-yun.com/v1"
+        if model_name:
+            pass  # 直接使用传入的 model_name
+        elif tier == "lite":
+            model_name = os.getenv("SPARK_MODEL_LITE") or "generalv3"
+        elif tier == "pro":
+            model_name = os.getenv("SPARK_MODEL_PRO") or "generalv3"
+        elif tier == "max":
+            model_name = os.getenv("SPARK_MODEL_MAX") or "max-32k"
+        else:
+            model_name = "generalv3"
+
+        # 按档位读取对应的 API Key
+        tier_key_map = {
+            "lite": "SPARK_API_PASSWORD_LITE",
+            "pro": "SPARK_API_PASSWORD_PRO",
+            "max": "SPARK_API_PASSWORD_MAX",
+        }
+        api_key = (
+            os.getenv(tier_key_map.get(tier, ""))
+            or os.getenv("SPARK_API_PASSWORD")
+        )
+        base_url = (
+            os.getenv(f"SPARK_BASE_URL_{tier.upper()}")
+            or os.getenv("SPARK_BASE_URL")
+            or "https://spark-api-open.xf-yun.com/v1"
+        )
+
+        # 诊断日志：确认实际读取到的凭证与模型
+        _key_preview = f"{api_key[:6]}...{api_key[-4:]}" if api_key else "None"
+        logger.info(f"🔑 [QAGenerator] model={model_name}, api_key={_key_preview}")
 
         if not api_key:
             logger.warning("⚠️ 未找到 SPARK_API_PASSWORD，QA生成可能失败。")
-            
+
         self.llm = ChatOpenAI(
             model=model_name,
             api_key=api_key,
-            base_url=base_url
+            base_url=base_url,
+            max_retries=3,
+            request_timeout=90,
         )
         self.prompt = ChatPromptTemplate.from_template(
             "你是一个专业的医学助理。请阅读以下由多个连续医学文档片段组合而成的长文本，提取出其中最重要的关联信息，生成3到5个高质量的问答对(Q&A)。\n"
