@@ -96,9 +96,24 @@ async def code_assist(request: CodeAssistRequest):
     task_mgr = resources["task_manager"]
     task_id = uuid.uuid4().hex
 
+    prompt = (request.prompt or "").strip()
+    existing_code = (request.existingCode or "").strip()
+
+    if not prompt and not existing_code:
+        logger.warning("[code_assist] task_id=%s 拒绝空输入: prompt和code均为空", task_id)
+        task_mgr.create_task(task_id, "code_assist", {})
+        error_event = build_error_event(
+            ValueError("请先输入代码或描述你的诉求"),
+            talk_id=task_id,
+        )
+        async def single_error_event():
+            yield {"event": "error", "data": json.dumps(error_event, ensure_ascii=False)}
+            yield {"event": "done", "data": json.dumps({"type": "done", "talkId": task_id}, ensure_ascii=False)}
+        return EventSourceResponse(single_error_event(), ping=15)
+
     question = _build_code_assist_question(request)
     logger.info("[code_assist] task_id=%s assistType=%s prompt_len=%d code_len=%d",
-                task_id, request.assistType, len(request.prompt or ""), len(request.existingCode or ""))
+                task_id, request.assistType, len(prompt), len(existing_code))
 
     task_mgr.create_task(task_id, "code_assist", {})
 
