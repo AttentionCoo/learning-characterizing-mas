@@ -1,5 +1,5 @@
 <script setup>
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, onMounted, onActivated, onDeactivated, onBeforeUnmount } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { executeCodeAPI, codeAssistStreamAPI } from '@/api/code'
@@ -31,6 +31,77 @@ const assistError = ref('')
 
 const resultPaneRef = ref(null)
 const userScrolled = ref(false)
+const inlineError = ref('')
+
+/** 当前 SSE 请求的 AbortController，用于主动取消 */
+let assistAbortController = null
+/** 安全超时计时器 */
+let assistSafetyTimer = null
+
+/** 重置所有 AI 辅助相关状态 */
+function resetAssistState() {
+  isAssisting.value = false
+  isThinking.value = false
+  thinkingHint.value = ''
+  assistContent.value = ''
+  assistError.value = ''
+  inlineError.value = ''
+  userScrolled.value = false
+}
+
+/** 取消正在进行的 AI 辅助请求 */
+function cancelAssist() {
+  if (assistSafetyTimer) {
+    clearTimeout(assistSafetyTimer)
+    assistSafetyTimer = null
+  }
+  if (assistAbortController) {
+    assistAbortController.abort()
+    assistAbortController = null
+  }
+  resetAssistState()
+}
+
+/** 设置安全超时（60 秒），防止 isAssisting 状态永久卡死 */
+function startSafetyTimer() {
+  clearSafetyTimer()
+  assistSafetyTimer = setTimeout(() => {
+    console.warn('[code-assist] 安全超时触发，强制重置状态')
+    cancelAssist()
+    assistError.value = 'AI 请求超时，请检查后端模型服务是否正常运行'
+    inlineError.value = assistError.value
+  }, 60000)
+}
+
+/** 清除安全超时计时器 */
+function clearSafetyTimer() {
+  if (assistSafetyTimer) {
+    clearTimeout(assistSafetyTimer)
+    assistSafetyTimer = null
+  }
+}
+
+// ── 生命周期管理：确保组件在任意生命周期阶段都能正确清理状态 ──
+
+/** 首次挂载时初始化 clean 状态 */
+onMounted(() => {
+  resetAssistState()
+})
+
+/** keep-alive 激活时重置状态 */
+onActivated(() => {
+  resetAssistState()
+})
+
+/** keep-alive 失活时取消请求并清理 */
+onDeactivated(() => {
+  cancelAssist()
+})
+
+/** 组件销毁时取消请求并清理 */
+onBeforeUnmount(() => {
+  cancelAssist()
+})
 
 function onPaneScroll() {
   const el = resultPaneRef.value
@@ -46,7 +117,14 @@ function scrollToBottom() {
 
 function renderMarkdown(text) {
   if (!text) return ''
-  return DOMPurify.sanitize(marked.parse(text))
+  try {
+    return DOMPurify.sanitize(marked.parse(text))
+  } catch (e) {
+    console.error('[code-assist] Markdown 渲染失败:', e)
+    return '<pre style="white-space:pre-wrap;word-break:break-word">' +
+      text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') +
+      '</pre>'
+  }
 }
 
 async function runCode() {
@@ -70,19 +148,36 @@ async function runCode() {
 }
 
 async function requestAssist() {
-  if (isAssisting.value) return
+  console.log('[code-assist] requestAssist 触发, isAssisting=', isAssisting.value)
+
+  if (isAssisting.value) {
+    console.log('[code-assist] 检测到正在进行的请求，取消并重试')
+    cancelAssist()
+    await nextTick()
+  }
+
   if (!code.value.trim() && !prompt.value.trim()) {
     assistError.value = '请先输入代码或描述你的诉求'
+    inlineError.value = assistError.value
+    console.warn('[code-assist] 输入为空，拒绝请求')
     return
   }
+
   isAssisting.value = true
   isThinking.value = true
   thinkingHint.value = 'AI 正在分析代码...'
   assistContent.value = ''
   assistError.value = ''
+  inlineError.value = ''
   userScrolled.value = false
 
+  assistAbortController = new AbortController()
+  startSafetyTimer()
+
+  await nextTick()
+
   try {
+    console.log('[code-assist] 开始 SSE 请求: assistType=', assistType.value, 'promptLen=', prompt.value.length, 'codeLen=', code.value.length)
     const result = await codeAssistStreamAPI(
       {
         talkId: talkId.value,
@@ -93,20 +188,37 @@ async function requestAssist() {
         errorMessage: runResult.value && !runResult.value.success ? runResult.value.stderr : null,
       },
       (chunk) => {
-        isThinking.value = false
-        assistContent.value += chunk
-        nextTick(scrollToBottom)
+        if (isThinking.value) isThinking.value = false
+        if (chunk != null && chunk !== '') {
+          assistContent.value += chunk
+          nextTick(scrollToBottom)
+        }
       },
       (thinking) => {
         thinkingHint.value = thinking.title || 'AI 正在分析代码...'
       },
+      { signal: assistAbortController.signal },
     )
+    console.log('[code-assist] SSE 请求完成: talkId=', result.data?.talkId)
     if (result.data?.talkId) talkId.value = result.data.talkId
+    if (!assistContent.value && !assistError.value) {
+      assistError.value = 'AI 未返回有效内容，请检查模型服务日志或稍后重试'
+      inlineError.value = assistError.value
+    }
   } catch (e) {
-    assistError.value = e.message || 'AI 辅助失败，请稍后重试'
+    console.error('[code-assist] SSE 请求失败:', e.message)
+    if (e.message === '请求被取消') {
+      console.log('[code-assist] 请求已被用户取消')
+      return
+    }
+    const msg = e.message || 'AI 辅助失败，请稍后重试'
+    assistError.value = msg
+    inlineError.value = msg
   } finally {
+    clearSafetyTimer()
     isAssisting.value = false
     isThinking.value = false
+    assistAbortController = null
   }
 }
 </script>
@@ -166,6 +278,9 @@ print(df.describe())"
               {{ isAssisting ? 'AI 分析中...' : '✨ AI 辅助' }}
             </button>
           </div>
+          <transition name="fade-inline-error">
+            <p v-if="inlineError" class="inline-error">{{ inlineError }}</p>
+          </transition>
         </div>
 
         <div class="panel output-panel">
@@ -350,6 +465,31 @@ print(df.describe())"
 
 .run-btn { background: var(--color-secondary-bg); color: var(--color-primary-dark); }
 .assist-btn { background: linear-gradient(135deg, #6366f1, #11967f); color: #fff; }
+
+.inline-error {
+  margin: 6px 12px 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.fade-inline-error-enter-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.fade-inline-error-leave-active {
+  transition: opacity 0.15s ease;
+}
+.fade-inline-error-enter-from {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+.fade-inline-error-leave-to {
+  opacity: 0;
+}
 
 .output-panel { flex: 1; min-height: 120px; }
 
