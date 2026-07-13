@@ -33,6 +33,10 @@ class ReportNode(BaseNode):
             logger.info(f"[report] 存在用户问题，直接返回提案")
             return {"report": state['proposal']}
 
+        # ── code_assist 模式：直接用 LLM 生成代码辅助内容 ──
+        if report_mode == "code_assist":
+            return await self._generate_code_assist(state)
+
         if not state['proposal']:
             logger.warning(f"[report] 没有提案，生成默认报告")
             default_report = f"""## 学习分析报告
@@ -133,4 +137,42 @@ class ReportNode(BaseNode):
             report = f"## 学习分析报告\n\n{state['proposal']}\n\n{warning_text}"
 
         logger.info(f"[report] 报告生成完成，长度: {len(report)}, 块数: {chunk_count}")
+        return {"report": report}
+
+    async def _generate_code_assist(self, state: LearningState) -> Dict:
+        """code_assist 模式：不依赖 proposal/evidence/critique，
+        直接用 LLM 流式生成代码补全/诊断/优化/讲解内容。"""
+        case_text = state.get("case_text", "")
+        logger.info(f"[report][code_assist] case_text 长度: {len(case_text)}")
+
+        code_assist_system = (
+            "你是一名专业的 Python 编程导师，专注于医学数据分析领域。\n"
+            "请根据用户的代码和诉求，提供代码补全、错误诊断、优化建议或代码讲解。\n"
+            "要求：\n"
+            "- 用中文回答，代码块用 ```python 包裹\n"
+            "- 解释清晰、步骤分明\n"
+            "- 如果用户代码有错误，指出问题并给出修复方案\n"
+            "- 如果用户请求补全，提供可直接使用的代码片段\n"
+            "- 如果用户请求优化，解释优化点和性能提升\n"
+            "- 如果用户请求讲解，逐行解释代码逻辑\n"
+            "- 涉及医学统计（如 pandas/numpy/scipy/scikit-learn）时，结合领域知识说明"
+        )
+
+        messages = [
+            SystemMessage(content=code_assist_system),
+            HumanMessage(content=case_text),
+        ]
+
+        report = ""
+        chunk_count = 0
+        try:
+            async for chunk in self.llm_proposer.astream(messages):
+                c = chunk.content if hasattr(chunk, "content") else str(chunk)
+                report += c
+                chunk_count += 1
+        except Exception as e:
+            logger.error(f"[report][code_assist] 生成失败: {type(e).__name__} - {str(e)}")
+            report = f"代码辅助生成失败：{str(e)}"
+
+        logger.info(f"[report][code_assist] 生成完成，长度: {len(report)}, 块数: {chunk_count}")
         return {"report": report}

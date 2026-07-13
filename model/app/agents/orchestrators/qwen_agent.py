@@ -53,6 +53,7 @@ _REPORT_MODE_TO_INTENT: Dict[str, str] = {
     "tutor": "tutor",
     "learning_path_generate": "learning_path",
     "emergency": "profile",
+    "code_assist": "code_assist",
 }
 
 

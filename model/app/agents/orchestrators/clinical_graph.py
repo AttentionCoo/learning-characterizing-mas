@@ -82,6 +82,7 @@ class LearningGraphBuilder:
                 "assessment": "analysis",
                 "learning_path": "analysis",
                 "consultation": "analysis",
+                "code_assist": "generate_report",
             }
         )
 
@@ -144,6 +145,9 @@ class LearningGraphBuilder:
         t = state['intent_type']
         if t == "non_stroke":
             return "non_stroke"
+        # code_assist 跳过临床分析链，直接进入报告生成
+        if t == "code_assist":
+            return "code_assist"
         valid_types = {"profile", "resource", "tutor", "assessment", "learning_path", "consultation", "knowledge"}
         if t in valid_types:
             return t
