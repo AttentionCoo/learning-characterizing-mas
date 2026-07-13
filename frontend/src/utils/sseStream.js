@@ -7,7 +7,7 @@
  * resolve 结构：{ data: { talkId, content, profileDimensions } }
  * profileDimensions 仅画像构建场景的 done 事件携带，其余场景为 null。
  */
-export function sseStreamRequest(url, params, { onChunk, onThinking, timeout = 300000 } = {}) {
+export function sseStreamRequest(url, params, { onChunk, onThinking, timeout = 300000, signal: externalSignal } = {}) {
   const token = localStorage.getItem('Synapse_MD_USER')
     ? JSON.parse(localStorage.getItem('Synapse_MD_USER')).token
     : ''
@@ -79,6 +79,18 @@ export function sseStreamRequest(url, params, { onChunk, onThinking, timeout = 3
       controller.abort()
       safeReject(new Error('请求超时，请稍后重试'))
     }, timeout)
+
+    if (externalSignal) {
+      if (externalSignal.aborted) {
+        safeReject(new Error('请求被取消'))
+        return
+      }
+      externalSignal.addEventListener('abort', () => {
+        controller.abort()
+        clearTimeout(timeoutId)
+        safeReject(new Error('请求被取消'))
+      }, { once: true })
+    }
 
     fetch(url, {
       method: 'POST',
