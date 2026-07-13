@@ -24,7 +24,7 @@ pw_max = os.getenv("SPARK_API_PASSWORD_MAX") or os.getenv("SPARK_API_PASSWORD")
 
 model_lite = os.getenv("SPARK_MODEL_LITE") or "lite"
 model_pro = os.getenv("SPARK_MODEL_PRO") or "generalv3"
-model_max = os.getenv("SPARK_MODEL_MAX") or "max-32k"
+model_max = os.getenv("SPARK_MODEL_MAX") or "generalv3"
 
 print("=" * 60)
 print("[DEBUG-xfyun-auth] Xunfei Spark Auth Diagnosis")

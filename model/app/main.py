@@ -108,7 +108,7 @@ def init_all_resources():
     #   max → Ultra-32K（最强模型，Agent proposer 长提示词场景）
     #   pro → Pro（critic / 反思）
     #   lite → Pro（原 Lite 已无额度，轻量任务复用 Pro）
-    _model_max = os.getenv("SPARK_MODEL_MAX") or "max-32k"
+    _model_max = os.getenv("SPARK_MODEL_MAX") or "generalv3"
     _model_pro = os.getenv("SPARK_MODEL_PRO") or "generalv3"
     _model_lite = os.getenv("SPARK_MODEL_LITE") or "generalv3"
 

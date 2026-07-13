@@ -23,7 +23,7 @@ class QAGenerator:
         elif tier == "pro":
             model_name = os.getenv("SPARK_MODEL_PRO") or "generalv3"
         elif tier == "max":
-            model_name = os.getenv("SPARK_MODEL_MAX") or "max-32k"
+            model_name = os.getenv("SPARK_MODEL_MAX") or "generalv3"
         else:
             model_name = "generalv3"
 
