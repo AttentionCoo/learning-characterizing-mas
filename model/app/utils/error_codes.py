@@ -34,6 +34,7 @@ def build_error_event(exc: Exception, talk_id=None) -> dict:
     return {
         "type": "error",
         "talkId": talk_id,
+        "message": str(exc),
         "content": str(exc),
         "error": {
             "code": error_code.code,
