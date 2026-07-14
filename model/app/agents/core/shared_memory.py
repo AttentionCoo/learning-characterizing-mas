@@ -172,6 +172,28 @@ class MetaMemoryFilter:
 # 物理层 — 共享记忆存储
 # ============================================================
 
+class _ChromaEmbeddingFunction:
+    """将 LangChain 的 XfyunEmbeddings 包装为 ChromaDB 原生 EmbeddingFunction。
+
+    ChromaDB 的 get_or_create_collection 在未传入 embedding_function 时会使用默认
+    ONNX 模型（all-MiniLM-L6-v2, 384d），与讯飞 embedding（2560d）或 BGE 降级
+    （1024d）维度冲突，导致后续写入/检索全量失败。
+
+    此包装器确保 ChromaDB 集合的维度与 XfyunEmbeddings 当前有效模型一致，
+    同时保证降级路径（add 时不传 embeddings）也能产出正确维度的向量。
+    """
+
+    def __init__(self, xfyun_embeddings):
+        self._xfyun = xfyun_embeddings
+
+    def __call__(self, texts):
+        """ChromaDB 要求: (List[str]) -> List[List[float]]"""
+        if isinstance(texts, str):
+            # ChromaDB 某些版本会传单个 str 作为 query
+            return [self._xfyun.embed_query(texts)]
+        return self._xfyun.embed_documents(texts)
+
+
 class SharedMemoryStore:
     """基于 ChromaDB 的共享记忆存储，负责持久化高价值学习洞察"""
 
@@ -186,6 +208,7 @@ class SharedMemoryStore:
         self.meta_filter = MetaMemoryFilter(cfg.get("meta_filter", {}))
         self._collection = None
         self._embeddings = None
+        self._ef = None  # ChromaDB 原生 embedding function 包装器
         self._initialized = False
         logger.info(f"[shared_memory] 初始化 | 持久化目录={self.persist_dir}")
 
@@ -197,15 +220,21 @@ class SharedMemoryStore:
             import chromadb
 
             self._embeddings = XfyunEmbeddings()
+            self._ef = _ChromaEmbeddingFunction(self._embeddings)
 
             client = chromadb.PersistentClient(path=self.persist_dir)
             self._collection = client.get_or_create_collection(
                 name=self.COLLECTION_NAME,
-                metadata={"hnsw:space": "cosine"}
+                embedding_function=self._ef,
+                metadata={"hnsw:space": "cosine"},
             )
             self._initialized = True
             count = self._collection.count()
-            logger.info(f"[shared_memory] ✅ 初始化完成 | 已有 {count} 条共享记忆")
+            actual_dim = self._collection._embedding_function
+            logger.info(
+                f"[shared_memory] ✅ 初始化完成 | 已有 {count} 条共享记忆"
+                f" | embedding_function={type(actual_dim).__name__}"
+            )
         except Exception as e:
             logger.error(f"[shared_memory] ❌ 初始化失败: {e}")
             self._initialized = False
@@ -271,11 +300,24 @@ class SharedMemoryStore:
             logger.info(f"[shared_memory] ✅ 存储 | id={mem_id} source={source_agent} entropy={entropy_score}")
             return mem_id
         except Exception as e:
-            logger.warning(f"[shared_memory] ⚠️ 向量存储失败，降级为纯文档存储: {e}")
+            err_msg = str(e)
+            # 维度不匹配不可恢复 — 降级重试只会产生同样的错误，直接给出修复指引
+            if "dimension" in err_msg.lower() or "dimensionality" in err_msg.lower():
+                logger.error(
+                    f"[shared_memory] ❌ 向量维度冲突，无法存储: {err_msg}\n"
+                    f"   原因：ChromaDB 集合维度与当前 embedding 模型输出维度不一致。\n"
+                    f"   解决：删除向量库目录后重启服务，统一使用一种 embedding 模型。\n"
+                    f"   向量库路径: {self.persist_dir}\n"
+                    f"   建议：在 .env 中设置 XFYUN_EMBEDDING_ENABLED=false 全程使用本地 BGE（1024d）"
+                )
+                return None
+            logger.warning(f"[shared_memory] ⚠️ 向量存储失败，降级重试: {err_msg}")
             try:
+                fallback_embeddings = self._ef([content]) if self._ef else None
                 self._collection.add(
                     ids=[mem_id],
                     documents=[content],
+                    embeddings=fallback_embeddings,
                     metadatas=[meta],
                 )
                 logger.info(f"[shared_memory] ✅ 降级存储成功 | id={mem_id}")
