@@ -1,11 +1,5 @@
-"""测试向量库持久化打造功能
+"""Test vector store persistence - build, load, search, cross-session"""
 
-测试覆盖:
-  1. 主知识库 (chroma_db_unified) — 构建、加载、搜索
-  2. 共享记忆库 (chroma_db_shared_memory) — 存储、检索、跨会话持久化
-  3. 维度一致性检查
-  4. 跨会话持久化验证
-"""
 import os
 import sys
 import shutil
@@ -23,401 +17,260 @@ logging.basicConfig(
 )
 logger = logging.getLogger("test_vectorstore")
 
-
-TEST_PERSIST_DIR = os.path.join(
+TEST_PERSIST_DIR = os.path.normpath(os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     "..", "data", "vector_stores", "_test_persist"
-)
-TEST_PERSIST_DIR = os.path.normpath(TEST_PERSIST_DIR)
+))
 
 
-def print_header(title: str):
-    print(f"\n{'=' * 60}")
-    print(f"  {title}")
-    print(f"{'=' * 60}")
+def hdr(title):
+    print(f"\n{'='*60}\n  {title}\n{'='*60}")
 
 
-def print_result(name: str, passed: bool, detail: str = ""):
-    status = "✅ PASS" if passed else "❌ FAIL"
-    print(f"  [{status}] {name}" + (f" — {detail}" if detail else ""))
+def ok(name, passed, detail=""):
+    s = "PASS" if passed else "FAIL"
+    print(f"  [{s}] {name}" + (f" -- {detail}" if detail else ""))
 
 
-def cleanup(persist_dir: str):
-    if os.path.exists(persist_dir):
-        shutil.rmtree(persist_dir)
-        logger.info(f"🧹 已清理测试目录: {persist_dir}")
+def cleanup(path):
+    if os.path.exists(path):
+        shutil.rmtree(path)
 
 
-# ============================================================
-# 测试 1: 主知识库 — 构建与加载
-# ============================================================
-def test_main_knowledge_base_build_and_load():
-    print_header("测试 1: 主知识库 — 构建与加载")
-
+# Test 1: Main knowledge base build & load
+def test_main_kb():
+    hdr("Test 1: Main KB - Build & Load")
     cleanup(TEST_PERSIST_DIR)
-
     try:
         from langchain_core.documents import Document
         from app.rag.retrievers import build_or_load_vectorstore, XfyunEmbeddings
 
-        # 1.1 创建测试文档
-        test_chunks = [
-            Document(
-                page_content="脑卒中急性期溶栓治疗需要严格把握时间窗，发病4.5小时内可使用rtPA静脉溶栓。",
-                metadata={"source": "test_doc_1.pdf", "page": 1},
-            ),
-            Document(
-                page_content="NIHSS评分是评估卒中严重程度的重要工具，范围0-42分，分数越高表示神经功能缺损越严重。",
-                metadata={"source": "test_doc_1.pdf", "page": 2},
-            ),
-            Document(
-                page_content="缺血性脑卒中的二级预防包括抗血小板治疗、血压控制、血糖管理和生活方式干预。",
-                metadata={"source": "test_doc_2.pdf", "page": 1},
-            ),
-            Document(
-                page_content="颈动脉支架植入术是治疗颈动脉狭窄的有效方法，适用于狭窄程度≥70%的症状性患者。",
-                metadata={"source": "test_doc_2.pdf", "page": 3},
-            ),
-            Document(
-                page_content="脑出血急性期管理包括血压控制、颅内压管理和并发症防治。",
-                metadata={"source": "test_doc_3.pdf", "page": 1},
-            ),
+        chunks = [
+            Document(page_content="rtPA IV thrombolysis time window is within 4.5 hours of onset.", metadata={"source": "t1.pdf"}),
+            Document(page_content="NIHSS score ranges 0-42, higher = more severe neurological deficit.", metadata={"source": "t1.pdf"}),
+            Document(page_content="Secondary prevention includes antiplatelet, BP control, glucose management.", metadata={"source": "t2.pdf"}),
+            Document(page_content="Carotid stenting indicated for symptomatic stenosis >= 70%.", metadata={"source": "t2.pdf"}),
+            Document(page_content="ICH acute management: BP control, ICP management, complication prevention.", metadata={"source": "t3.pdf"}),
         ]
 
-        # 1.2 构建向量库（enable_qa=False，快速测试）
-        logger.info("🏗️  构建向量库...")
-        vectordb = build_or_load_vectorstore(
-            test_chunks, TEST_PERSIST_DIR, enable_qa=False
-        )
-        count = vectordb._collection.count()
-        print_result("向量库构建成功", count == len(test_chunks),
-                     f"预期 {len(test_chunks)} 条，实际 {count} 条")
+        vdb = build_or_load_vectorstore(chunks, TEST_PERSIST_DIR, enable_qa=False)
+        count = vdb._collection.count()
+        ok("Build", count == 5, f"expected 5, got {count}")
 
-        # 1.3 验证向量库持久化文件
-        sqlite_path = os.path.join(TEST_PERSIST_DIR, "chroma.sqlite3")
-        print_result("持久化文件存在", os.path.exists(sqlite_path),
-                     f"路径: {sqlite_path}")
+        sqlite = os.path.join(TEST_PERSIST_DIR, "chroma.sqlite3")
+        ok("Persistence file", os.path.exists(sqlite), sqlite)
 
-        # 1.4 重新加载向量库（模拟跨会话）
-        logger.info("🔄 重新加载向量库（模拟跨会话）...")
-        vectordb2 = build_or_load_vectorstore(
-            [], TEST_PERSIST_DIR, enable_qa=False
-        )
-        count2 = vectordb2._collection.count()
-        print_result("跨会话加载数据一致", count2 == len(test_chunks),
-                     f"重新加载后 count={count2}")
+        vdb2 = build_or_load_vectorstore([], TEST_PERSIST_DIR, enable_qa=False)
+        ok("Reload", vdb2._collection.count() == 5, f"count={vdb2._collection.count()}")
 
-        # 1.5 检索测试
-        embeddings = XfyunEmbeddings()
-        query = "溶栓治疗时间窗"
-        query_embedding = embeddings.embed_query(query)
-        results = vectordb2._collection.query(
-            query_embeddings=[query_embedding],
-            n_results=3,
-            include=["documents", "distances"],
-        )
-        hit_count = len(results["documents"][0]) if results["documents"] else 0
-        print_result("向量检索功能", hit_count > 0,
-                     f"查询'{query}'命中 {hit_count} 条")
-
-        # 1.6 打印检索结果
-        if hit_count > 0:
-            for i, (doc, dist) in enumerate(zip(results["documents"][0], results["distances"][0])):
-                print(f"      #{i+1} [distance={dist:.4f}] {doc[:60]}...")
-
+        emb = XfyunEmbeddings()
+        qv = emb.embed_query("thrombolysis time window")
+        res = vdb2._collection.query(query_embeddings=[qv], n_results=2, include=["documents", "distances"])
+        hits = len(res["documents"][0]) if res["documents"] else 0
+        ok("Search", hits > 0, f"hits={hits}")
+        if hits:
+            for i, (d, dist) in enumerate(zip(res["documents"][0], res["distances"][0])):
+                print(f"      #{i+1} [dist={dist:.4f}] {d[:60]}...")
         return True
     except Exception as e:
-        logger.error(f"❌ 测试失败: {e}", exc_info=True)
-        print_result("主知识库测试", False, str(e))
+        logger.error(f"FAIL: {e}", exc_info=True)
+        ok("Main KB", False, str(e))
         return False
 
 
-# ============================================================
-# 测试 2: 共享记忆库 — 存储与检索
-# ============================================================
-def test_shared_memory_store_and_retrieve():
-    print_header("测试 2: 共享记忆库 — 存储与检索")
-
+# Test 2: Shared memory store & retrieve
+def test_shared_memory():
+    hdr("Test 2: Shared Memory - Store & Retrieve")
     try:
         from app.agents.core.shared_memory import SharedMemoryStore
 
-        # 清理旧的共享记忆测试数据
-        mem_persist_dir = os.path.join(
+        mem_dir = os.path.normpath(os.path.join(
             os.path.dirname(os.path.abspath(__file__)),
             "..", "data", "vector_stores", "chroma_db_shared_memory"
-        )
-        mem_persist_dir = os.path.normpath(mem_persist_dir)
-        cleanup(mem_persist_dir)
+        ))
+        cleanup(mem_dir)
 
-        store = SharedMemoryStore(config={"persist_dir": mem_persist_dir})
-
-        # 2.1 初始化状态
+        store = SharedMemoryStore(config={"persist_dir": mem_dir})
         stats = store.get_stats()
-        print_result("记忆库初始化成功", stats["initialized"],
-                     f"总记忆数={stats['total']}")
+        ok("Init", stats["initialized"], f"total={stats['total']}")
 
-        # 2.2 存储高价值记忆
-        mem_id1 = store.store(
-            "rtPA静脉溶栓时间窗为发病4.5小时内，需严格把握适应症和禁忌症。",
-            "test_agent_1",
-            metadata={"knowledge_points": ["溶栓", "时间窗"], "confidence": 0.9},
-            force=True,
-        )
-        print_result("存储高价值记忆", mem_id1 is not None, f"id={mem_id1}")
+        mid1 = store.store("rtPA thrombolysis time window is within 4.5h.", "agent1",
+                           metadata={"kp": ["thrombolysis"], "conf": 0.9}, force=True)
+        ok("Store high-value", mid1 is not None, f"id={mid1}")
 
-        mem_id2 = store.store(
-            "NIHSS评分是评估卒中严重程度的重要工具，范围0-42分。",
-            "test_agent_2",
-            metadata={"knowledge_points": ["NIHSS", "评估"], "confidence": 0.85},
-            force=True,
-        )
-        print_result("存储第二条记忆", mem_id2 is not None, f"id={mem_id2}")
+        mid2 = store.store("NIHSS score ranges 0-42 for stroke severity.", "agent2",
+                           metadata={"kp": ["NIHSS"], "conf": 0.85}, force=True)
+        ok("Store 2nd", mid2 is not None, f"id={mid2}")
 
-        # 2.3 噪声音记忆应被过滤
-        mem_id3 = store.store(
-            "嗯嗯好的知道了",
-            "test_agent_3",
-            force=False,
-        )
-        print_result("噪声音记忆被过滤", mem_id3 is None,
-                     f"低价值内容被熵值过滤拦截")
+        mid3 = store.store("ok thanks", "agent3", force=False)
+        ok("Noise filtered", mid3 is None, "low-value content rejected")
 
-        # 2.4 检索
-        hits = store.retrieve("溶栓治疗", top_k=3)
-        print_result("语义检索成功", len(hits) >= 1,
-                     f"查询'溶栓治疗'命中 {len(hits)} 条")
-
+        hits = store.retrieve("thrombolysis", top_k=3)
+        ok("Semantic search", len(hits) >= 1, f"hits={len(hits)}")
         if hits:
             for h in hits:
                 print(f"      [{h['relevance']:.4f}] {h['content'][:60]}...")
 
-        # 2.5 统计
         stats = store.get_stats()
-        print_result("记忆库统计正确", stats["total"] == 2,
-                     f"预期 2 条，实际 {stats['total']} 条")
-
+        ok("Stats", stats["total"] == 2, f"expected 2, got {stats['total']}")
         return True
     except Exception as e:
-        logger.error(f"❌ 测试失败: {e}", exc_info=True)
-        print_result("共享记忆库测试", False, str(e))
+        logger.error(f"FAIL: {e}", exc_info=True)
+        ok("Shared Memory", False, str(e))
         return False
 
 
-# ============================================================
-# 测试 3: 共享记忆库 — 跨会话持久化
-# ============================================================
-def test_shared_memory_cross_session_persistence():
-    print_header("测试 3: 共享记忆库 — 跨会话持久化")
-
+# Test 3: Cross-session persistence
+def test_cross_session():
+    hdr("Test 3: Cross-Session Persistence")
     try:
         from app.agents.core.shared_memory import SharedMemoryStore
 
-        mem_persist_dir = os.path.join(
+        mem_dir = os.path.normpath(os.path.join(
             os.path.dirname(os.path.abspath(__file__)),
             "..", "data", "vector_stores", "chroma_db_shared_memory"
-        )
-        mem_persist_dir = os.path.normpath(mem_persist_dir)
+        ))
 
-        # 3.1 重新创建 store（模拟新会话）
-        store2 = SharedMemoryStore(config={"persist_dir": mem_persist_dir})
+        store2 = SharedMemoryStore(config={"persist_dir": mem_dir})
         stats = store2.get_stats()
-        print_result("跨会话数据保留", stats["total"] >= 2,
-                     f"持久化记忆数={stats['total']}（预期 ≥ 2）")
+        ok("Data retained", stats["total"] >= 2, f"total={stats['total']}")
 
-        # 3.2 新会话中检索旧数据
-        hits = store2.retrieve("NIHSS评分", top_k=3)
-        print_result("跨会话检索旧数据", len(hits) >= 1,
-                     f"查询'NIHSS评分'命中 {len(hits)} 条")
+        hits = store2.retrieve("NIHSS", top_k=3)
+        ok("Cross-session search", len(hits) >= 1, f"hits={len(hits)}")
 
-        # 3.3 新会话中写入新数据
-        mem_id_new = store2.store(
-            "脑出血急性期血压控制目标为收缩压<140mmHg。",
-            "test_agent_new",
-            metadata={"knowledge_points": ["脑出血", "血压"], "confidence": 0.9},
-            force=True,
-        )
-        print_result("新会话写入数据", mem_id_new is not None,
-                     f"id={mem_id_new}")
+        mid = store2.store("ICH BP target: SBP < 140mmHg.", "new_agent",
+                           metadata={"kp": ["ICH", "BP"], "conf": 0.9}, force=True)
+        ok("New session write", mid is not None, f"id={mid}")
 
         stats = store2.get_stats()
-        print_result("新会话数据总量正确", stats["total"] >= 3,
-                     f"持久化记忆数={stats['total']}（预期 ≥ 3）")
-
+        ok("Total after write", stats["total"] >= 3, f"total={stats['total']}")
         return True
     except Exception as e:
-        logger.error(f"❌ 测试失败: {e}", exc_info=True)
-        print_result("跨会话持久化测试", False, str(e))
+        logger.error(f"FAIL: {e}", exc_info=True)
+        ok("Cross-Session", False, str(e))
         return False
 
 
-# ============================================================
-# 测试 4: 维度一致性检查
-# ============================================================
-def test_dimension_consistency():
-    print_header("测试 4: 维度一致性检查")
-
+# Test 4: Dimension consistency
+def test_dimension():
+    hdr("Test 4: Dimension Consistency")
     try:
         from app.rag.retrievers import XfyunEmbeddings
         import chromadb
 
-        embeddings = XfyunEmbeddings()
-
-        # 4.1 生成一个 embedding 并检查维度
-        test_text = "脑卒中急性期溶栓治疗"
-        vec = embeddings.embed_query(test_text)
+        emb = XfyunEmbeddings()
+        vec = emb.embed_query("stroke thrombolysis")
         dim = len(vec)
+        ok("Embedding dimension", dim > 0, f"dim={dim}")
 
-        print_result("Embedding 维度有效", dim > 0, f"维度={dim}")
-
-        # 4.2 验证两个向量库的维度一致
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         stores = {
-            "主知识库": os.path.join(base_dir, "data", "vector_stores", "chroma_db_unified"),
-            "_test_persist": os.path.join(base_dir, "data", "vector_stores", "_test_persist"),
-            "共享记忆库": os.path.join(base_dir, "data", "vector_stores", "chroma_db_shared_memory"),
+            "main_kb": os.path.join(base, "data", "vector_stores", "chroma_db_unified"),
+            "test_kb": os.path.join(base, "data", "vector_stores", "_test_persist"),
+            "shared_mem": os.path.join(base, "data", "vector_stores", "chroma_db_shared_memory"),
         }
-
         for name, path in stores.items():
             if os.path.exists(path):
                 try:
                     client = chromadb.PersistentClient(path=path)
-                    collections = client.list_collections()
-                    if collections:
-                        col = collections[0]
-                        count = col.count()
-                        ef = col._embedding_function
-                        ef_name = type(ef).__name__ if ef else "None"
-                        print(f"      {name}: count={count}, embedding_function={ef_name}")
+                    cols = client.list_collections()
+                    if cols:
+                        c = cols[0]
+                        ef = type(c._embedding_function).__name__ if c._embedding_function else "None"
+                        print(f"      {name}: count={c.count()}, ef={ef}")
                     else:
-                        print(f"      {name}: 集合为空")
+                        print(f"      {name}: empty")
                 except Exception as e:
-                    print(f"      {name}: 检查失败 — {e}")
+                    print(f"      {name}: error -- {e}")
             else:
-                print(f"      {name}: 目录不存在（尚未创建）")
+                print(f"      {name}: not created yet")
 
-        print_result("维度一致性检查完成", True, f"当前 embedding 维度={dim}")
-
+        ok("Dimension check", True, f"current dim={dim}")
         return True
     except Exception as e:
-        logger.error(f"❌ 测试失败: {e}", exc_info=True)
-        print_result("维度一致性检查", False, str(e))
+        logger.error(f"FAIL: {e}", exc_info=True)
+        ok("Dimension", False, str(e))
         return False
 
 
-# ============================================================
-# 测试 5: 元记忆过滤器
-# ============================================================
-def test_meta_memory_filter():
-    print_header("测试 5: 元记忆过滤器")
-
+# Test 5: MetaMemory filter
+def test_meta():
+    hdr("Test 5: MetaMemory Filter")
     try:
         from app.agents.core.shared_memory import MetaMemoryFilter
-
         mf = MetaMemoryFilter()
 
-        # 5.1 高价值医学内容
-        text_high = "脑卒中急性期溶栓治疗需要严格把握时间窗，发病4.5小时内可使用rtPA静脉溶栓，NIHSS评分是评估卒中严重程度的重要工具。"
-        should, score, detail = mf.should_persist(text_high)
-        print_result("高价值内容被保留", should is True,
-                     f"熵分={score:.4f} < 阈值={mf.entropy_threshold}")
+        ok("High-value retained", mf.should_persist(
+            "Stroke thrombolysis with rtPA within 4.5h. NIHSS assessment tool.")[0] is True)
 
-        # 5.2 噪音内容
-        text_noise = "嗯嗯好的知道了谢谢老师"
-        should2, score2, _ = mf.should_persist(text_noise)
-        print_result("噪音内容被丢弃", should2 is False,
-                     f"熵分={score2:.4f} >= 阈值={mf.entropy_threshold}")
+        ok("Noise rejected", mf.should_persist("ok thanks bye")[0] is False)
 
-        # 5.3 批量过滤
         items = [
-            {"content": text_high, "id": 1},
-            {"content": text_noise, "id": 2},
-            {"content": "缺血性脑卒中二级预防包括抗血小板、血压控制、血糖管理。", "id": 3},
+            {"content": "Stroke rtPA thrombolysis within 4.5h. NIHSS assessment.", "id": 1},
+            {"content": "ok thanks", "id": 2},
+            {"content": "Secondary prevention: antiplatelet, BP, glucose control.", "id": 3},
         ]
         filtered = mf.filter_batch(items)
-        print_result("批量过滤正确", len(filtered) == 2,
-                     f"输入={len(items)} 输出={len(filtered)}")
-
+        ok("Batch filter", len(filtered) == 2, f"in={len(items)} out={len(filtered)}")
         return True
     except Exception as e:
-        logger.error(f"❌ 测试失败: {e}", exc_info=True)
-        print_result("元记忆过滤器", False, str(e))
+        logger.error(f"FAIL: {e}", exc_info=True)
+        ok("MetaMemory", False, str(e))
         return False
 
 
-# ============================================================
-# 测试 6: 共识引擎与信誉存储
-# ============================================================
-def test_consensus_and_reputation():
-    print_header("测试 6: 共识引擎与信誉存储")
-
+# Test 6: Consensus & reputation
+def test_consensus():
+    hdr("Test 6: Consensus & Reputation")
     try:
         from app.agents.core.shared_memory import ConsensusEngine, AgentReputationStore
 
-        # 6.1 共识引擎
         ce = ConsensusEngine()
         advices = {
-            "agent_a": "建议从脑血管解剖基础开始复习，重点关注Willis环和脑供血系统。",
-            "agent_b": "建议从脑血管解剖基础开始复习，重点关注Willis环和脑供血系统。",
-            "agent_c": "建议直接学习溶栓治疗指南，跳过基础解剖知识。",
+            "a": "Start with Willis circle anatomy.",
+            "b": "Start with Willis circle anatomy.",
+            "c": "Skip anatomy, go to guidelines.",
         }
-        result = ce.resolve_conflict(advices)
-        print_result("共识引擎工作正常", len(result["winning_agents"]) > 0,
-                     f"winner={result['winning_agents']}")
+        r = ce.resolve_conflict(advices)
+        ok("Consensus", len(r["winning_agents"]) > 0, f"winner={r['winning_agents']}")
 
-        # 6.2 信誉存储持久化
-        test_file = os.path.join(tempfile.gettempdir(), "_test_reputation_persist.json")
-        ars = AgentReputationStore(config={"reputation_file": test_file})
-        ars.update("agent_a", was_correct=True)
-        ars.update("agent_a", was_correct=True)
-        ars.update("agent_a", was_correct=False)
-        score = ars.get_score("agent_a")
-        print_result("信誉评分正确", abs(score - 2/3) < 0.01,
-                     f"score={score:.3f} (预期 0.667)")
+        tf = os.path.join(tempfile.gettempdir(), "_test_rep.json")
+        ars = AgentReputationStore(config={"reputation_file": tf})
+        ars.update("a", True)
+        ars.update("a", True)
+        ars.update("a", False)
+        sc = ars.get_score("a")
+        ok("Score", abs(sc - 2/3) < 0.01, f"score={sc:.3f}")
 
-        # 6.3 信誉持久化
-        ars2 = AgentReputationStore(config={"reputation_file": test_file})
-        score2 = ars2.get_score("agent_a")
-        print_result("信誉数据持久化", abs(score2 - 2/3) < 0.01,
-                     f"重新加载后 score={score2:.3f}")
+        ars2 = AgentReputationStore(config={"reputation_file": tf})
+        sc2 = ars2.get_score("a")
+        ok("Reputation persistence", abs(sc2 - 2/3) < 0.01, f"reload score={sc2:.3f}")
 
         try:
-            if os.path.exists(test_file):
-                os.remove(test_file)
+            os.remove(tf)
         except Exception:
             pass
-
         return True
     except Exception as e:
-        logger.error(f"❌ 测试失败: {e}", exc_info=True)
-        print_result("共识引擎与信誉存储", False, str(e))
+        logger.error(f"FAIL: {e}", exc_info=True)
+        ok("Consensus", False, str(e))
         return False
 
 
-# ============================================================
-# 主入口
-# ============================================================
 if __name__ == "__main__":
-    results = []
-
-    results.append(("元记忆过滤器", test_meta_memory_filter()))
-    results.append(("共识引擎与信誉存储", test_consensus_and_reputation()))
-    results.append(("主知识库 — 构建与加载", test_main_knowledge_base_build_and_load()))
-    results.append(("共享记忆库 — 存储与检索", test_shared_memory_store_and_retrieve()))
-    results.append(("共享记忆库 — 跨会话持久化", test_shared_memory_cross_session_persistence()))
-    results.append(("维度一致性检查", test_dimension_consistency()))
-
-    # 汇总
-    print_header("测试汇总")
+    results = [
+        ("MetaMemory Filter", test_meta()),
+        ("Consensus & Reputation", test_consensus()),
+        ("Main KB Build & Load", test_main_kb()),
+        ("Shared Memory Store & Retrieve", test_shared_memory()),
+        ("Cross-Session Persistence", test_cross_session()),
+        ("Dimension Consistency", test_dimension()),
+    ]
+    hdr("SUMMARY")
     passed = sum(1 for _, r in results if r)
-    total = len(results)
     for name, r in results:
-        print_result(name, r)
-
-    print(f"\n  📊 总计: {passed}/{total} 通过")
-    if passed == total:
-        print("  🎉 全部测试通过！向量库持久化功能正常。")
-    else:
-        print(f"  ⚠️ 有 {total - passed} 个测试失败，请检查日志。")
-
-    # 清理
+        ok(name, r)
+    print(f"\n  Result: {passed}/{len(results)} passed")
+    if passed == len(results):
+        print("  All tests passed! Vector store persistence is working.")
     cleanup(TEST_PERSIST_DIR)
