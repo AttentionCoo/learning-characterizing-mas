@@ -197,6 +197,11 @@ async function requestAssist() {
       (thinking) => {
         thinkingHint.value = thinking.title || 'AI 正在分析代码...'
       },
+      (error) => {
+        console.error('[code-assist] SSE 收到错误事件:', error)
+        assistError.value = error
+        inlineError.value = error
+      },
       { signal: assistAbortController.signal },
     )
     console.log('[code-assist] SSE 请求完成: talkId=', result.data?.talkId)

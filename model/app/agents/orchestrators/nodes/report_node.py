@@ -148,14 +148,31 @@ class ReportNode(BaseNode):
         code_assist_system = (
             "你是一名专业的 Python 编程导师，专注于医学数据分析领域。\n"
             "请根据用户的代码和诉求，提供代码补全、错误诊断、优化建议或代码讲解。\n"
-            "要求：\n"
-            "- 用中文回答，代码块用 ```python 包裹\n"
+            "\n"
+            "【核心要求：必须按以下结构输出，每部分都要有实际内容】\n"
+            "\n"
+            "## 优化后的代码示例\n"
+            "（给出完整的、可直接运行的 Python 代码，用 ```python 围栏格式包裹。\n"
+            " 补全场景：补全用户未完成的代码段；\n"
+            " 诊断场景：修复错误后的完整代码；\n"
+            " 优化场景：优化后的完整代码；\n"
+            " 讲解场景：被讲解的代码片段。\n"
+            " 即使只有一行改动，也要输出完整代码，不要省略！）\n"
+            "\n"
+            "## 改动说明\n"
+            "（逐条列出改动位置、原因和效果；错误诊断场景需先指出错误根因）\n"
+            "\n"
+            "## 相关知识点\n"
+            "（涉及的语法特性、库用法或医学数据处理惯例）\n"
+            "\n"
+            "## 进阶建议\n"
+            "（性能、可读性或健壮性方面可进一步优化的方向）\n"
+            "\n"
+            "其他要求：\n"
+            "- 用中文回答\n"
             "- 解释清晰、步骤分明\n"
-            "- 如果用户代码有错误，指出问题并给出修复方案\n"
-            "- 如果用户请求补全，提供可直接使用的代码片段\n"
-            "- 如果用户请求优化，解释优化点和性能提升\n"
-            "- 如果用户请求讲解，逐行解释代码逻辑\n"
-            "- 涉及医学统计（如 pandas/numpy/scipy/scikit-learn）时，结合领域知识说明"
+            "- 涉及医学统计（如 pandas/numpy/scipy/scikit-learn）时，结合领域知识说明\n"
+            "- 代码块必须完整可运行，不要用 ... 或 # 省略 代替实际代码"
         )
 
         messages = [
@@ -175,4 +192,9 @@ class ReportNode(BaseNode):
             report = f"代码辅助生成失败：{str(e)}"
 
         logger.info(f"[report][code_assist] 生成完成，长度: {len(report)}, 块数: {chunk_count}")
+        logger.info(f"[report][code_assist] 内容预览:\n{report[:500]}")
+        if "```python" in report or "```" in report:
+            logger.info(f"[report][code_assist] 包含代码块: 是")
+        else:
+            logger.warning(f"[report][code_assist] 包含代码块: 否")
         return {"report": report}

@@ -33,6 +33,7 @@ export function sseStreamRequest(url, params, { onChunk, onThinking, timeout = 3
     function handleMessageBlock(block) {
       if (finished) return
       if (!block.trim()) return
+      console.log('[sseStream] raw block:', block.slice(0, 200))
       const lines = block.split(/\r?\n/)
       const dataLines = []
       for (const line of lines) {
@@ -56,13 +57,15 @@ export function sseStreamRequest(url, params, { onChunk, onThinking, timeout = 3
           onThinking({ step: src.step || '', title: src.title || '', content: src.content || '' })
           return
         }
-        if (type === 'chunk' || type === 'result') {
+        if (type === 'chunk' || type === 'result' || type === 'token') {
           fullAnswer += data.content || ''
           if (onChunk) onChunk(data.content || '')
+          console.log('[sseStream] chunk received, type:', type, 'len:', (data.content || '').length, 'preview:', (data.content || '').slice(0, 80))
           return
         }
         if (type === 'done') {
           if (data.profile_dimensions) profileDimensions = data.profile_dimensions
+          console.log('[sseStream] done event, fullAnswer len:', fullAnswer.length, 'preview:', fullAnswer.slice(0, 100))
           safeResolve()
           return
         }
