@@ -267,7 +267,7 @@ build_or_load_vectorstore():
 
 #### 实验设计
 
-使用阿里云百炼 `text-embedding-v2` + `qwen-plus`，在 12 份医学 PDF（259 页，涵盖脑卒中诊疗指南、专家共识等）上进行 **RAGAS 评测框架** 的 A/B 对比。
+使用讯飞星火 `text-embedding-v2` + `xf-xinghuo-plus`，在 12 份医学 PDF（259 页，涵盖脑卒中诊疗指南、专家共识等）上进行 **RAGAS 评测框架** 的 A/B 对比。
 
 **语义分块 V1 参数**（第一轮）：
 - `similarity_threshold=0.75`（相邻句子余弦相似度 < 0.75 则在此切分）
@@ -428,9 +428,9 @@ def reciprocal_rank_fusion(vector_results, bm25_results, k=60, top_k=20):
 class BGEReranker:
     def __init__(self):
         self.candidate_models = [
-            "qwen-rerank-v1",    # 首选
+            "xf-xinghuo-rerank-v1",    # 首选
             "gte-rerank-v2",     # 备选1
-            "qwen-rerank",       # 备选2
+            "xf-xinghuo-rerank",       # 备选2
             "gte-rerank"         # 备选3
         ]
 
@@ -502,7 +502,7 @@ if cache_key in self._cache:
    日志: "{len(v_docs)+len(b_docs)} 篇 → {len(coarse_candidates)} 篇候选"
 
 3. 第三阶 · Reranker 精排 (Fine Ranking):
-   FOR model IN [qwen-rerank-v1, gte-rerank-v2, qwen-rerank, gte-rerank]:
+   FOR model IN [xf-xinghuo-rerank-v1, gte-rerank-v2, xf-xinghuo-rerank, gte-rerank]:
      TRY: result ← DashScope.TextReRank(model, query, coarse_candidates, top_n=3)
           IF result.status == OK: RETURN result
      CATCH AccessDenied / Exception: CONTINUE
@@ -534,7 +534,7 @@ if cache_key in self._cache:
 
 ```python
 class QAGenerator:
-    def __init__(self, model_name="qwen-turbo"):
+    def __init__(self, model_name="xf-xinghuo-turbo"):
         self.llm = ChatOpenAI(
             model=model_name,
             api_key=os.getenv("DASHSCOPE_API_KEY"),

@@ -31,7 +31,7 @@ model/
 │   │   │   └── decorators.py              - retry / timeit 装饰器
 │   │   ├── orchestrators/                 - 编排层（LangGraph 工作流）
 │   │   │   ├── clinical_graph.py          - LearningGraphBuilder（图构建器）
-│   │   │   ├── qwen_agent.py             - LearningAgent（顶层智能体，对外入口）
+│   │   │   ├── xf_xinghuo_agent.py        - LearningAgent（顶层智能体，对外入口）
 │   │   │   └── nodes/                     - 工作流节点
 │   │   │       ├── base.py                - BaseNode 抽象基类
 │   │   │       ├── intent_node.py         - 意图识别节点
@@ -102,7 +102,7 @@ model/
 | 9 | `app/agents/orchestrators/nodes/validate_node.py` | **校验节点**，质量把关和反思循环 |
 | 10 | `app/agents/orchestrators/nodes/report_node.py` | **报告节点**，最终输出 |
 | 11 | `app/agents/orchestrators/clinical_graph.py` | **图构建器**，把所有节点组装成 LangGraph 状态图，定义路由和边 |
-| 12 | `app/agents/orchestrators/qwen_agent.py` | **顶层智能体** `LearningAgent`，组装所有节点并暴露 `run_learning_reasoning()` 流式接口 |
+| 12 | `app/agents/orchestrators/xf_xinghuo_agent.py` | **顶层智能体** `LearningAgent`，组装所有节点并暴露 `run_learning_reasoning()` 流式接口 |
 
 ### 第三阶段：理解 RAG 管道和服务层
 
@@ -196,7 +196,7 @@ class LearningState(TypedDict):
 
 | 字段名 | 类型 | 写入节点 | 读取节点 | 含义 |
 |--------|------|---------|---------|------|
-| `case_text` | str | 初始化(qwen_agent) | intent, analysis | 用户原始输入文本 |
+| `case_text` | str | 初始化(xf_xinghuo_agent) | intent, analysis | 用户原始输入文本 |
 | `all_info` | str | 初始化 | analysis, reason | 历史对话上下文 |
 | `report_mode` | str | 初始化 | report | 报告模板模式 |
 | `profile_summary` | str | 初始化 | reason | 学生画像摘要 |

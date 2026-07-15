@@ -62,7 +62,7 @@
 | --- | --- | --- |
 | Web 框架 | FastAPI 0.128 + Uvicorn | 高性能异步 Web 服务 |
 | 智能体编排 | LangGraph 0.2 + LangChain 0.2 | 状态图驱动的多智能体推理 |
-| 大语言模型 | Qwen-Max / Qwen-Plus / Qwen-Turbo | 阿里云百炼平台多级模型 |
+| 大语言模型 | XF-Xinghuo-Max / XF-Xinghuo-Plus / XF-Xinghuo-Turbo | 讯飞星火平台多级模型 |
 | 向量检索 | ChromaDB 0.5 + DashScope Embedding | 语义向量检索 |
 | 关键词检索 | BM25 (rank-bm25) | 专业术语精准匹配 |
 | 重排模型 | DashScope gte-rerank | 深度语境重排与证据压缩 |
@@ -83,7 +83,7 @@ model/
 │   ├── agents/                     # 多智能体核心模块
 │   │   ├── orchestrators/          # LangGraph 编排层
 │   │   │   ├── clinical_graph.py   # LearningGraphBuilder 状态图构建
-│   │   │   ├── qwen_agent.py       # LearningAgent 主入口（流式推理）
+│   │   │   ├── xf_xinghuo_agent.py  # LearningAgent 主入口（流式推理）
 │   │   │   └── nodes/              # 推理节点
 │   │   │       ├── base.py         # BaseNode 节点基类
 │   │   │       ├── intent_node.py  # 意图分类节点（7 种意图路由）
@@ -167,7 +167,7 @@ model/
 
 ### 2. 意图识别与智能路由
 
-Intent Node 利用 Qwen-Turbo 对输入进行意图分类，支持 7 种路由：
+Intent Node 利用 XF-Xinghuo-Turbo 对输入进行意图分类，支持 7 种路由：
 
 | 意图类型 | 路由目标 | 说明 |
 | --- | --- | --- |
@@ -239,7 +239,7 @@ pip install -r requirements.txt
 在 `model/` 根目录下创建 `.env` 文件（参考 `.env.example`）：
 
 ```env
-# 必需：阿里云百炼 API 密钥（用于 Qwen 模型调用 + Embedding + Rerank）
+# 必需：讯飞星火 API 密钥（用于 XF-Xinghuo 模型调用 + Embedding + Rerank）
 DASHSCOPE_API_KEY=sk-您的阿里云百炼平台密钥
 
 # 必需：JWT 认证密钥（须与后端 application-dev.yml 中 shared-jwt-secret 一致）
@@ -262,7 +262,7 @@ HF_ENDPOINT=https://hf-mirror.com
    - 将 PDF 切分为上千条文本块
 
 2. **AI Batch QA 衍生**
-   - 系统将文本块每 10 条打包发送给 Qwen-Turbo
+   - 系统将文本块每 10 条打包发送给 XF-Xinghuo-Turbo
    - 利用模型归纳能力"反向做题"，提取高质量 Q&A 对
    - 自动打上原文页码标签
 
@@ -288,7 +288,7 @@ python main.py
 
 启动时系统会按顺序初始化 7 个步骤：
 1. 加载环境变量与配置
-2. 初始化 LLM 模型（Qwen-Max / Qwen-Plus / Qwen-Turbo）
+2. 初始化 LLM 模型（XF-Xinghuo-Max / XF-Xinghuo-Plus / XF-Xinghuo-Turbo）
 3. 构建 RAG 检索引擎（文档加载 → 分块 → QA 衍生 → 向量化 → BM25 索引）
 4. 加载 Prompt 模板与报告模板
 5. 初始化 LearningAssistant 学习助手

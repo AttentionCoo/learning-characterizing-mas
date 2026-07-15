@@ -2,7 +2,7 @@
 医学OCR服务 — Medical OCR Service
 
 对检验报告、处方等医学文档图片进行结构化文本提取。
-基于 qwen-vl-max 多模态模型，输出结构化 JSON。
+基于 xf-xinghuo-vl-max 多模态模型，输出结构化 JSON。
 """
 
 import asyncio
@@ -159,7 +159,7 @@ class MedicalOCRService:
             "type": "thinking",
             "step": "MedicalOCR",
             "title": f"📄 正在识别{label}...",
-            "content": f"文档类型：{label}，调用 Qwen-VL-Max OCR识别",
+            "content": f"文档类型：{label}，调用 XF-Xinghuo-VL-Max OCR识别",
         }
 
         system_prompt = f"你是一位医学文档识别专家。请准确识别以下{label}中的所有文字，保持原有的结构和格式。如遇模糊文字，标注[模糊]。不提取患者身份信息。"

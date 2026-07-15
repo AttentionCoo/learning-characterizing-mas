@@ -2,7 +2,7 @@
 // 宽/高超过 maxWidth 时等比缩放，输出 JPEG Base64 data URL
 // DICOM 文件跳过画布压缩，直接读取为 Base64 原始数据
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024  // 10MB（单张上限，与 Qwen VL 要求一致）
+const MAX_FILE_SIZE = 10 * 1024 * 1024  // 10MB（单张上限，与 XF-Xinghuo VL 要求一致）
 const MAX_WIDTH = 2048                   // 超过此尺寸时等比缩放
 const JPEG_QUALITY = 0.85               // JPEG 压缩质量
 

@@ -30,7 +30,7 @@ onnxruntime>=1.17.0
 openai==1.109.1
 # 讯飞图片理解 WebSocket 客户端
 websocket-client==1.8.0
-# 仅供 Rerank 精排与医学影像子系统(qwen-vl)使用,可选
+# 仅供 Rerank 精排与医学影像子系统(xf-xinghuo-vl)使用,可选
 dashscope==1.25.9
 
 # =========================

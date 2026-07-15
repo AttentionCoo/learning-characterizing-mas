@@ -9,7 +9,7 @@
 - 多图对比分析
 - VL 模型输出到结构化 JSON 的解析
 
-基于 qwen-vl-max 多模态大模型，专为脑卒中医学教育场景优化。
+基于 xf-xinghuo-vl-max 多模态大模型，专为脑卒中医学教育场景优化。
 """
 
 import asyncio
@@ -503,7 +503,7 @@ class MedicalVisionService:
             "type": "thinking",
             "step": "MedicalVision",
             "title": f"🔬 正在分析{type_name}影像...",
-            "content": f"影像类型：{type_name}，共 {len(images)} 张图片，调用 Qwen-VL-Max 医学影像分析模型",
+            "content": f"影像类型：{type_name}，共 {len(images)} 张图片，调用 XF-Xinghuo-VL-Max 医学影像分析模型",
             "image_type": img_type,
         }
 
@@ -799,7 +799,7 @@ class MedicalVisionService:
         system_text: str,
         user_prefix: str,
     ) -> list:
-        """构建 Qwen-VL-Max API 消息格式"""
+        """构建 XF-Xinghuo-VL-Max API 消息格式"""
         messages = []
 
         if system_text and system_text.strip():
