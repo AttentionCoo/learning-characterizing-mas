@@ -186,12 +186,15 @@ class _ChromaEmbeddingFunction:
     def __init__(self, xfyun_embeddings):
         self._xfyun = xfyun_embeddings
 
-    def __call__(self, texts):
-        """ChromaDB 要求: (List[str]) -> List[List[float]]"""
-        if isinstance(texts, str):
-            # ChromaDB 某些版本会传单个 str 作为 query
-            return [self._xfyun.embed_query(texts)]
-        return self._xfyun.embed_documents(texts)
+    def __call__(self, input):
+        """ChromaDB 要求: (List[str]) -> List[List[float]]
+
+        ChromaDB 0.4.16+ 要求 EmbeddingFunction.__call__ 的参数名必须为 'input'，
+        否则会抛出签名不匹配错误。
+        """
+        if isinstance(input, str):
+            return [self._xfyun.embed_query(input)]
+        return self._xfyun.embed_documents(input)
 
 
 class SharedMemoryStore:
