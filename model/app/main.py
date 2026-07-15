@@ -127,7 +127,17 @@ def init_all_resources():
         max_retries=2, request_timeout=30,
     )
 
-    logger.info(f"  ✅ 模型加载完成: {_model_max}@{_base_max}, {_model_pro}@{_base_pro}, {_model_lite}@{_base_lite}")
+    _qwen_api_key = os.getenv("QWEN_API_KEY") or os.getenv("DASHSCOPE_API_KEY")
+    _qwen_base_url = os.getenv("QWEN_BASE_URL") or "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    llm_qwen_max = ChatOpenAI(
+        model="qwen-max",
+        base_url=_qwen_base_url,
+        api_key=_qwen_api_key,
+        max_retries=3,
+        request_timeout=120,
+    )
+
+    logger.info(f"  ✅ 模型加载完成: {_model_max}@{_base_max}, {_model_pro}@{_base_pro}, {_model_lite}@{_base_lite}, qwen-max@{_qwen_base_url}")
 
     logger.info("💬 [3/8] 初始化上下文摘要服务...")
     context_summary = ConversationSummaryService(
@@ -206,8 +216,8 @@ def init_all_resources():
 
     logger.info("🧠 [9/10] 初始化学习推理智能体...")
     agent = LearningAgent(
-        llm_proposer=llm_max,
-        llm_critic=llm_plus,
+        llm_proposer=llm_qwen_max,
+        llm_critic=llm_qwen_max,
         learning_assistant=learning_assistant,
         prompt_manager=prompt_mgr,
         report_manager=report_mgr,
