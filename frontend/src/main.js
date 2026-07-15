@@ -6,9 +6,9 @@ import App from './App.vue'
 import router from './router'
 
 // 全局注册图标组件
-import UserSVG from './components/svg/UserSVG.vue'
-import PasswordSVG from './components/svg/PasswordSVG.vue'
-import SendSVG from './components/svg/SendSVG.vue'
+import UserSvg from './components/svg/UserSvg.vue'
+import PasswordSvg from './components/svg/PasswordSvg.vue'
+import SendSvg from './components/svg/SendSvg.vue'
 
 import 'normalize.css'
 
@@ -25,8 +25,8 @@ import { useThemeStore } from './stores/theme'
 const themeStore = useThemeStore()
 themeStore.applyTheme()
 
-app.component('UserSVG', UserSVG)
-app.component('PasswordSVG', PasswordSVG)
-app.component('SendSVG', SendSVG)
+app.component('UserSvg', UserSvg)
+app.component('PasswordSvg', PasswordSvg)
+app.component('SendSvg', SendSvg)
 
 app.mount('#app')

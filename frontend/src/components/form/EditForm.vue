@@ -73,7 +73,7 @@ async function handleLogout() {
     <div class="input-group">
       <div class="input-wrapper">
         <span class="icon">
-          <PasswordSVG size="20" color="var(--color-text-medium)"></PasswordSVG>
+          <PasswordSvg size="20" color="var(--color-text-medium)"></PasswordSvg>
         </span>
         <input v-model="EditFormData.prePassword" type="password" placeholder="请输入旧密码" />
       </div>
@@ -82,7 +82,7 @@ async function handleLogout() {
     <div class="input-group">
       <div class="input-wrapper">
         <span class="icon">
-          <PasswordSVG size="20" color="var(--color-text-medium)"></PasswordSVG>
+          <PasswordSvg size="20" color="var(--color-text-medium)"></PasswordSvg>
         </span>
         <input v-model="EditFormData.newPassword" type="password" placeholder="请输入新密码" />
       </div>

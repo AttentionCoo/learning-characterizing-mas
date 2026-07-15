@@ -3,8 +3,8 @@ import { ref } from 'vue'
 import { loginAPI } from '@/api/user'
 import { useUserStore } from '@/stores/user'
 import { useRouter } from 'vue-router'
-import UserSVG from '@/components/svg/UserSVG.vue'
-import PasswordSVG from '@/components/svg/PasswordSVG.vue'
+import UserSvg from '@/components/svg/UserSvg.vue'
+import PasswordSvg from '@/components/svg/PasswordSvg.vue'
 
 const userStore = useUserStore()
 const router = useRouter()
@@ -63,7 +63,7 @@ async function handleLogin() {
     <div class="auth-input-group">
       <div class="auth-input-wrapper">
         <span class="icon">
-          <UserSVG size="20" color="var(--color-text-medium)"></UserSVG>
+          <UserSvg size="20" color="var(--color-text-medium)"></UserSvg>
         </span>
         <input v-model="loginFormData.name" class="auth-input" type="text" placeholder="请输入用户名"
           @keyup.enter="handleLogin" />
@@ -74,7 +74,7 @@ async function handleLogin() {
     <div class="auth-input-group">
       <div class="auth-input-wrapper">
         <span class="icon">
-          <PasswordSVG size="20" color="var(--color-text-medium)"></PasswordSVG>
+          <PasswordSvg size="20" color="var(--color-text-medium)"></PasswordSvg>
         </span>
         <input v-model="loginFormData.password" class="auth-input" type="password" placeholder="请输入密码"
           @keyup.enter="handleLogin" />

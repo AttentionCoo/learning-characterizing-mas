@@ -3,8 +3,8 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { registerAPI, loginAPI } from '@/api/user'
 import { useUserStore } from '@/stores/user'
-import UserSVG from '@/components/svg/UserSVG.vue'
-import PasswordSVG from '@/components/svg/PasswordSVG.vue'
+import UserSvg from '@/components/svg/UserSvg.vue'
+import PasswordSvg from '@/components/svg/PasswordSvg.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -87,7 +87,7 @@ async function handleRegister() {
     <div class="auth-input-group">
       <div class="auth-input-wrapper">
         <span class="icon">
-          <UserSVG size="20" color="var(--color-text-medium)"></UserSVG>
+          <UserSvg size="20" color="var(--color-text-medium)"></UserSvg>
         </span>
         <input v-model="registerFormData.name" class="auth-input" type="text" placeholder="请输入用户名"
           @keyup.enter="handleRegister" />
@@ -98,7 +98,7 @@ async function handleRegister() {
     <div class="auth-input-group">
       <div class="auth-input-wrapper">
         <span class="icon">
-          <PasswordSVG size="20" color="var(--color-text-medium)"></PasswordSVG>
+          <PasswordSvg size="20" color="var(--color-text-medium)"></PasswordSvg>
         </span>
         <input v-model="registerFormData.password" class="auth-input" type="password" placeholder="请输入密码"
           @keyup.enter="handleRegister" />
@@ -109,7 +109,7 @@ async function handleRegister() {
     <div class="auth-input-group">
       <div class="auth-input-wrapper">
         <span class="icon">
-          <PasswordSVG size="20" color="var(--color-text-medium)"></PasswordSVG>
+          <PasswordSvg size="20" color="var(--color-text-medium)"></PasswordSvg>
         </span>
         <input v-model="registerFormData.password_confirmation" class="auth-input" type="password" placeholder="请再次确认密码"
           @keyup.enter="handleRegister" />
