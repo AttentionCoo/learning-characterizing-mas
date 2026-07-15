@@ -128,5 +128,5 @@ com.it
 
 | 文档 | 说明 |
 |:---|:---|
-| `BAOTA_DEPLOY.md` | 宝塔面板部署指南 |
-| `README_DEPLOY.md` | 通用部署文档 |
+| `baota-deploy.md` | 宝塔面板部署指南 |
+| `deploy-guide.md` | 通用部署文档 |
