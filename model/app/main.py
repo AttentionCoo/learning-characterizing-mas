@@ -110,7 +110,7 @@ def init_all_resources():
     #   lite → Pro（原 Lite 已无额度，轻量任务复用 Pro）
     _model_max = os.getenv("SPARK_MODEL_MAX") or "generalv3"
     _model_pro = os.getenv("SPARK_MODEL_PRO") or "generalv3"
-    _model_lite = os.getenv("SPARK_MODEL_LITE") or "generalv3"
+    _model_lite = os.getenv("SPARK_MODEL_LITE") or "lite"
 
     logger.info(f"  ✅ APIPassword: {_spark_password[:6]}...{_spark_password[-4:]}")
 
@@ -141,6 +141,14 @@ def init_all_resources():
         persist_dir=CONFIG.get("persist_dir", "./chroma_db_unified"),
         top_k=CONFIG.get("top_k_final", 3)
     )
+
+    # 预加载 BGE 兜底模型，避免运行时讯飞 embedding 失败时静默下载 1.3GB 模型导致"假死"
+    logger.info("🔄 [4.5/8] 预加载 BGE 兜底 embedding 模型（避免运行时卡顿）...")
+    try:
+        from app.rag.retrievers import XfyunEmbeddings
+        XfyunEmbeddings.preload_fallback()
+    except Exception as e:
+        logger.warning(f"⚠️ BGE 预加载失败（非致命）: {e}")
 
     if retriever.chunks:
         _loaded_doc_names = sorted(set(

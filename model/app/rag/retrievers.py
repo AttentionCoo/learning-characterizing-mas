@@ -74,10 +74,13 @@ class XfyunEmbeddings(Embeddings):
         10163: "请求参数错误",
     }
 
+    # 类级别 BGE 模型缓存：所有 XfyunEmbeddings 实例共享同一份模型，避免重复加载
+    _fallback_embeddings_cache = None
+    _fallback_embeddings_failed = False
+
     def __init__(self):
         from app.utils.xfyun_auth import get_xfyun_credentials
         self.app_id, self.api_key, self.api_secret = get_xfyun_credentials()
-        self._fallback_embeddings = None  # 懒加载本地 BGE 兜底
 
         # 环境变量开关：XFYUN_EMBEDDING_ENABLED=false 时跳过讯飞，直接走 BGE
         embedding_enabled = os.getenv("XFYUN_EMBEDDING_ENABLED", "true").strip().lower()
@@ -98,22 +101,47 @@ class XfyunEmbeddings(Embeddings):
             time.sleep(cls._MIN_INTERVAL - elapsed)
         cls._last_request_time = time.time()
 
-    def _get_fallback_embeddings(self):
-        """懒加载本地 BGE-large-zh-v1.5 模型（1024 维），作为讯飞云端不可用时的兜底。"""
-        if self._fallback_embeddings is None:
-            try:
-                from langchain_community.embeddings import HuggingFaceBgeEmbeddings
-                # 中文优化模型，本地 CPU 推理，无需 GPU
-                self._fallback_embeddings = HuggingFaceBgeEmbeddings(
-                    model_name="BAAI/bge-large-zh-v1.5",
-                    model_kwargs={"device": "cpu"},
-                    encode_kwargs={"normalize_embeddings": True},
-                )
-                logger.info("✅ 本地 BGE 兜底模型已加载 (bge-large-zh-v1.5, 1024d)")
-            except Exception as e:
-                logger.error(f"❌ 本地 BGE 模型加载失败: {e}")
-                self._fallback_embeddings = False  # 标记为不可用
-        return self._fallback_embeddings if self._fallback_embeddings is not False else None
+    @classmethod
+    def _get_fallback_embeddings(cls):
+        """懒加载本地 BGE-large-zh-v1.5 模型（1024 维），作为讯飞云端不可用时的兜底。
+
+        模型缓存在类级别 _fallback_embeddings_cache 中，所有实例共享同一份，
+        避免每次 XfyunEmbeddings() 实例化都重新加载 1.3GB 模型。
+        """
+        if cls._fallback_embeddings_cache is not None:
+            return cls._fallback_embeddings_cache
+        if cls._fallback_embeddings_failed:
+            return None
+        try:
+            logger.info(
+                "⏳ 正在加载本地 BGE 兜底模型 (bge-large-zh-v1.5, ~1.3GB)...\n"
+                "   首次加载需从 HuggingFace 下载模型文件，可能需要 1~3 分钟，请耐心等待..."
+            )
+            from langchain_community.embeddings import HuggingFaceBgeEmbeddings
+            cls._fallback_embeddings_cache = HuggingFaceBgeEmbeddings(
+                model_name="BAAI/bge-large-zh-v1.5",
+                model_kwargs={"device": "cpu"},
+                encode_kwargs={"normalize_embeddings": True},
+            )
+            logger.info("✅ 本地 BGE 兜底模型已加载 (bge-large-zh-v1.5, 1024d)")
+            return cls._fallback_embeddings_cache
+        except Exception as e:
+            logger.error(f"❌ 本地 BGE 模型加载失败: {e}")
+            cls._fallback_embeddings_failed = True
+            return None
+
+    @classmethod
+    def preload_fallback(cls):
+        """预加载 BGE 兜底模型（建议在系统初始化时调用，避免运行时静默下载导致"假死"）。
+
+        直接使用类级别缓存，所有实例共享同一份模型。
+        """
+        logger.info("🔄 预加载 BGE 兜底模型（系统初始化）...")
+        fallback = cls._get_fallback_embeddings()
+        if fallback:
+            logger.info("✅ BGE 兜底模型预加载完成，后续降级将瞬间切换")
+        else:
+            logger.warning("⚠️ BGE 兜底模型预加载失败，运行时降级可能较慢")
 
     def _embed_once(self, text: str, domain: str) -> List[float]:
         """调用讯飞官方文本向量化 HTTP 接口。
@@ -226,7 +254,11 @@ class XfyunEmbeddings(Embeddings):
             raise
 
     def _embed_batch(self, texts: List[str], domain: str) -> List[List[float]]:
-        """批量 embedding 的通用实现，domain="para" 或 "query"。"""
+        """批量 embedding 的通用实现，domain="para" 或 "query"。
+
+        逐条调用讯飞 API，内置 QPS 节流。单条失败时整批降级到本地 BGE。
+        每 10 条打印一次进度，避免大批量时长时间无日志输出（看起来像"死机"）。
+        """
         # 已降级：直接走 BGE
         if self._xfyun_dead:
             fallback = self._get_fallback_embeddings()
@@ -234,13 +266,19 @@ class XfyunEmbeddings(Embeddings):
                 return fallback.embed_documents(texts)
             raise ValueError("讯飞不可用且 BGE 兜底加载失败，无法 embedding")
 
+        batch_total = len(texts)
         results = []
         for i, t in enumerate(texts):
             try:
                 results.append(self._embed_once(t, domain))
+                # 每 10 条或最后一条时打印进度，避免长时间静默
+                if (i + 1) % 10 == 0 or i == batch_total - 1:
+                    logger.debug(
+                        f"  📝 embedding 批次内进度: {i + 1}/{batch_total} 条"
+                    )
             except ValueError as e:
                 err_msg = str(e)
-                logger.warning(f"⚠️ 讯飞 embedding 第 {i} 条失败: {e}")
+                logger.warning(f"⚠️ 讯飞 embedding 第 {i + 1}/{batch_total} 条失败: {e}")
                 # 打印排查指引
                 if "11202" in err_msg:
                     logger.warning(
@@ -251,7 +289,7 @@ class XfyunEmbeddings(Embeddings):
                 fallback = self._get_fallback_embeddings()
                 if fallback:
                     logger.info(
-                        f"🔄 整批降级到本地 BGE 模型（{len(texts)} 条，1024d），"
+                        f"🔄 整批降级到本地 BGE 模型（本批 {len(texts)} 条，1024d），"
                         f"后续批次不再重试讯飞"
                     )
                     return fallback.embed_documents(texts)
@@ -401,8 +439,10 @@ def reciprocal_rank_fusion(
 def build_or_load_vectorstore(chunks, persist_dir: str, enable_qa: bool = False):
     logger.info(f"🔌 [VectorStore] 连接: {persist_dir}")
     embeddings = XfyunEmbeddings()
+    import chromadb
+    _client = chromadb.PersistentClient(path=persist_dir)
     vectordb = Chroma(
-        persist_directory=persist_dir,
+        client=_client,
         embedding_function=embeddings,
     )
     try:
@@ -421,14 +461,37 @@ def build_or_load_vectorstore(chunks, persist_dir: str, enable_qa: bool = False)
             batch_size = 32
             total_docs = len(docs_to_insert)
             xfyun_failed = False
+            write_start = time.time()
+
+            logger.info(f"  📝 开始写入向量库，共 {total_docs} 条，批次大小 {batch_size}")
+            logger.info(f"{'─' * 50}")
+
             for i in range(0, total_docs, batch_size):
                 batch = docs_to_insert[i:i + batch_size]
                 try:
                     vectordb.add_documents(documents=batch)
                     current_processed = min(i + batch_size, total_docs)
-                    # 每 5 个批次或是最后一批时打印进度
-                    if (i // batch_size + 1) % 5 == 0 or current_processed == total_docs:
-                        logger.info(f"  ⏳ 正在写入向量库... 已完成: {current_processed} / {total_docs} 条")
+
+                    # 每批次都打印进度（带进度条、百分比、速度、ETA）
+                    elapsed = time.time() - write_start
+                    pct = current_processed / total_docs * 100
+                    speed = current_processed / elapsed if elapsed > 0 else 0
+
+                    if speed > 0:
+                        eta_sec = (total_docs - current_processed) / speed
+                        eta_str = f"{eta_sec:.0f}s" if eta_sec < 120 else f"{eta_sec / 60:.1f}min"
+                    else:
+                        eta_str = "计算中..."
+
+                    # 简单进度条（20 格）
+                    bar_length = 20
+                    filled = int(bar_length * current_processed / total_docs)
+                    bar = "█" * filled + "░" * (bar_length - filled)
+
+                    logger.info(
+                        f"  [{bar}] {pct:5.1f}% | {current_processed}/{total_docs} 条 | "
+                        f"耗时 {elapsed:.0f}s | 速度 {speed:.1f} 条/s | ETA {eta_str}"
+                    )
                 except ValueError as e:
                     # 讯飞 embedding 失败 → 后续批次已自动降级到 BGE
                     if "讯飞 embedding 失败" in str(e):
@@ -440,7 +503,7 @@ def build_or_load_vectorstore(chunks, persist_dir: str, enable_qa: bool = False)
                             try:
                                 vectordb.add_documents(documents=batch)
                                 current_processed = min(i + batch_size, total_docs)
-                                logger.info(f"  ⏳ [BGE兜底] 已完成: {current_processed} / {total_docs} 条")
+                                logger.info(f"  [BGE兜底] 已完成: {current_processed} / {total_docs} 条")
                             except Exception as e2:
                                 logger.error(f"❌ BGE 兜底也失败 (起始索引 {i}): {e2}")
                         else:
@@ -465,7 +528,9 @@ def build_or_load_vectorstore(chunks, persist_dir: str, enable_qa: bool = False)
                         )
                     else:
                         logger.error(f"❌ 批次写入失败 (起始索引 {i}): {e}")
-            logger.info("✅ 向量库写入完成")
+            write_elapsed = time.time() - write_start
+            logger.info(f"{'─' * 50}")
+            logger.info(f"✅ 向量库写入完成！共 {total_docs} 条，总耗时 {write_elapsed:.1f}s")
         else:
             logger.info(f"✅ 向量库已有 {count} 条数据")
     except Exception as e:
