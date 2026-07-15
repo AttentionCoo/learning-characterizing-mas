@@ -34,7 +34,7 @@ public class SecurityConfig {
                 session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             // 4. 路由放行规则
             //    - 登录/注册/退出：完全放行，无需任何 Token
-            //    - 其余接口：Spring Security 层放行，由 MVC 拦截器（Tokeninterceptor）做真正的 JWT 鉴权
+            //    - 其余接口：Spring Security 层放行，由 MVC 拦截器（TokenInterceptor）做真正的 JWT 鉴权
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(
                     "/api/user/login",

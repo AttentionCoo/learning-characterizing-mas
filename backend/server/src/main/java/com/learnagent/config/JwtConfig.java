@@ -1,6 +1,6 @@
 package com.learnagent.config;
 
-import com.learnagent.utils.JWT;
+import com.learnagent.utils.Jwt;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,7 +35,7 @@ public class JwtConfig {
                     "并确保与 Python 模型服务的 AI_JWT_SECRET 值完全相同。"
             );
         }
-        JWT.setSecretKey(sharedJwtSecret);
+        Jwt.setSecretKey(sharedJwtSecret);
         log.info("JWT 密钥已从配置加载（长度={}）", sharedJwtSecret.length());
     }
 }

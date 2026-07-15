@@ -7,7 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.Map;
 
-public class JWT {
+public class Jwt {
     // 由 JwtConfig 在 Spring 启动时通过 setSecretKey() 注入，禁止在此处硬编码密钥
     private static String secretKey;
 

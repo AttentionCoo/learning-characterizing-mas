@@ -1,7 +1,7 @@
 package com.learnagent.config;
 
 import com.learnagent.interceptor.RefreshTokenInterceptor;
-import com.learnagent.interceptor.Tokeninterceptor;
+import com.learnagent.interceptor.TokenInterceptor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -31,8 +31,8 @@ public class WebConfig implements WebMvcConfigurer {
                 )
                 .order(0);
 
-        // ⭐ 第二步：Tokeninterceptor 检查 ThreadLocal 中是否有用户（order=1）
-        registry.addInterceptor(new Tokeninterceptor())
+        // ⭐ 第二步：TokenInterceptor 检查 ThreadLocal 中是否有用户（order=1）
+        registry.addInterceptor(new TokenInterceptor())
                 .addPathPatterns("/**")
                 .excludePathPatterns(
                         "/api/user/login",

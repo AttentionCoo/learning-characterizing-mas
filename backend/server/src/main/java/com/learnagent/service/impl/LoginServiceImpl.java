@@ -12,7 +12,7 @@ import com.learnagent.dto.User;
 import com.learnagent.entity.Result;
 import com.learnagent.service.ILoginService;
 import com.learnagent.utils.IpUtil;
-import com.learnagent.utils.JWT;
+import com.learnagent.utils.Jwt;
 import com.learnagent.utils.ThreadLocalUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -165,7 +165,7 @@ public class LoginServiceImpl extends ServiceImpl<LoginMapper, User> implements 
             claims.put("id", dbUser.getId());
             claims.put("name", dbUser.getName());
             claims.put("jti", jti);
-            String token = JWT.generateToken(claims);
+            String token = Jwt.generateToken(claims);
 
             // 存 token -> user 映射供拦截器使用
             UserDTO userDTO = BeanUtil.copyProperties(dbUser, UserDTO.class);
@@ -197,7 +197,7 @@ public class LoginServiceImpl extends ServiceImpl<LoginMapper, User> implements 
         if (token.startsWith("Bearer ")) token = token.substring(7);
 
         try {
-            Long userId = JWT.getUserIdFromToken(token);
+            Long userId = Jwt.getUserIdFromToken(token);
             stringRedisTemplate.delete("login:user:" + userId);
             stringRedisTemplate.delete("user:token:" + token);
             ThreadLocalUtil.removeCurrentUser();

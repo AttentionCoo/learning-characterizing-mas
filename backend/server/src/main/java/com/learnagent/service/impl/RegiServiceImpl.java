@@ -12,7 +12,7 @@ import com.learnagent.entity.Result;
 import com.learnagent.service.AIStreamingService;
 import com.learnagent.service.IRegiService;
 import com.learnagent.utils.IpUtil;
-import com.learnagent.utils.JWT;
+import com.learnagent.utils.Jwt;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RateIntervalUnit;
@@ -163,7 +163,7 @@ public class RegiServiceImpl extends ServiceImpl<RegiMapper, User> implements IR
             claims.put("id", newId);
             claims.put("name", username);
             claims.put("jti", jti);
-            String token = JWT.generateToken(claims);
+            String token = Jwt.generateToken(claims);
 
             // 将 user DTO 转为 map，并以 hash 存入 redis，key = user:token:<token>
             UserDTO userDTO = BeanUtil.copyProperties(u, UserDTO.class);

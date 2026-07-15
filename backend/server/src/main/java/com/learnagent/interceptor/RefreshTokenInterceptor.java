@@ -3,7 +3,7 @@ package com.learnagent.interceptor;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.StrUtil;
 import com.learnagent.dto.UserDTO;
-import com.learnagent.utils.JWT;
+import com.learnagent.utils.Jwt;
 import com.learnagent.utils.ThreadLocalUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -31,9 +31,9 @@ public class RefreshTokenInterceptor implements HandlerInterceptor {
         }
 
         try {
-            Long userId = JWT.getUserIdFromToken(token);
+            Long userId = Jwt.getUserIdFromToken(token);
 
-            Object jtiObj = JWT.parseToken(token).get("jti");
+            Object jtiObj = Jwt.parseToken(token).get("jti");
             if (jtiObj == null) {
                 log.warn("Token 中缺少 jti，可能是旧 Token");
                 sendUnauthorized(response, "Token 已过期，请重新登录");
