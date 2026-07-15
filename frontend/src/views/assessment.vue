@@ -185,12 +185,7 @@ async function handleOptimize() {
   optimizeResult.value = null
 
   try {
-    const pathId = learningPathId.value
-    if (!pathId) {
-      optimizeResult.value = { optimizationApplied: false, changes: [], reason: '暂无学习路径，请先生成学习路径后再优化' }
-      isOptimizing.value = false
-      return
-    }
+    const pathId = learningPathId.value || null
 
     const evalData = reportDetail.value || currentReportData.value
     const res = await optimizeLearningPathAPI({
