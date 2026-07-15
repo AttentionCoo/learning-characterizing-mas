@@ -228,13 +228,19 @@ public class AIStreamingServiceImpl implements AIStreamingService {
                                    List<String> images,
                                    String reportMode) {
 
+        log.info("[streamChat] 方法入口: userId={}, talkId={}, questionLen={}, reportMode={}, tokenLen={}",
+                userId, talkId, question != null ? question.length() : 0, reportMode, token != null ? token.length() : 0);
+
         if (userId == null) {
+            log.warn("[streamChat] 拒绝: userId 为 null");
             return Flux.just(buildError("未登录"));
         }
         if (StrUtil.isBlank(token)) {
+            log.warn("[streamChat] 拒绝: token 为空");
             return Flux.just(buildError("缺少登录令牌"));
         }
         if (!allowAICircuit()) {
+            log.warn("[streamChat] 拒绝: AI 熔断已触发");
             return Flux.just(buildError("AI 服务当前不可用，请稍后重试"));
         }
 
@@ -291,11 +297,17 @@ public class AIStreamingServiceImpl implements AIStreamingService {
         final String[] generatedTitle = {null};
         final String[] updatedAllInfo = {historyText};
 
+        log.info("[streamChat] 准备发送请求: talkId={}, questionLen={}, reportMode={}, token={}",
+                finalTalkId, question.length(), finalReportMode, requestToken.substring(0, Math.min(8, requestToken.length())) + "…");
+
         return webClient.post()
                 .uri("/model/get_result")
                 .contentType(MediaType.APPLICATION_JSON)
                 .accept(MediaType.TEXT_PLAIN)
                 .bodyValue(request)
+
+                .doOnSubscribe(s -> log.info("[streamChat] 流订阅开始: talkId={}", finalTalkId))
+
                 .retrieve()
                 .bodyToFlux(String.class)
                 // 背压控制：限制每次向上游请求的元素数量，防止 Python 推流速度远超 Java 处理能力
@@ -312,6 +324,9 @@ public class AIStreamingServiceImpl implements AIStreamingService {
                         : line)
                 .filter(line -> !line.isEmpty())
                 .filter(line -> !"[DONE]".equalsIgnoreCase(line))
+
+                .doOnNext(line -> log.info("[streamChat] 收到原始行: talkId={}, len={}, preview={}",
+                        finalTalkId, line.length(), line.length() > 200 ? line.substring(0, 200) + "…" : line))
 
                 .flatMap(line -> parseModelLine(line, finalTalkId, generatedTitle, updatedAllInfo, fullAnswer), 1)
 
