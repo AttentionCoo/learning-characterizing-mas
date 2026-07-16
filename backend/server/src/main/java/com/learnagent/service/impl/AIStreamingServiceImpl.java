@@ -306,10 +306,10 @@ public class AIStreamingServiceImpl implements AIStreamingService {
                 .accept(MediaType.TEXT_PLAIN)
                 .bodyValue(request)
 
-                .doOnSubscribe(s -> log.info("[streamChat] 流订阅开始: talkId={}", finalTalkId))
-
                 .retrieve()
                 .bodyToFlux(String.class)
+
+                .doOnSubscribe(s -> log.info("[streamChat] 流订阅开始: talkId={}", finalTalkId))
                 // 背压控制：限制每次向上游请求的元素数量，防止 Python 推流速度远超 Java 处理能力
                 .limitRate(32)
                 // 每个数据块最多等待 CHUNK_TIMEOUT，防止模型中途挂起导致连接永久卡死

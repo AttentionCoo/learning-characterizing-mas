@@ -92,6 +92,25 @@ async def run_agent_background(
 
         result_text = "".join(final_parts).strip()
 
+        # ── 兜底：若整个推理过程未产出任何内容，明确告知前端 ──
+        if not result_text:
+            logger.warning(
+                f"[background] 任务 {task_id} 完成但无有效内容 "
+                f"(report_mode={report_mode})，生成错误提示"
+            )
+            error_msg = (
+                "AI 未能生成有效内容，可能原因：\n"
+                "1. 模型服务暂时不可用（请检查 API 连通性）\n"
+                "2. 请求格式异常导致模型未正确响应\n"
+                "3. 模型返回了空响应\n\n"
+                "请检查后端模型服务日志，或稍后重试。"
+            )
+            task_mgr.add_event(task_id, {
+                "type": "token",
+                "content": error_msg,
+            })
+            result_text = error_msg
+
         generated_name = None
         if naming_future:
             try:

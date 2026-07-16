@@ -3,7 +3,7 @@ aiserver:
     driver-class-name: com.mysql.cj.jdbc.Driver
     host: ${DB_HOST:localhost}
     port: ${DB_PORT:3306}
-    database: ${DB_NAME:medai}
+    database: ${DB_NAME:learningo-agents}
     username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD}
 

@@ -88,6 +88,8 @@ class LearningAgent:
         self.validate_node = ValidateNode(self.llm_critic, shared_memory_system=shared_memory_system)
         self.report_node = ReportNode(self.llm_proposer, report_manager)
 
+        self._event_log_counts = {}
+
         self.graph = LearningGraphBuilder(
             intent_node=self.intent_node,
             analysis_node=self.analysis_node,
@@ -187,7 +189,11 @@ class LearningAgent:
         meta = event.get("metadata", {})
         langgraph_node = meta.get("langgraph_node", "")
 
-        logger.info(f"[event] 事件类型: {evt}, 节点名称: {name}, langgraph_node: {langgraph_node}")
+        log_key = f"{evt}:{name}:{langgraph_node}"
+        log_count = self._event_log_counts.get(log_key, 0)
+        if log_count < 10:
+            self._event_log_counts[log_key] = log_count + 1
+            logger.info(f"[event] 事件类型: {evt}, 节点名称: {name}, langgraph_node: {langgraph_node}")
 
         if evt == "on_chain_start" and name in _NODE_LABELS and show_thinking:
             llm_call_counts.pop(name, None)
@@ -218,9 +224,17 @@ class LearningAgent:
 
         if evt == "on_chat_model_stream" and langgraph_node in self._STREAMING_NODES:
             chunk = event.get("data", {}).get("chunk")
-            content = getattr(chunk, "content", "") if chunk else ""
-            if content:
-                return {"type": "token", "content": content}
+            if chunk is None:
+                return None
+            content = getattr(chunk, "content", None)
+            # 兼容 content 为 None / 空字符串 / 非字符串类型
+            if content is None:
+                return None
+            if not isinstance(content, str):
+                content = str(content)
+            if not content:
+                return None
+            return {"type": "token", "content": content}
 
         if evt == "on_chat_model_start" and langgraph_node and langgraph_node not in self._STREAMING_NODES:
             if show_thinking and langgraph_node in _NODE_PROGRESS_LABELS:

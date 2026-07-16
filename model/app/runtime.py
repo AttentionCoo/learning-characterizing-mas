@@ -5,6 +5,10 @@ resources 在 main.py 的 lifespan 中完成初始化，各 router 通过本模�
 """
 import os
 
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
+
 import jwt
 from fastapi import HTTPException
 

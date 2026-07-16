@@ -141,7 +141,10 @@ class ReportNode(BaseNode):
 
     async def _generate_code_assist(self, state: LearningState) -> Dict:
         """code_assist 模式：不依赖 proposal/evidence/critique，
-        直接用 LLM 流式生成代码补全/诊断/优化/讲解内容。"""
+        直接用 LLM 流式生成代码补全/诊断/优化/讲解内容。
+
+        流式调用优先，若流式返回空内容则自动降级为非流式调用。
+        """
         case_text = state.get("case_text", "")
         logger.info(f"[report][code_assist] case_text 长度: {len(case_text)}")
 
@@ -182,19 +185,83 @@ class ReportNode(BaseNode):
 
         report = ""
         chunk_count = 0
+        stream_error = None
+
+        # ── 第一轮：流式调用 ──
         try:
             async for chunk in self.llm_proposer.astream(messages):
-                c = chunk.content if hasattr(chunk, "content") else str(chunk)
-                report += c
                 chunk_count += 1
+                # 安全提取 chunk 内容：兼容 content 为 None / "" / list 等情况
+                if hasattr(chunk, "content"):
+                    c = chunk.content
+                    if c is None:
+                        c = ""
+                    elif not isinstance(c, str):
+                        # 某些模型 content 可能为 list[dict]，尝试转字符串
+                        try:
+                            c = str(c) if c else ""
+                        except Exception:
+                            c = ""
+                else:
+                    c = str(chunk) if chunk else ""
+                report += c
         except Exception as e:
-            logger.error(f"[report][code_assist] 生成失败: {type(e).__name__} - {str(e)}")
-            report = f"代码辅助生成失败：{str(e)}"
+            stream_error = e
+            logger.error(
+                f"[report][code_assist] 流式生成失败: {type(e).__name__} - {str(e)}"
+            )
 
-        logger.info(f"[report][code_assist] 生成完成，长度: {len(report)}, 块数: {chunk_count}")
-        logger.info(f"[report][code_assist] 内容预览:\n{report[:500]}")
-        if "```python" in report or "```" in report:
-            logger.info(f"[report][code_assist] 包含代码块: 是")
+        logger.info(
+            f"[report][code_assist] 流式完成，长度: {len(report)}, "
+            f"块数: {chunk_count}, 有效内容: {bool(report.strip())}"
+        )
+
+        # ── 第二轮：流式为空时降级为非流式调用 ──
+        if not report.strip():
+            logger.warning(
+                f"[report][code_assist] 流式返回空内容 "
+                f"(stream_error={type(stream_error).__name__ if stream_error else '无异常'})，"
+                f"降级为非流式调用"
+            )
+            try:
+                response = await self.llm_proposer.ainvoke(messages)
+                if hasattr(response, "content"):
+                    c = response.content
+                    if c is None:
+                        c = ""
+                    elif not isinstance(c, str):
+                        try:
+                            c = str(c) if c else ""
+                        except Exception:
+                            c = ""
+                    report = c
+                else:
+                    report = str(response) if response else ""
+                logger.info(
+                    f"[report][code_assist] 非流式降级完成，长度: {len(report)}, "
+                    f"有效内容: {bool(report.strip())}"
+                )
+            except Exception as e:
+                logger.error(
+                    f"[report][code_assist] 非流式降级也失败: {type(e).__name__} - {str(e)}"
+                )
+                report = (
+                    f"代码辅助生成失败：LLM 服务当前不可用。\n\n"
+                    f"流式调用{f'报错: {stream_error}' if stream_error else '返回空内容'}，"
+                    f"非流式降级报错: {type(e).__name__}。\n"
+                    f"请检查模型服务日志或稍后重试。"
+                )
+
+        if report.strip():
+            logger.info(f"[report][code_assist] 内容预览:\n{report[:500]}")
+            if "```python" in report or "```" in report:
+                logger.info(f"[report][code_assist] 包含代码块: 是")
+            else:
+                logger.warning(f"[report][code_assist] 包含代码块: 否")
         else:
-            logger.warning(f"[report][code_assist] 包含代码块: 否")
+            logger.error(
+                f"[report][code_assist] 流式+非流式均未返回有效内容，"
+                f"将返回空报告（前端将提示用户）"
+            )
+
         return {"report": report}
