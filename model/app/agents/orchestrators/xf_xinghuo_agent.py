@@ -162,15 +162,12 @@ class LearningAgent:
             }
 
             async for event in self.graph.astream_events(initial_state, config=config, version="v2"):
-                if (event.get("event") == "on_chat_model_stream"
-                        and event.get("metadata", {}).get("langgraph_node", "")
-                        in self._STREAMING_NODES):
-                    streamed_nodes.add(
-                        event["metadata"]["langgraph_node"]
-                    )
-
                 translated = self._translate_event(event, show_thinking, streamed_nodes, llm_call_counts)
                 if translated:
+                    if translated.get("type") == "token":
+                        node = event.get("metadata", {}).get("langgraph_node", "")
+                        if node in self._STREAMING_NODES:
+                            streamed_nodes.add(node)
                     yield translated
 
         except Exception as e:
@@ -212,10 +209,17 @@ class LearningAgent:
             if name == "reject":
                 return {"type": "token", "content": report_text} if report_text else None
 
-            if name in self._STREAMING_NODES and name not in streamed_nodes:
+            if name in self._STREAMING_NODES:
+                # ── code_assist 场景特殊处理 ──
+                # 如果报告长度明显大于已流式传输的内容（说明触发了强化重试），
+                # 必须将完整报告作为 token 事件再次发送，确保前端一定能收到。
+                # 正常场景流式已完整发送时，此处的重复前端会自动去重。
                 if report_text:
-                    logger.info(f"[event] 节点 {name} 输出报告内容，长度: {len(report_text)}")
-                    streamed_nodes.add(name)
+                    if name not in streamed_nodes:
+                        logger.info(f"[event] 节点 {name} 输出报告内容（首次），长度: {len(report_text)}")
+                        streamed_nodes.add(name)
+                    else:
+                        logger.info(f"[event] 节点 {name} 重新输出完整报告（可能触发过重试），长度: {len(report_text)}")
                     return {"type": "token", "content": report_text}
 
             if show_thinking:
@@ -235,6 +239,25 @@ class LearningAgent:
             if not content:
                 return None
             return {"type": "token", "content": content}
+
+        if evt == "on_chain_stream" and langgraph_node in self._STREAMING_NODES:
+            chunk_data = event.get("data", {}).get("chunk")
+            if chunk_data is None:
+                return None
+            if hasattr(chunk_data, "content"):
+                content = chunk_data.content
+                if content is None:
+                    return None
+                if not isinstance(content, str):
+                    content = str(content)
+                if not content:
+                    return None
+                return {"type": "token", "content": content}
+            if isinstance(chunk_data, str):
+                if not chunk_data:
+                    return None
+                return {"type": "token", "content": chunk_data}
+            return None
 
         if evt == "on_chat_model_start" and langgraph_node and langgraph_node not in self._STREAMING_NODES:
             if show_thinking and langgraph_node in _NODE_PROGRESS_LABELS:

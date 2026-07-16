@@ -139,90 +139,204 @@ class ReportNode(BaseNode):
         logger.info(f"[report] 报告生成完成，长度: {len(report)}, 块数: {chunk_count}")
         return {"report": report}
 
+    # ── 代码辅助专用系统提示词（通用 Python 编程导师） ──
+    _CODE_ASSIST_SYSTEM = """\
+你是一名专业的 Python 编程导师。
+请根据用户提供的代码和诉求，提供代码补全、错误诊断、优化建议或代码讲解。
+
+如果用户提供了代码，请按以下结构输出：
+
+## 优化后的代码示例
+（给出完整的、可直接运行的 Python 代码，用 ```python 围栏格式包裹。
+ 补全场景：在用户代码基础上扩展，使其更丰富、更实用；
+ 诊断场景：修复错误后的完整代码；
+ 优化场景：优化后的完整代码；
+ 讲解场景：被讲解的代码片段。）
+
+## 改动说明
+（逐条列出改动位置、原因和效果；错误诊断场景需先指出错误根因）
+
+## 相关知识点
+（涉及的 Python 语法特性、库用法或编程最佳实践）
+
+## 进阶建议
+（性能、可读性或健壮性方面可进一步优化的方向）
+
+如果用户没有提供代码或需求不够明确，可以先友好地询问具体情况，引导用户补充信息。
+
+其他要求：
+- 用中文回答
+- 解释清晰、步骤分明
+- 代码块中的代码必须完整可运行，不要用 ... 或 # 省略 代替实际代码
+"""
+
+
+    # ── 代码辅助重试提示词（首次未生成代码块时使用） ──
+    _CODE_ASSIST_RETRY_SYSTEM = """\
+你是一名专业的 Python 编程导师。
+你的上一次回复没有包含 Python 代码示例。
+
+如果用户的原始输入中包含了代码，请务必：
+1. 包含一个或多个 ```python ... ``` 代码块
+2. 给出完整的、可运行的改进代码
+3. 按以下结构输出：
+   ## 优化后的代码示例
+   （```python 代码块）
+   ## 改动说明
+   ## 相关知识点
+   ## 进阶建议
+
+如果用户的原始输入确实没有包含任何代码，可以继续询问用户，但请在询问的同时也给出一个与用户诉求相关的示例代码，帮助用户理解你可以提供什么样的帮助。
+
+现在请重新回答。
+"""
+
     async def _generate_code_assist(self, state: LearningState) -> Dict:
         """code_assist 模式：不依赖 proposal/evidence/critique，
-        直接用 LLM 流式生成代码补全/诊断/优化/讲解内容。
+        直接用 LLM 生成代码补全/诊断/优化/讲解内容。
 
-        流式调用优先，若流式返回空内容则自动降级为非流式调用。
+        调用策略（三层降级）：
+        1. 非流式调用（避免 LLM 反问用户的无用内容被流式推送到前端）
+        2. 非流式为空 → 降级重试
+        3. 内容不含代码块 → 强化提示词流式重试
+           （流式重试可让 on_chat_model_stream 事件把内容推送到前端）
         """
         case_text = state.get("case_text", "")
         logger.info(f"[report][code_assist] case_text 长度: {len(case_text)}")
 
-        code_assist_system = (
-            "你是一名专业的 Python 编程导师，专注于医学数据分析领域。\n"
-            "请根据用户的代码和诉求，提供代码补全、错误诊断、优化建议或代码讲解。\n"
-            "\n"
-            "【核心要求：必须按以下结构输出，每部分都要有实际内容】\n"
-            "\n"
-            "## 优化后的代码示例\n"
-            "（给出完整的、可直接运行的 Python 代码，用 ```python 围栏格式包裹。\n"
-            " 补全场景：补全用户未完成的代码段；\n"
-            " 诊断场景：修复错误后的完整代码；\n"
-            " 优化场景：优化后的完整代码；\n"
-            " 讲解场景：被讲解的代码片段。\n"
-            " 即使只有一行改动，也要输出完整代码，不要省略！）\n"
-            "\n"
-            "## 改动说明\n"
-            "（逐条列出改动位置、原因和效果；错误诊断场景需先指出错误根因）\n"
-            "\n"
-            "## 相关知识点\n"
-            "（涉及的语法特性、库用法或医学数据处理惯例）\n"
-            "\n"
-            "## 进阶建议\n"
-            "（性能、可读性或健壮性方面可进一步优化的方向）\n"
-            "\n"
-            "其他要求：\n"
-            "- 用中文回答\n"
-            "- 解释清晰、步骤分明\n"
-            "- 涉及医学统计（如 pandas/numpy/scipy/scikit-learn）时，结合领域知识说明\n"
-            "- 代码块必须完整可运行，不要用 ... 或 # 省略 代替实际代码"
-        )
-
         messages = [
-            SystemMessage(content=code_assist_system),
+            SystemMessage(content=self._CODE_ASSIST_SYSTEM),
             HumanMessage(content=case_text),
         ]
 
+        # ── 第一轮：非流式调用 ──
+        # 注意：首次使用非流式而不使用流式，防止 LLM 反问用户的无用内容
+        # 被流式发送到前端（一旦流式发送就无法撤回）。
+        # 如果首次就产出代码块 → on_chain_end 会将完整报告发送给前端。
+        # 如果首次无代码块 → 触发强化重试（流式），重试内容正常流式推送。
+        report, stream_error = await self._try_generate(messages, use_stream=False)
+
+        # ── 第二轮：内容质量校验 ──
+        # 即使内容非空，如果 LLM 在"反问用户"而非给出代码，也需要重试
+        has_code_block = bool(report.strip()) and (
+            "```python" in report or "```" in report
+        )
+        if report.strip():
+            logger.info(f"[report][code_assist] 内容预览:\n{report[:500]}")
+            if has_code_block:
+                logger.info(f"[report][code_assist] 包含代码块: 是 ✓")
+            else:
+                logger.warning(
+                    f"[report][code_assist] 包含代码块: 否，"
+                    f"疑似 LLM 反问用户或未按格式输出，触发强化重试"
+                )
+
+        # ── 第三轮：内容不含代码块时，用强化提示词重试 ──
+        # 只在用户确实提供了代码时才触发重试，避免用户没写代码时白白浪费 LLM 调用
+        user_has_code = case_text and ("```" in case_text)
+        if report.strip() and not has_code_block:
+            if user_has_code:
+                logger.info(
+                    f"[report][code_assist] 用户提供了代码但 LLM 未输出代码块，触发强化重试"
+                )
+                retry_messages = [
+                    SystemMessage(content=self._CODE_ASSIST_RETRY_SYSTEM),
+                    HumanMessage(
+                        content=(
+                            f"用户原始输入：\n{case_text}\n\n"
+                            f"你上一次的回复（不包含代码块，请重新回答）：\n{report[:300]}"
+                        )
+                    ),
+                ]
+                retry_report, _ = await self._try_generate(retry_messages, use_stream=True)
+                if retry_report.strip():
+                    retry_has_code = "```python" in retry_report or "```" in retry_report
+                    logger.info(
+                        f"[report][code_assist] 重试完成，长度: {len(retry_report)}, "
+                        f"包含代码块: {'是' if retry_has_code else '否'}"
+                    )
+                    if retry_has_code:
+                        report = retry_report
+                        has_code_block = True
+            else:
+                logger.info(
+                    f"[report][code_assist] 用户未提供代码，LLM 正常询问，跳过重试"
+                )
+
+        # ── 最终兜底 ──
+        if not report.strip():
+            logger.error(
+                f"[report][code_assist] 所有尝试均未返回有效内容"
+            )
+            report = (
+                "代码辅助生成失败：LLM 服务当前不可用。\n\n"
+                "请检查模型服务日志或稍后重试。"
+            )
+        elif not has_code_block and user_has_code:
+            # 只有用户提供了代码但 LLM 没输出代码块时才追加提示
+            logger.warning(
+                f"[report][code_assist] 用户提供了代码但 LLM 未输出代码块，"
+                f"返回原始内容并附加提示"
+            )
+            report = (
+                f"{report}\n\n"
+                f"---\n"
+                f"⚠️ **注意**：AI 本次未生成代码示例。请尝试：\n"
+                f"1. 在编辑器中多写一些代码，让 AI 有更多上下文\n"
+                f"2. 在「诉求」框中更具体地描述你希望 AI 帮你做什么\n"
+                f"3. 如果问题持续，请检查模型服务配置"
+            )
+
+        return {"report": report}
+
+    async def _try_generate(
+        self, messages: list, use_stream: bool = True
+    ) -> tuple:
+        """统一的 LLM 生成调用，返回 (报告文本, 异常对象)。
+
+        先尝试流式，失败/为空时自动降级为非流式。
+        """
         report = ""
         chunk_count = 0
         stream_error = None
 
-        # ── 第一轮：流式调用 ──
-        try:
-            async for chunk in self.llm_proposer.astream(messages):
-                chunk_count += 1
-                # 安全提取 chunk 内容：兼容 content 为 None / "" / list 等情况
-                if hasattr(chunk, "content"):
-                    c = chunk.content
-                    if c is None:
-                        c = ""
-                    elif not isinstance(c, str):
-                        # 某些模型 content 可能为 list[dict]，尝试转字符串
-                        try:
-                            c = str(c) if c else ""
-                        except Exception:
+        # ── 流式调用 ──
+        if use_stream:
+            try:
+                async for chunk in self.llm_proposer.astream(messages):
+                    chunk_count += 1
+                    if hasattr(chunk, "content"):
+                        c = chunk.content
+                        if c is None:
                             c = ""
-                else:
-                    c = str(chunk) if chunk else ""
-                report += c
-        except Exception as e:
-            stream_error = e
-            logger.error(
-                f"[report][code_assist] 流式生成失败: {type(e).__name__} - {str(e)}"
+                        elif not isinstance(c, str):
+                            try:
+                                c = str(c) if c else ""
+                            except Exception:
+                                c = ""
+                    else:
+                        c = str(chunk) if chunk else ""
+                    report += c
+            except Exception as e:
+                stream_error = e
+                logger.error(
+                    f"[report][code_assist] 流式生成失败: "
+                    f"{type(e).__name__} - {str(e)}"
+                )
+
+            logger.info(
+                f"[report][code_assist] 流式完成，长度: {len(report)}, "
+                f"块数: {chunk_count}, 有效内容: {bool(report.strip())}"
             )
 
-        logger.info(
-            f"[report][code_assist] 流式完成，长度: {len(report)}, "
-            f"块数: {chunk_count}, 有效内容: {bool(report.strip())}"
-        )
-
-        # ── 第二轮：流式为空时降级为非流式调用 ──
+        # ── 非流式降级 ──
         if not report.strip():
-            logger.warning(
-                f"[report][code_assist] 流式返回空内容 "
-                f"(stream_error={type(stream_error).__name__ if stream_error else '无异常'})，"
-                f"降级为非流式调用"
-            )
+            if use_stream:
+                logger.warning(
+                    f"[report][code_assist] 流式返回空内容"
+                    f"(stream_error={type(stream_error).__name__ if stream_error else '无异常'})，"
+                    f"降级为非流式调用"
+                )
             try:
                 response = await self.llm_proposer.ainvoke(messages)
                 if hasattr(response, "content"):
@@ -238,12 +352,13 @@ class ReportNode(BaseNode):
                 else:
                     report = str(response) if response else ""
                 logger.info(
-                    f"[report][code_assist] 非流式降级完成，长度: {len(report)}, "
+                    f"[report][code_assist] 非流式完成，长度: {len(report)}, "
                     f"有效内容: {bool(report.strip())}"
                 )
             except Exception as e:
                 logger.error(
-                    f"[report][code_assist] 非流式降级也失败: {type(e).__name__} - {str(e)}"
+                    f"[report][code_assist] 非流式调用失败: "
+                    f"{type(e).__name__} - {str(e)}"
                 )
                 report = (
                     f"代码辅助生成失败：LLM 服务当前不可用。\n\n"
@@ -252,16 +367,4 @@ class ReportNode(BaseNode):
                     f"请检查模型服务日志或稍后重试。"
                 )
 
-        if report.strip():
-            logger.info(f"[report][code_assist] 内容预览:\n{report[:500]}")
-            if "```python" in report or "```" in report:
-                logger.info(f"[report][code_assist] 包含代码块: 是")
-            else:
-                logger.warning(f"[report][code_assist] 包含代码块: 否")
-        else:
-            logger.error(
-                f"[report][code_assist] 流式+非流式均未返回有效内容，"
-                f"将返回空报告（前端将提示用户）"
-            )
-
-        return {"report": report}
+        return report, stream_error
