@@ -33,10 +33,8 @@ const resultPaneRef = ref(null)
 const userScrolled = ref(false)
 const inlineError = ref('')
 
-/** 当前 SSE 请求的 AbortController，用于主动取消 */
-let assistAbortController = null
-/** 安全超时计时器 */
 let assistSafetyTimer = null
+let assistAbortController = null
 
 /** 重置所有 AI 辅助相关状态 */
 function resetAssistState() {
@@ -49,17 +47,22 @@ function resetAssistState() {
   userScrolled.value = false
 }
 
-/** 取消正在进行的 AI 辅助请求 */
+/** 取消当前 AI 请求 */
 function cancelAssist() {
-  if (assistSafetyTimer) {
-    clearTimeout(assistSafetyTimer)
-    assistSafetyTimer = null
-  }
+  clearSafetyTimer()
   if (assistAbortController) {
     assistAbortController.abort()
     assistAbortController = null
   }
   resetAssistState()
+}
+
+/** 清除安全超时定时器 */
+function clearSafetyTimer() {
+  if (assistSafetyTimer) {
+    clearTimeout(assistSafetyTimer)
+    assistSafetyTimer = null
+  }
 }
 
 /** 设置安全超时（60 秒），防止 isAssisting 状态永久卡死 */
@@ -73,33 +76,24 @@ function startSafetyTimer() {
   }, 60000)
 }
 
-/** 清除安全超时计时器 */
-function clearSafetyTimer() {
-  if (assistSafetyTimer) {
-    clearTimeout(assistSafetyTimer)
-    assistSafetyTimer = null
-  }
-}
-
-// ── 生命周期管理：确保组件在任意生命周期阶段都能正确清理状态 ──
-
-/** 首次挂载时初始化 clean 状态 */
 onMounted(() => {
-  resetAssistState()
+  const el = resultPaneRef.value
+  if (el) el.addEventListener('scroll', onPaneScroll, { passive: true })
 })
 
-/** keep-alive 激活时重置状态 */
 onActivated(() => {
-  resetAssistState()
+  const el = resultPaneRef.value
+  if (el) el.addEventListener('scroll', onPaneScroll, { passive: true })
 })
 
-/** keep-alive 失活时取消请求并清理 */
 onDeactivated(() => {
   cancelAssist()
 })
 
-/** 组件销毁时取消请求并清理 */
 onBeforeUnmount(() => {
+  clearSafetyTimer()
+  const el = resultPaneRef.value
+  if (el) el.removeEventListener('scroll', onPaneScroll)
   cancelAssist()
 })
 
@@ -141,7 +135,7 @@ async function runCode() {
     })
     runResult.value = res.data
   } catch (e) {
-    runError.value = e.msg || e.message || '代码执行失败，请稍后重试'
+    runError.value = e.message || '代码执行失败'
   } finally {
     isRunning.value = false
   }
@@ -204,8 +198,17 @@ async function requestAssist() {
       },
       { signal: assistAbortController.signal },
     )
-    console.log('[code-assist] SSE 请求完成: talkId=', result.data?.talkId)
+    console.log('[code-assist] SSE 请求完成: talkId=', result.data?.talkId, 'contentLen=', result.data?.content?.length || 0)
     if (result.data?.talkId) talkId.value = result.data.talkId
+
+    // ── 兜底：若 SSE 流式块未能正确累积到 assistContent，但 Promise 解析结果中有完整内容，
+    //        直接使用完整内容填充，避免因前端解析时序问题导致空白。 ──
+    if (!assistContent.value && result.data?.content) {
+      console.log('[code-assist] 流式块未累积到 assistContent，使用 Promise 结果兜底填充')
+      assistContent.value = result.data.content
+      isThinking.value = false
+    }
+
     if (!assistContent.value && !assistError.value) {
       assistError.value = 'AI 未返回有效内容，请检查模型服务日志或稍后重试'
       inlineError.value = assistError.value
@@ -264,11 +267,12 @@ import pandas as pd
 df = pd.DataFrame({'NIHSS评分': [4, 12, 20], '预后': ['良好', '中等', '差']})
 print(df.describe())"
           ></textarea>
+        </div>
+        <div class="prompt-bar">
           <input
             v-model="prompt"
             class="prompt-input"
-            placeholder="描述你的诉求（如：帮我补全缺失值处理逻辑）"
-            @keyup.enter="requestAssist"
+            placeholder="多写一点"
           />
           <input
             v-model="stdinData"
@@ -283,30 +287,27 @@ print(df.describe())"
               {{ isAssisting ? 'AI 分析中...' : '✨ AI 辅助' }}
             </button>
           </div>
-          <transition name="fade-inline-error">
-            <p v-if="inlineError" class="inline-error">{{ inlineError }}</p>
-          </transition>
         </div>
+      </div>
 
-        <div class="panel output-panel">
-          <div class="panel-title"><span>运行结果</span>
-            <span v-if="runResult" class="run-meta">
-              退出码 {{ runResult.exitCode }} · 耗时 {{ runResult.executionTime }}s
-              <span v-if="runResult.truncated"> · 输出已截断</span>
-            </span>
-          </div>
-          <div class="output-body">
-            <div v-if="runError" class="output-error">{{ runError }}</div>
-            <template v-else-if="runResult">
-              <pre v-if="runResult.stdout" class="output-stdout">{{ runResult.stdout }}</pre>
-              <pre v-if="runResult.stderr" class="output-stderr">{{ runResult.stderr }}</pre>
-              <div v-if="runResult.error" class="output-error">{{ runResult.error }}</div>
-              <div v-if="!runResult.stdout && !runResult.stderr && !runResult.error" class="output-empty">
-                程序执行完成，无输出
-              </div>
-            </template>
-            <div v-else class="output-empty">点击「▶ 运行代码」在沙箱中执行</div>
-          </div>
+      <div class="result-column panel">
+        <div class="panel-title">
+          <span>运行结果</span>
+          <span class="run-meta" v-if="runResult">
+            退出码 {{ runResult.exitCode }} · 耗时 {{ runResult.executionTime }}s
+          </span>
+        </div>
+        <div class="output-body">
+          <div v-if="runError" class="output-error">{{ runError }}</div>
+          <template v-else-if="runResult">
+            <pre v-if="runResult.stdout" class="output-stdout">{{ runResult.stdout }}</pre>
+            <pre v-if="runResult.stderr" class="output-stderr">{{ runResult.stderr }}</pre>
+            <div v-if="runResult.error" class="output-error">{{ runResult.error }}</div>
+            <div v-if="!runResult.stdout && !runResult.stderr && !runResult.error" class="output-empty">
+              程序执行完成，无输出
+            </div>
+          </template>
+          <div v-else class="output-empty">点击「▶ 运行代码」在沙箱中执行</div>
         </div>
       </div>
 
@@ -431,103 +432,85 @@ print(df.describe())"
   background: transparent;
   color: var(--color-text-strong);
   font-family: 'SF Mono', Menlo, Consolas, monospace;
-  font-size: 13px;
+  font-size: 13.5px;
   line-height: 1.6;
+  tab-size: 4;
+}
+
+.prompt-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .prompt-input {
-  margin: 0 12px 10px;
-  padding: 8px 12px;
+  padding: 10px 12px;
   border: 1px solid var(--color-border);
   border-radius: 10px;
-  background: transparent;
+  background: var(--color-message-bg, transparent);
   color: var(--color-text-strong);
   font-size: 13px;
   outline: none;
+  transition: border-color 0.15s;
 
   &:focus { border-color: var(--color-primary-dark); }
 }
 
-.action-row {
-  display: flex;
-  gap: 10px;
-  padding: 0 12px 12px;
-  flex-shrink: 0;
-}
+.action-row { display: flex; gap: 10px; }
 
 .btn {
-  flex: 1;
-  padding: 9px 0;
+  padding: 9px 20px;
   border: none;
   border-radius: 10px;
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
-  transition: opacity 0.15s;
+  transition: opacity 0.15s, background 0.15s;
 
-  &:disabled { opacity: 0.5; cursor: not-allowed; }
-}
-
-.run-btn { background: var(--color-secondary-bg); color: var(--color-primary-dark); }
-.assist-btn { background: linear-gradient(135deg, #6366f1, #11967f); color: #fff; }
-
-.inline-error {
-  margin: 6px 12px 0;
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: rgba(239, 68, 68, 0.1);
-  color: #dc2626;
-  font-size: 12.5px;
-  font-weight: 500;
-  line-height: 1.4;
+  &:disabled { opacity: 0.45; cursor: not-allowed; }
 }
 
-.fade-inline-error-enter-active {
-  transition: opacity 0.2s ease, transform 0.2s ease;
-}
-.fade-inline-error-leave-active {
-  transition: opacity 0.15s ease;
-}
-.fade-inline-error-enter-from {
-  opacity: 0;
-  transform: translateY(-6px);
-}
-.fade-inline-error-leave-to {
-  opacity: 0;
-}
+.run-btn { background: var(--color-primary-dark); color: #fff; }
+.assist-btn { background: var(--color-secondary-bg); color: var(--color-primary-dark); }
 
-.output-panel { flex: 1; min-height: 120px; }
+.result-column { min-height: 0; }
 
 .output-body {
   flex: 1;
   overflow-y: auto;
-  padding: 10px 14px;
+  padding: 12px 14px;
   min-height: 0;
 }
 
-.output-stdout, .output-stderr {
-  margin: 0 0 8px;
+.output-stdout,
+.output-stderr {
+  margin: 0;
   padding: 10px 12px;
   border-radius: 10px;
   font-family: 'SF Mono', Menlo, Consolas, monospace;
   font-size: 12.5px;
-  line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
-.output-stdout {
-  background: var(--color-secondary-bg);
-  color: var(--color-text-strong);
-}
+.output-stdout { background: var(--color-secondary-bg); color: var(--color-text-strong); }
+.output-stderr { background: #fef2f2; color: #dc2626; }
 
-.output-stderr {
-  background: rgba(239, 68, 68, 0.08);
+.output-error {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fef2f2;
   color: #dc2626;
+  font-size: 13px;
+  font-weight: 600;
 }
 
-.output-error { padding: 8px 0; font-size: 13px; color: #dc2626; }
-.output-empty { padding: 14px 0; font-size: 13px; color: var(--color-text-weak); text-align: center; }
+.output-empty {
+  font-size: 13px;
+  color: var(--color-text-weak);
+  text-align: center;
+  padding: 24px 0;
+}
 
 .assist-column { min-height: 0; }
 
@@ -579,5 +562,52 @@ print(df.describe())"
 @media (max-width: 960px) {
   .code-body { grid-template-columns: 1fr; overflow-y: auto; }
   .assist-column { min-height: 320px; }
+}
+</style>
+
+<!-- 非 scoped 样式：确保 v-html 渲染的 Markdown 代码块可见 -->
+<style lang="scss">
+.assist-pane .markdown-body {
+  font-size: 14px;
+  line-height: 1.75;
+  color: #1e293b;
+  word-break: break-word;
+}
+.assist-pane .markdown-body h2 { font-size: 1.1rem; font-weight: 700; margin: 16px 0 8px; color: #0f172a; }
+.assist-pane .markdown-body h3 { font-size: 1rem; font-weight: 700; margin: 12px 0 6px; color: #1e293b; }
+.assist-pane .markdown-body p { margin: 6px 0; }
+.assist-pane .markdown-body ul, .assist-pane .markdown-body ol { padding-left: 20px; margin: 6px 0; }
+.assist-pane .markdown-body li { margin: 3px 0; }
+.assist-pane .markdown-body strong { font-weight: 700; }
+.assist-pane .markdown-body pre {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 14px 16px;
+  overflow-x: auto;
+  margin: 10px 0;
+}
+.assist-pane .markdown-body pre code {
+  font-family: 'SF Mono', Menlo, Consolas, 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #0f172a;
+  white-space: pre;
+  background: transparent;
+  padding: 0;
+}
+.assist-pane .markdown-body code {
+  font-family: 'SF Mono', Menlo, Consolas, 'Courier New', monospace;
+  font-size: 13px;
+  background: #f1f5f9;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #c7254e;
+}
+.assist-pane .markdown-body pre code {
+  color: #0f172a;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
 }
 </style>
