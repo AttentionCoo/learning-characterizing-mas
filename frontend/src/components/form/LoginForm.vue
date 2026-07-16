@@ -84,6 +84,6 @@ async function handleLogin() {
 
     <div v-if="errorMessage" class="auth-error">{{ errorMessage }}</div>
 
-    <button class="primary-action auth-submit-btn animate-shimmer" @click="handleLogin">登录</button>
+    <button class="primary-action auth-submit-btn" @click="handleLogin">登录</button>
   </div>
 </template>

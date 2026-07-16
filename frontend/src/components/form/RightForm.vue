@@ -9,7 +9,7 @@ const isLogin = ref(true)
 <template>
   <div class="content">
     <transition name="flip" mode="out-in">
-      <div :key="isLogin ? 'login' : 'register'" class="form-wrapper glass prism-border">
+      <div :key="isLogin ? 'login' : 'register'" class="form-wrapper">
         <LoginForm v-if="isLogin" />
         <RegisterForm v-else />
         <div class="switch-text" @click="isLogin = !isLogin">

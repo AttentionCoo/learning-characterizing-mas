@@ -177,7 +177,7 @@ function typing(text, delay = TYPE_DELAY) {
     </div>
     <div class="card-area">
       <div class="card-stack">
-        <div v-for="card in stackCards" :key="card.textIndex" class="intro-card prism-border"
+        <div v-for="card in stackCards" :key="card.textIndex" class="intro-card"
           :class="{ leaving: card.layer === 0 && isLeaving }" :style="getCardStyle(card.layer, card.textIndex)">
           <!-- 卡片光轨 -->
           <div class="card-light-trail"></div>
@@ -185,9 +185,6 @@ function typing(text, delay = TYPE_DELAY) {
             {{ card.textIndex === typingTextIndex ? typedText : card.text }}
             <span class="cursor" v-show="card.textIndex === typingTextIndex && cursorShow">●</span>
           </span>
-          <!-- 角落光点 -->
-          <div class="card-sparkle sparkle-tl"></div>
-          <div class="card-sparkle sparkle-br"></div>
         </div>
       </div>
     </div>
@@ -256,28 +253,6 @@ function typing(text, delay = TYPE_DELAY) {
               box-shadow 0.3s ease;
   overflow: hidden;
 
-  // 背景光晕
-  &::after {
-    content: '';
-    position: absolute;
-    top: -50%;
-    left: -50%;
-    width: 200%;
-    height: 200%;
-    background: conic-gradient(
-      from 0deg,
-      transparent,
-      rgba(139, 92, 246, 0.06),
-      transparent,
-      rgba(14, 165, 233, 0.05),
-      transparent,
-      rgba(17, 150, 127, 0.04),
-      transparent
-    );
-    animation: rotate-glow 8s linear infinite;
-    pointer-events: none;
-  }
-
   &.leaving {
     opacity: 0 !important;
     transition:
@@ -317,29 +292,6 @@ function typing(text, delay = TYPE_DELAY) {
 @keyframes rotate-glow {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
-}
-
-// 角落光点
-.card-sparkle {
-  position: absolute;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  pointer-events: none;
-  z-index: 2;
-
-  &::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: 50%;
-    background: var(--color-stardust-1);
-    box-shadow: 0 0 8px rgba(167, 139, 250, 0.6), 0 0 20px rgba(167, 139, 250, 0.3);
-    animation: stardust-twinkle 3s ease-in-out infinite;
-  }
-
-  &.sparkle-tl { top: 12px; left: 16px; }
-  &.sparkle-br { bottom: 12px; right: 16px; animation-delay: 1.5s; }
 }
 
 @keyframes stardust-twinkle {

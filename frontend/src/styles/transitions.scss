@@ -27,13 +27,16 @@
 .fade-rise-enter-active {
   transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1), transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
+
 .fade-rise-leave-active {
   transition: opacity 0.2s ease, transform 0.2s ease;
 }
+
 .fade-rise-enter-from {
   opacity: 0;
   transform: translateY(20px) scale(0.97);
 }
+
 .fade-rise-leave-to {
   opacity: 0;
   transform: translateY(-10px) scale(0.99);
@@ -43,13 +46,16 @@
 .scale-bounce-enter-active {
   transition: opacity 0.3s ease, transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
+
 .scale-bounce-leave-active {
   transition: opacity 0.2s ease, transform 0.2s ease;
 }
+
 .scale-bounce-enter-from {
   opacity: 0;
   transform: scale(0.85);
 }
+
 .scale-bounce-leave-to {
   opacity: 0;
   transform: scale(0.92);
@@ -58,15 +64,18 @@
 // 列表交错入场（巧思：列表项依次浮入）
 .list-stagger-enter-active {
   transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1),
-              transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
+
 .list-stagger-leave-active {
   transition: opacity 0.2s ease, transform 0.2s ease;
 }
+
 .list-stagger-enter-from {
   opacity: 0;
   transform: translateX(-12px);
 }
+
 .list-stagger-leave-to {
   opacity: 0;
   transform: translateX(12px);
@@ -76,7 +85,9 @@
 
 // 旋转加载
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .spinner {
@@ -90,8 +101,13 @@
 
 // 梦幻旋转加载器
 @keyframes dreamy-spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 .dreamy-spinner {
@@ -113,135 +129,308 @@
 
 // 流光扫过（巧思：按钮/卡片上的光效）
 @keyframes shimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 // 脉冲光晕（巧思：活跃状态的呼吸灯）
 @keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 8px rgba(17, 150, 127, 0.2); }
-  50% { box-shadow: 0 0 24px rgba(17, 150, 127, 0.45); }
+
+  0%,
+  100% {
+    box-shadow: 0 0 8px rgba(17, 150, 127, 0.2);
+  }
+
+  50% {
+    box-shadow: 0 0 24px rgba(17, 150, 127, 0.45);
+  }
 }
 
 // 浮动动画（巧思：装饰元素轻柔浮动）
 @keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-8px);
+  }
 }
 
 @keyframes float-slow {
-  0%, 100% { transform: translateY(0) rotate(0deg); }
-  33% { transform: translateY(-12px) rotate(1deg); }
-  66% { transform: translateY(6px) rotate(-1deg); }
+
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+
+  33% {
+    transform: translateY(-12px) rotate(1deg);
+  }
+
+  66% {
+    transform: translateY(6px) rotate(-1deg);
+  }
 }
 
 @keyframes float-wide {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  25% { transform: translate(15px, -20px) scale(1.05); }
-  50% { transform: translate(-10px, -8px) scale(0.97); }
-  75% { transform: translate(8px, 15px) scale(1.03); }
+
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+
+  25% {
+    transform: translate(15px, -20px) scale(1.05);
+  }
+
+  50% {
+    transform: translate(-10px, -8px) scale(0.97);
+  }
+
+  75% {
+    transform: translate(8px, 15px) scale(1.03);
+  }
 }
 
 // 渐变旋转（巧思：边框流光效果）
 @keyframes gradient-rotate {
-  0% { --angle: 0deg; }
-  100% { --angle: 360deg; }
+  0% {
+    --angle: 0deg;
+  }
+
+  100% {
+    --angle: 360deg;
+  }
 }
 
 // 波纹扩散（巧思：点击反馈）
 @keyframes ripple {
-  0% { transform: scale(0); opacity: 0.5; }
-  100% { transform: scale(4); opacity: 0; }
+  0% {
+    transform: scale(0);
+    opacity: 0.5;
+  }
+
+  100% {
+    transform: scale(4);
+    opacity: 0;
+  }
 }
 
 // 打字光标闪烁
 @keyframes blink-cursor {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0;
+  }
 }
 
 // 渐显入场（巧思：页面内容优雅入场）
 @keyframes fade-in-up {
-  from { opacity: 0; transform: translateY(16px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 // 弹性缩放（巧思：数字/徽章变化时的弹跳）
 @keyframes bounce-in {
-  0% { transform: scale(0); }
-  50% { transform: scale(1.15); }
-  70% { transform: scale(0.95); }
-  100% { transform: scale(1); }
+  0% {
+    transform: scale(0);
+  }
+
+  50% {
+    transform: scale(1.15);
+  }
+
+  70% {
+    transform: scale(0.95);
+  }
+
+  100% {
+    transform: scale(1);
+  }
 }
 
 // ─────────────────── 梦幻动画 ───────────────────
 
 // 极光流动
 @keyframes aurora-flow {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
+  0% {
+    background-position: 0% 50%;
+  }
+
+  50% {
+    background-position: 100% 50%;
+  }
+
+  100% {
+    background-position: 0% 50%;
+  }
 }
 
 // 星尘闪烁
 @keyframes stardust-twinkle {
-  0%, 100% { opacity: 0.3; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.3); }
+
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.3);
+  }
 }
 
 // 棱镜旋转（边框彩虹光）
 @keyframes prism-rotate {
-  0% { filter: hue-rotate(0deg); }
-  100% { filter: hue-rotate(360deg); }
+  0% {
+    filter: hue-rotate(0deg);
+  }
+
+  100% {
+    filter: hue-rotate(360deg);
+  }
 }
 
 // 形态变换光斑
 @keyframes morph-blob {
-  0%, 100% { border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%; }
-  50% { border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%; }
+
+  0%,
+  100% {
+    border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
+  }
+
+  50% {
+    border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%;
+  }
 }
 
 // 魔法飘散粒子
 @keyframes particle-rise {
-  0% { transform: translateY(0) scale(1); opacity: 0.8; }
-  100% { transform: translateY(-120px) scale(0); opacity: 0; }
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 0.8;
+  }
+
+  100% {
+    transform: translateY(-120px) scale(0);
+    opacity: 0;
+  }
 }
 
 // 光轨扫过
 @keyframes light-trail {
-  0% { left: -100%; opacity: 0; }
-  20% { opacity: 1; }
-  80% { opacity: 1; }
-  100% { left: 200%; opacity: 0; }
+  0% {
+    left: -100%;
+    opacity: 0;
+  }
+
+  20% {
+    opacity: 1;
+  }
+
+  80% {
+    opacity: 1;
+  }
+
+  100% {
+    left: 200%;
+    opacity: 0;
+  }
 }
 
 // 柔光呼吸
 @keyframes soft-breathe {
-  0%, 100% { box-shadow: 0 0 20px rgba(139, 92, 246, 0.1), 0 0 40px rgba(17, 150, 127, 0.05); }
-  50% { box-shadow: 0 0 35px rgba(139, 92, 246, 0.2), 0 0 60px rgba(17, 150, 127, 0.12); }
+
+  0%,
+  100% {
+    box-shadow: 0 0 20px rgba(139, 92, 246, 0.1), 0 0 40px rgba(17, 150, 127, 0.05);
+  }
+
+  50% {
+    box-shadow: 0 0 35px rgba(139, 92, 246, 0.2), 0 0 60px rgba(17, 150, 127, 0.12);
+  }
 }
 
 // 梦幻卡片悬浮
 @keyframes dreamy-hover {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-4px); }
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-4px);
+  }
 }
 
 // 虹光边缘
 @keyframes iridescent-border {
-  0% { border-color: rgba(139, 92, 246, 0.3); box-shadow: 0 0 15px rgba(139, 92, 246, 0.1); }
-  33% { border-color: rgba(14, 165, 233, 0.3); box-shadow: 0 0 15px rgba(14, 165, 233, 0.1); }
-  66% { border-color: rgba(17, 150, 127, 0.3); box-shadow: 0 0 15px rgba(17, 150, 127, 0.1); }
-  100% { border-color: rgba(139, 92, 246, 0.3); box-shadow: 0 0 15px rgba(139, 92, 246, 0.1); }
+  0% {
+    border-color: rgba(139, 92, 246, 0.3);
+    box-shadow: 0 0 15px rgba(139, 92, 246, 0.1);
+  }
+
+  33% {
+    border-color: rgba(14, 165, 233, 0.3);
+    box-shadow: 0 0 15px rgba(14, 165, 233, 0.1);
+  }
+
+  66% {
+    border-color: rgba(17, 150, 127, 0.3);
+    box-shadow: 0 0 15px rgba(17, 150, 127, 0.1);
+  }
+
+  100% {
+    border-color: rgba(139, 92, 246, 0.3);
+    box-shadow: 0 0 15px rgba(139, 92, 246, 0.1);
+  }
 }
 
 // ─────────────────── 工具类 ───────────────────
 
-.animate-float { animation: float 3s ease-in-out infinite; }
-.animate-float-slow { animation: float 5s ease-in-out infinite; }
-.animate-float-wide { animation: float-wide 12s ease-in-out infinite; }
-.animate-pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
-.animate-shimmer { position: relative; overflow: hidden; }
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.animate-float-slow {
+  animation: float 5s ease-in-out infinite;
+}
+
+.animate-float-wide {
+  animation: float-wide 12s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.animate-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
 .animate-shimmer::after {
   content: '';
   position: absolute;
@@ -250,22 +439,63 @@
   animation: shimmer 2.5s ease-in-out infinite;
   pointer-events: none;
 }
-.animate-fade-in-up { animation: fade-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
-.animate-bounce-in { animation: bounce-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
-.animate-soft-breathe { animation: soft-breathe 4s ease-in-out infinite; }
-.animate-dreamy-hover { animation: dreamy-hover 3s ease-in-out infinite; }
-.animate-iridescent { animation: iridescent-border 6s ease-in-out infinite; }
-.animate-stardust { animation: stardust-twinkle 2s ease-in-out infinite; }
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-bounce-in {
+  animation: bounce-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.animate-soft-breathe {
+  animation: soft-breathe 4s ease-in-out infinite;
+}
+
+.animate-dreamy-hover {
+  animation: dreamy-hover 3s ease-in-out infinite;
+}
+
+.animate-iridescent {
+  animation: iridescent-border 6s ease-in-out infinite;
+}
+
+.animate-stardust {
+  animation: stardust-twinkle 2s ease-in-out infinite;
+}
 
 // 交错延迟工具类
-.stagger-1 { animation-delay: 0.05s; }
-.stagger-2 { animation-delay: 0.1s; }
-.stagger-3 { animation-delay: 0.15s; }
-.stagger-4 { animation-delay: 0.2s; }
-.stagger-5 { animation-delay: 0.25s; }
-.stagger-6 { animation-delay: 0.3s; }
-.stagger-7 { animation-delay: 0.35s; }
-.stagger-8 { animation-delay: 0.4s; }
+.stagger-1 {
+  animation-delay: 0.05s;
+}
+
+.stagger-2 {
+  animation-delay: 0.1s;
+}
+
+.stagger-3 {
+  animation-delay: 0.15s;
+}
+
+.stagger-4 {
+  animation-delay: 0.2s;
+}
+
+.stagger-5 {
+  animation-delay: 0.25s;
+}
+
+.stagger-6 {
+  animation-delay: 0.3s;
+}
+
+.stagger-7 {
+  animation-delay: 0.35s;
+}
+
+.stagger-8 {
+  animation-delay: 0.4s;
+}
 
 // 玻璃拟态工具类
 .glass {
@@ -277,9 +507,17 @@
 }
 
 // 光晕效果
-.glow { box-shadow: var(--glow-primary); }
-.glow-strong { box-shadow: var(--glow-strong); }
-.glow-dreamy { box-shadow: var(--glow-dreamy); }
+.glow {
+  box-shadow: var(--glow-primary);
+}
+
+.glow-strong {
+  box-shadow: var(--glow-strong);
+}
+
+.glow-dreamy {
+  box-shadow: var(--glow-dreamy);
+}
 
 // 渐变文字（巧思：标题渐变色）
 .gradient-text {
@@ -303,6 +541,7 @@
   position: relative;
   border: none !important;
 }
+
 .glow-border::before {
   content: '';
   position: absolute;
@@ -317,6 +556,7 @@
   transition: opacity 0.3s ease;
   pointer-events: none;
 }
+
 .glow-border:hover::before {
   opacity: 1;
 }
@@ -344,5 +584,7 @@
     transition: opacity 0.4s ease;
   }
 
-  &:hover::before { opacity: 1; }
+  &:hover::before {
+    opacity: 1;
+  }
 }
