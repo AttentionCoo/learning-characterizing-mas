@@ -11,7 +11,9 @@
 [![Vue 3.5](https://img.shields.io/badge/Vue-3.5-4FC08D?style=flat-square&logo=vue.js&logoColor=white)](https://vuejs.org/)
 [![Spring Boot 3.3](https://img.shields.io/badge/Spring%20Boot-3.3-6DB33F?style=flat-square&logo=springboot&logoColor=white)](https://spring.io/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.128-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![LangGraph](https://img.shields.io/badge/LangGraph-0.2.20-1C3C3C?style=flat-square&logo=langchain&logoColor=white)](https://github.com/langchain-ai/langgraph)
+[![LangGraph](https://img.shields.io/badge/LangGraph-1.2.9-1C3C3C?style=flat-square&logo=langchain&logoColor=white)](https://github.com/langchain-ai/langgraph)
+[![LangChain](https://img.shields.io/badge/LangChain-1.3.13-1C3C3C?style=flat-square&logo=langchain&logoColor=white)](https://www.langchain.com/)
+[![RAGAS](https://img.shields.io/badge/RAGAS-0.4.x-6C5CE7?style=flat-square)](https://docs.ragas.io/)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
 
 </div>
@@ -20,14 +22,15 @@
 
 ## 🌟 项目背景
 
-面向高等教育场景（脑卒中方向医学生）的个性化学习智能体系统。在传统医学教育中，学生面临以下挑战：
+面向高等教育场景（**脑卒中方向医学生**）的个性化学习智能体系统。在传统医学教育中，学生面临以下挑战：
 
-- 📚 **知识碎片化**：医学知识体系庞大，学生难以建立系统性认知
-- 👨‍⚕️ **个性化缺失**：统一的教学模式无法满足不同学生的学习节奏和基础差异
-- 🧩 **实践机会有限**：临床案例资源稀缺，难以获得充分的实践训练
-- 📊 **评估手段单一**：传统考试难以全面评估学生的综合能力
+- 📚 **知识碎片化**：医学知识体系庞大、更新迅速，学生难以建立系统性的认知框架，知识点之间缺乏有效连接
+- 👨‍⚕️ **个性化缺失**：统一的教学模式无法满足不同学生的学习节奏、基础差异和兴趣方向，优秀学生"吃不饱"、基础薄弱学生"跟不上"
+- 🧩 **实践机会有限**：临床案例资源稀缺，尤其是典型病例的影像资料和诊疗方案，学生难以获得充分的实践训练
+- 📊 **评估手段单一**：传统考试偏重记忆性知识考查，难以全面评估学生的临床推理能力、循证思维和综合应用能力
+- 🔬 **循证医学教育滞后**：最新临床指南和研究成果难以快速融入教学，教学内容与临床实践存在脱节
 
-LearnAgent 以高校专业课程知识库为底座，融合 **多智能体协同推理**、**Hybrid RAG**、**多模态影像识别** 与 **全栈响应式流式架构**，实现从学生画像构建到个性化资源生成、学习路径规划、智能辅导、学习效果评估的完整闭环。
+LearnAgent 以高校专业课程知识库为底座，融合 **多智能体协同推理**、**Hybrid RAG**（混合检索增强生成）、**多模态影像识别** 与 **全栈响应式流式架构**，实现从学生画像构建到个性化资源生成、学习路径规划、智能辅导、学习效果评估的完整闭环。系统内置 10 个脑卒中专业领域的循证医学测试问答，支持递归分块与语义分块两种策略的 A/B 评测对比，确保检索质量可量化、可优化。
 
 ## 🎯 系统目标
 
@@ -45,15 +48,127 @@ LearnAgent 以高校专业课程知识库为底座，融合 **多智能体协同
 
 | 特性 | 说明 |
 |:---|:---|
-| 🧠 **三群协同多智能体架构** | 基于 LangGraph StateGraph 构建 9 个专家智能体，YAML 配置驱动，支持动态编排与辩论-仲裁机制 |
-| 🔍 **证据前置 Hybrid RAG** | 三阶漏斗检索：向量 + BM25 宽召回 → RRF 倒数排名融合粗排 → Reranker 4 模型自动切换精排；QA 生成扩充向量库；强制文献溯源 |
-| 💾 **共享记忆系统** | 物理层（ChromaDB 向量存储）+ 逻辑层（信任加权投票共识）+ 元记忆过滤（四维信息熵计算），跨会话保留高价值洞察 |
-| ⚡ **全栈响应式流式管道** | Java WebFlux + Python Asyncio 深度流式融合，AI 思考过程完全透明可视化，SSE 断线续传 |
+| 🧠 **三群协同多智能体架构** | 基于 LangGraph StateGraph 构建 9 个专家智能体，YAML 配置驱动，支持动态编排与辩论-仲裁机制，实现从画像构建到学习评估的完整闭环 |
+| 🔍 **证据前置 Hybrid RAG** | 三阶漏斗检索：向量 + BM25 宽召回 → RRF 倒数排名融合粗排 → Reranker 4 模型自动切换精排；QA 生成扩充向量库；强制文献溯源；支持递归分块与语义分块 A/B 评测 |
+| 💾 **共享记忆系统** | 物理层（ChromaDB 向量存储）+ 逻辑层（信任加权投票共识）+ 元记忆过滤（四维信息熵计算），跨会话保留高价值洞察，实现学习连续性 |
+| ⚡ **全栈响应式流式管道** | Java WebFlux + Python AsyncIO 深度流式融合，AI 思考过程完全透明可视化，SSE 断线续传，支持 100 并发稳定运行 |
 | 🖼️ **医学多模态影像分析** | 10 类医学影像自动分类 + xf-xinghuo-vl-max 结构化分析 + DICOM 元数据提取 + 多图对比 + Vision-RAG 桥接循证检索 |
-| 🛡️ **防幻觉与质量保障** | 双层校验（规则引擎 + LLM 反思）+ 动态退火修正 + 辩论-仲裁 + 71 条自动化测试用例 |
-| 🩺 **医学 OCR 结构化提取** | 检验报告 + 处方 + 通用医学文档的 OCR 流式识别与结构化提取 |
-| 💻 **代码执行与辅助** | 支持 Python 代码在线执行与 AI 编程辅助，适用于医学数据处理与算法教学场景 |
-| 📊 **学习风险评估** | 百炼平台集成，自动评估学生学习风险等级并给出干预建议 |
+| 🛡️ **防幻觉与质量保障** | 双层校验（规则引擎学术审查 + LLM 反思逻辑审查）+ 动态退火修正 + 辩论-仲裁 + 71 条自动化测试用例，确保输出可靠性 |
+| 🩺 **医学 OCR 结构化提取** | 检验报告 + 处方 + 通用医学文档的 OCR 流式识别与结构化提取，支持多格式文档输入 |
+| 💻 **代码执行与辅助** | 支持 Python 代码在线执行沙箱与 AI 编程辅助，适用于医学数据处理、统计分析与算法教学场景 |
+| 📊 **学习风险评估** | 百炼平台集成，自动评估学生学习风险等级并生成个性化干预建议，支持知识点掌握度热力图与综合能力雷达图 |
+
+---
+
+## 🧠 多智能体编排架构
+
+### 9 大专家智能体协同体系
+
+系统基于 LangGraph StateGraph 构建 9 个领域专家智能体，通过 YAML 配置驱动，支持动态编排与辩论-仲裁机制。每个智能体拥有独立的系统提示词、知识边界和输出规范。
+
+```
+                           ┌──────────────────┐
+                           │   学生输入/请求    │
+                           └────────┬─────────┘
+                                    │
+                           ┌────────▼─────────┐
+                           │   Orchestrator    │
+                           │  (意图识别+路由)   │
+                           └────────┬─────────┘
+                                    │
+            ┌───────────┬───────────┼───────────┬───────────┐
+            │           │           │           │           │
+     ┌──────▼──────┐ ┌──▼────┐ ┌───▼────┐ ┌───▼────┐ ┌───▼────┐
+     │  Profile    │ │Resource│ │Learning│ │ Tutor  │ │Evaluate│
+     │   Agent     │ │ Agent  │ │  Path  │ │ Agent  │ │ Agent  │
+     │  画像构建    │ │ 资源生成│ │  Agent  │ │ 智能辅导│ │ 学习评估│
+     └─────────────┘ └────────┘ │ 路径规划│ └────────┘ └────────┘
+                                └────────┘
+            ┌───────────┬───────────┬───────────┐
+     ┌──────▼──────┐ ┌──▼────┐ ┌───▼────┐ ┌───▼────────┐
+     │   Vision    │ │  OCR  │ │  Code  │ │   Bailian   │
+     │   Agent     │ │ Agent │ │ Agent  │ │   Agent     │
+     │  医学影像    │ │ 文档识别│ │ 代码执行│ │  学习风险    │
+     └─────────────┘ └────────┘ └────────┘ └─────────────┘
+```
+
+| 智能体 | 职责 | 核心能力 |
+|:---|:---|:---|
+| **Profile Agent** | 学生画像构建 | 对话式信息采集、知识水平评估、学习风格分析、兴趣方向识别 |
+| **Resource Agent** | 个性化资源生成 | 8 种资源类型独立生成（讲义/案例/习题/文献综述/思维导图/临床指南/视频脚本/交互式问答） |
+| **Learning Path Agent** | 学习路径规划 | 知识图谱导航、先修关系推理、难度梯度设计、动态路径调整 |
+| **Tutor Agent** | 智能辅导答疑 | 24/7 全天候辅导、多轮对话理解、循证解答、文献溯源 |
+| **Evaluate Agent** | 学习效果评估 | 知识点掌握度热力图、综合能力雷达图、学习行为分析、优化方案生成 |
+| **Vision Agent** | 医学影像分析 | 10 类影像自动分类、结构化报告生成、DICOM 元数据提取、多图对比 |
+| **OCR Agent** | 医学文档识别 | 检验报告/处方/通用文档流式 OCR 识别与结构化提取 |
+| **Code Agent** | 代码执行辅助 | Python 代码在线执行沙箱、AI 编程辅助、医学数据处理教学 |
+| **Bailian Agent** | 学习风险分析 | 百炼平台集成、学习风险等级评估、干预建议生成 |
+
+### 辩论-仲裁质量保障机制
+
+当多个智能体对同一问题产生分歧时，系统自动启动辩论-仲裁流程：
+
+1. **辩论阶段**：各相关智能体基于自身知识领域提出观点和证据链
+2. **信任加权投票**：基于历史表现加权计算共识得分
+3. **仲裁裁决**：由 Orchestrator 综合证据链和共识得分做出最终裁决
+4. **元记忆沉淀**：高价值洞察通过四维信息熵计算后存入共享记忆，跨会话复用
+
+---
+
+## 📊 RAG 分块策略 A/B 评测
+
+系统内置完整的 RAG 分块策略对比评测框架（`tests/compare_chunking.py`），支持递归字符分块与语义分块两种策略的量化对比。
+
+### 评测指标（RAGAS）
+
+| 指标 | 英文名 | 说明 |
+|:---|:---|:---|
+| 上下文精确度 | Context Precision | 检索到的上下文中有多少比例与问题相关 |
+| 上下文召回率 | Context Recall | 标准答案所需信息是否都被检索到 |
+| 答案忠实度 | Faithfulness | 生成的答案是否忠实于检索到的上下文 |
+| 答案相关性 | Answer Relevancy | 生成的答案与问题的相关程度 |
+
+### 两种分块策略
+
+| 策略 | 算法 | 参数 | 优势 |
+|:---|:---|:---|:---|
+| **递归字符分块** | RecursiveCharacterTextSplitter | chunk_size=512, overlap=128 | 实现简单、速度快、适合通用场景 |
+| **语义分块** | 基于 Embedding 相似度阈值切分 | similarity_threshold=0.80, overlap_ratio=0.25, chunk_size=100-800 | 保留语义完整性、适合专业领域长文档 |
+
+### 评测测试集
+
+系统内置 10 道脑卒中循证医学测试问答，覆盖以下核心知识点：
+
+| # | 知识点 | 测试问题 |
+|:---:|:---|:---|
+| 1 | 出血转化 | 脑梗死后出血转化的主要危险因素有哪些？ |
+| 2 | 静脉溶栓 | 急性脑梗死静脉溶栓的时间窗是多少？ |
+| 3 | t-PA 用药 | 急性脑梗死 t-PA 静脉溶栓的剂量和用法是什么？ |
+| 4 | 血管内治疗 | 急性大血管闭塞性脑梗死的血管内治疗适应症是什么？ |
+| 5 | 血压管理 | 脑梗死急性期的血压管理目标是什么？ |
+| 6 | 溶栓前血压 | 静脉溶栓前的血压控制目标是什么？ |
+| 7 | NIHSS 评分 | NIHSS 评分的临床意义和分级标准是什么？ |
+| 8 | 血糖管理 | 急性脑梗死患者血糖管理目标是什么？ |
+| 9 | 抗血小板治疗 | 脑梗死二级预防的抗血小板治疗方案是什么？ |
+| 10 | ECASS 分型 | 脑梗死后出血转化的 ECASS 分型标准是什么？ |
+
+### 运行评测
+
+```bash
+cd model
+
+# 构建向量库 + 评测（首次运行）
+python -m tests.compare_chunking
+
+# 跳过构建，仅运行评测（已有向量库）
+python -m tests.compare_chunking --skip-build
+
+# 强制重建向量库
+python -m tests.compare_chunking --force-rebuild
+
+# 输出结果到 JSON 文件
+python -m tests.compare_chunking --output results.json
+```
 
 ---
 
@@ -102,9 +217,9 @@ LearnAgent 以高校专业课程知识库为底座，融合 **多智能体协同
 
 | 层级 | 核心技术 | 版本 | 职责 |
 |:---|:---|:---|:---|
-| **前端** | Vue · Vite · Pinia · marked · DOMPurify · pdfjs-dist | 3.5 · 7 · 3 · 17 · 3.3 · 3.11 | 流式渲染 · Markdown 展示 · 思考步骤折叠 · 学习路径可视化 · PDF 预览 |
-| **后端** | Java · Spring Boot · WebFlux · Security · Redisson · MySQL · MyBatis-Plus | 21 · 3.3 · 6.1 · 6.3 · 3.27 · 8.0 · 3.5 | 响应式高并发 · JWT 认证 · 分布式限流 · WebClient 流式转发 · SSE 断线续传 |
-| **模型** | Python · FastAPI · LangGraph · LangChain · XF-Xinghuo · ChromaDB · gte-rerank · xf-xinghuo-vl-max | 3.11 · 0.128 · 0.2.20 · 0.2.16 · Max/Plus/Turbo · 0.5 · --- · --- | 多智能体编排 · Hybrid RAG · 流式事件输出 · 多模态识别 · 文献检索 |
+| **前端** | Vue · Vite · Pinia · marked · DOMPurify · pdfjs-dist | 3.5 · 7 · 3 · 17 · 3.3 · 3.11 | 流式渲染 · Markdown 展示 · 思考步骤折叠 · 学习路径可视化 · PDF 预览 · 医学影像查看器 |
+| **后端** | Java · Spring Boot · WebFlux · Security · Redisson · MySQL · MyBatis-Plus | 21 · 3.3 · 6.1 · 6.3 · 3.27 · 8.0 · 3.5 | 响应式高并发 · JWT 认证 · 分布式限流 · WebClient 流式转发 · SSE 断线续传 · 阿里云 OSS 集成 |
+| **模型** | Python · FastAPI · LangGraph · LangChain · XF-Xinghuo · ChromaDB · gte-rerank | 3.11 · 0.128 · 1.2.9 · 1.3.13 · Max/Plus/Turbo · 0.5 · --- | 多智能体编排 · Hybrid RAG · 流式事件输出 · 多模态识别 · 文献检索 · RAGAS 评测 |
 
 ### Hybrid RAG 检索架构（三阶漏斗）
 
@@ -267,6 +382,12 @@ python -m pytest tests/test_shared_memory.py -v
 # RAG 检索测试
 cd model
 python -m pytest tests/test_rag.py -v
+
+# RAG 分块策略 A/B 评测对比
+cd model
+python -m tests.compare_chunking
+python -m tests.compare_chunking --skip-build
+python -m tests.compare_chunking --output results.json
 
 # API 客户端集成测试（需启动模型服务）
 cd model
@@ -464,47 +585,59 @@ REDIS_PORT="6379"
 
 ---
 
-## 🔧 使用场景
+## 🔧 典型应用场景
 
 ### 场景一：个性化学习路径规划
 
-**用户**：医学生小王刚进入脑卒中专业学习
+**用户**：医学生小王，刚进入脑卒中专业学习，基础薄弱
 
 **流程**：
-1. 小王完成对话式画像构建，系统了解其基础水平、学习目标和兴趣方向
-2. 系统分析知识库，生成个性化学习路径
-3. 小王按照路径学习，系统实时跟踪学习进度
-4. 根据学习行为数据，动态调整路径难度和内容
+1. 小王完成对话式画像构建，系统通过多轮对话了解其基础水平、学习目标和兴趣方向
+2. 系统分析知识库中的知识图谱，结合先修关系推理，生成个性化学习路径
+3. 小王按照路径学习，系统实时跟踪学习进度和行为数据
+4. 根据学习行为数据（答题正确率、停留时间、重复学习次数等），动态调整路径难度和内容
+5. 学习完成后，系统生成知识点掌握度热力图和综合能力雷达图
 
-### 场景二：智能辅导答疑
+**涉及智能体**：Profile Agent → Learning Path Agent → Evaluate Agent
+
+### 场景二：智能循证辅导答疑
 
 **用户**：学生小李在学习过程中遇到疑难问题
 
 **流程**：
-1. 小李向智能辅导模块提问
-2. 系统通过 Hybrid RAG 检索相关文献
-3. 多智能体协同分析，生成详细解答
-4. 解答包含文献引用，支持证据溯源
+1. 小李向智能辅导模块提问："脑梗死后出血转化的主要危险因素有哪些？"
+2. 系统通过 Hybrid RAG 三阶漏斗检索相关文献（宽召回 → RRF 粗排 → Reranker 精排）
+3. 多智能体协同分析，Tutor Agent 结合检索结果生成详细解答
+4. 解答包含文献引用，支持证据溯源，双击引用可跳转至原文
+5. 系统自动记录问答历史，丰富学生画像
+
+**涉及智能体**：Tutor Agent + Orchestrator（辩论-仲裁）
 
 ### 场景三：医学影像分析学习
 
-**用户**：学生小张需要分析临床影像案例
+**用户**：学生小张需要分析临床影像案例，准备影像诊断考试
 
 **流程**：
-1. 小张上传医学影像图片
-2. 系统自动分类影像类型并进行结构化分析
-3. Vision-RAG 桥接本地知识库，提供循证支持
-4. 生成详细的分析报告，包含鉴别诊断和学习建议
+1. 小张上传 CT/MRI 等医学影像图片
+2. Vision Agent 自动分类影像类型（CT 平扫/CTA/MRI-DWI/MRI-T2 等 10 类）
+3. 系统进行结构化分析，标注关键解剖结构和异常发现
+4. Vision-RAG 桥接本地知识库，检索相关文献和诊疗指南，提供循证支持
+5. 生成详细的分析报告，包含影像学特征描述、鉴别诊断、相关知识点和学习建议
 
-### 场景四：学习效果评估
+**涉及智能体**：Vision Agent → OCR Agent（如有文本标注）→ RAG 检索
 
-**用户**：学生小赵完成阶段性学习
+### 场景四：学习效果综合评估
+
+**用户**：学生小赵完成阶段性学习，需要评估学习效果
 
 **流程**：
-1. 系统收集小赵的学习行为数据
-2. 生成知识点掌握度热力图
-3. 评估学习风险等级
-4. 提供针对性的学习方案优化建议
+1. 系统收集小赵的学习行为数据（学习时长、答题记录、交互频率、知识点覆盖度等）
+2. Evaluate Agent 生成知识点掌握度热力图，直观展示强项与薄弱环节
+3. Bailian Agent 评估学习风险等级，识别可能掉队的知识点
+4. 系统生成针对性学习方案优化建议，推荐补充学习资源
+5. 教师可查看全班学生的评估报告，调整教学策略
+
+**涉及智能体**：Evaluate Agent → Bailian Agent → Learning Path Agent（动态调整）
 
 ---
 
@@ -634,14 +767,20 @@ A: 将 PDF 文件放入 model/data/documents/ 目录，重启模型服务即可�
 
 ### Q5: 如何自定义专家智能体配置？
 
-A: 编辑 model/app/config/expert_config.yaml 文件，按照现有格式添加或修改专家定义。
+A: 编辑 model/app/config/expert_config.yaml 文件，按照现有格式添加或修改专家定义，然后通过 /admin/reload_config 接口热更新配置，无需重启服务。
 
-### Q6: 如何进行性能调优？
+### Q6: 支持哪些 LLM 模型？
+
+A: 系统默认使用阿里云 DashScope 平台模型（xf-xinghuo-max/plus/turbo），同时预留了 DeepSeek API 接口。可通过 .env 文件配置模型切换。
+
+### Q7: 如何进行性能调优？
 
 A:
-- 调整 limits_config.yaml 中的并发参数
-- 优化 Redis 缓存配置
+- 调整 limits_config.yaml 中的并发参数（AI 信号量 permits）
+- 优化 Redis 缓存配置（TTL、连接池大小）
 - 根据实际情况调整 Reranker 模型切换策略
+- 调整 ChromaDB 向量检索的 top_k 参数
+- 使用 RAGAS 评测对比不同分块策略的效果
 
 ---
 
