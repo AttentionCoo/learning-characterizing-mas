@@ -7,7 +7,6 @@ from dotenv import load_dotenv
 from langchain_core.output_parsers import StrOutputParser
 
 load_dotenv()
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def safe_truncate(text: str, max_len: int = 1200) -> str:

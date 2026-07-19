@@ -10,7 +10,6 @@ from app.utils.xfyun_compat import apply_patches
 apply_patches()
 
 load_dotenv(override=True)
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
