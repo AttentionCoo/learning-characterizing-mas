@@ -3,7 +3,7 @@ import requests
 import os
 from typing import List
 from app.agents.schemas.retrieval import RerankResult
-from app.agents.utils.retry import retry
+from app.agents.core.decorators import retry
 from app.agents.infra.base_reranker import BaseReranker
 
 logger = logging.getLogger(__name__)
@@ -19,7 +19,7 @@ class DashScopeReranker(BaseReranker):
         self.model = "gte-rerank"
         logger.info("✅ DashScopeReranker 初始化完成")
 
-    @retry(retries=3, delay=1)
+    @retry(max_retries=3, delay=1)
     def rerank(
         self,
         query: str,
