@@ -778,7 +778,7 @@ A: 编辑 model/app/config/expert_config.yaml 文件，按照现有格式添加�
 
 ### Q6: 支持哪些 LLM 模型？
 
-A: 系统默认使用阿里云 DashScope 平台模型（xf-xinghuo-max/plus/turbo），同时预留了 DeepSeek API 接口。可通过 .env 文件配置模型切换。
+A: 系统默认使用**讯飞星火（XF-Xinghuo）**大模型（xf-xinghuo-max/plus/turbo）作为主要推理模型，同时使用阿里云 DashScope 平台提供 Embedding（text-embedding-v2）和 ReRank（gte-rerank）服务。预置了 DeepSeek API 接口，可通过 .env 文件配置模型切换。
 
 ### Q7: 如何进行性能调优？
 
