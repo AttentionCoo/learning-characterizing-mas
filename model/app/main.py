@@ -21,7 +21,7 @@ from app.config.config_loader import (
     get_shared_memory_manager,
     get_validation_manager,
 )
-from app.rag.retrieve import CONFIG, UnifiedSearchEngine
+from app.rag.retrievers import CONFIG, UnifiedSearchEngine
 from app.routers import admin, code, evaluation, medical, profile, stream
 from app.runtime import resources
 from app.agents.orchestrators.nodes.vision_node import VisionAnalysisNode
@@ -58,7 +58,7 @@ def init_all_resources():
     logger.info("🚀 开始初始化系统资源")
     logger.info("=" * 80)
 
-    logger.info("📋 [1/8] 加载配置管理器...")
+    logger.info("📋 [1/10] 加载配置管理器...")
     prompt_mgr = get_prompt_manager()
     report_mgr = get_report_manager()
     expert_mgr = get_expert_manager()
@@ -85,7 +85,7 @@ def init_all_resources():
     logger.info(f"     - 最大证据字符数: {limits_mgr.get_max_evidence_chars()}")
     logger.info(f"  ✅ 共享记忆配置: 自动存储={shared_memory_mgr.is_auto_store_enabled()}")
 
-    logger.info("🤖 [2/8] 初始化大语言模型（讯飞星火）...")
+    logger.info("🤖 [2/10] 初始化大语言模型（讯飞星火）...")
     _spark_base_default = os.getenv("SPARK_BASE_URL") or "https://spark-api-open.xf-yun.com/v1"
     _spark_password = os.getenv("SPARK_API_PASSWORD")
 
@@ -139,21 +139,21 @@ def init_all_resources():
 
     logger.info(f"  ✅ 模型加载完成: {_model_max}@{_base_max}, {_model_pro}@{_base_pro}, {_model_lite}@{_base_lite}, qwen-max@{_qwen_base_url}")
 
-    logger.info("💬 [3/8] 初始化上下文摘要服务...")
+    logger.info("💬 [3/10] 初始化上下文摘要服务...")
     context_summary = ConversationSummaryService(
         llm=llm_turbo,
         prompt_manager=prompt_mgr
     )
     logger.info("  ✅ 上下文摘要服务初始化完成")
 
-    logger.info("🔍 [4/8] 初始化向量检索引擎...")
+    logger.info("🔍 [4/10] 初始化向量检索引擎...")
     retriever = UnifiedSearchEngine(
         persist_dir=CONFIG.get("persist_dir", "./chroma_db_unified"),
         top_k=CONFIG.get("top_k_final", 3)
     )
 
     # 预加载 BGE 兜底模型，避免运行时讯飞 embedding 失败时静默下载 1.3GB 模型导致"假死"
-    logger.info("🔄 [4.5/8] 预加载 BGE 兜底 embedding 模型（避免运行时卡顿）...")
+    logger.info("🔄 [4.5/10] 预加载 BGE 兜底 embedding 模型（避免运行时卡顿）...")
     try:
         from app.rag.retrievers import XfyunEmbeddings
         XfyunEmbeddings.preload_fallback()
@@ -173,7 +173,7 @@ def init_all_resources():
     else:
         logger.warning("  ⚠️  本地文档为空，system_role 使用 YAML 静态列表")
 
-    logger.info("📚 [5/8] 初始化学习助手...")
+    logger.info("📚 [5/10] 初始化学习助手...")
     learning_assistant = LearningAssistant(
         llm_main=llm_max,
         llm_fast=llm_plus,
@@ -183,7 +183,7 @@ def init_all_resources():
     )
     logger.info("  ✅ 学习助手初始化完成")
 
-    logger.info("🧠 [6/8] 初始化共享记忆系统...")
+    logger.info("🧠 [6/10] 初始化共享记忆系统...")
     shared_memory_config = {
         "store": shared_memory_mgr.get_store_config(),
         "consensus": shared_memory_mgr.get_consensus_config(),
