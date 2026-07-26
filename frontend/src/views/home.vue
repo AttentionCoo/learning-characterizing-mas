@@ -174,6 +174,8 @@ function toggleSidebar() {
 .app-layout {
   display: flex;
   height: 100vh;
+  height: 100dvh;
+  min-height: 0;
   overflow: hidden;
   background: var(--color-bg-base);
   position: relative;
@@ -415,6 +417,7 @@ function toggleSidebar() {
 // ── 主内容区 ──
 .main-content {
   flex: 1;
+  min-height: 0;
   min-width: 0;
   margin-left: 260px;
   overflow: hidden;

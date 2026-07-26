@@ -83,8 +83,10 @@ body,
 .app-shell {
   position: relative;
   width: 100%;
-  height: 100vh;
-  overflow: hidden;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 // ── 梦幻宇宙背景 ──
