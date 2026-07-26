@@ -1,13 +1,9 @@
-import os
 import logging
 
 from dotenv import load_dotenv
 from langchain_core.messages import SystemMessage, HumanMessage
-from langchain_openai import ChatOpenAI
 
-# 独立运行时也需要讯飞兼容性补丁（main.py 中也会执行，幂等安全）
-from app.utils.xfyun_compat import apply_patches
-apply_patches()
+from app.config.qwen import create_qwen_chat_model
 
 load_dotenv(override=True)
 logger = logging.getLogger(__name__)
@@ -15,32 +11,21 @@ logger = logging.getLogger(__name__)
 
 class NamingModel(object):
     def __init__(self):
-        # 默认使用 PRO 档（原 Lite 服务已无额度，轻量任务复用 Pro）
-        api_key = os.environ.get("SPARK_API_PASSWORD_PRO") or os.environ.get("SPARK_API_PASSWORD")
-        model = os.environ.get("SPARK_MODEL_PRO") or "generalv3"
-        base_url = (
-            os.environ.get("SPARK_BASE_URL_PRO")
-            or os.environ.get("SPARK_BASE_URL")
-            or "https://spark-api-open.xf-yun.com/v1"
-        )
-
-        if not api_key:
-            logger.warning("未找到环境变量 SPARK_API_PASSWORD，标题生成功能将不可用")
-            self.llm = None
-        else:
-            self.llm = ChatOpenAI(
-                model=model,
-                base_url=base_url,
-                api_key=api_key,
+        try:
+            self.llm = create_qwen_chat_model(
+                "turbo",
                 temperature=0.3,
                 max_tokens=300,
-                timeout=25
+                timeout=25,
             )
+        except ValueError as exc:
+            logger.warning(f"Qwen 模型未配置，标题生成功能将不可用: {exc}")
+            self.llm = None
 
     def run_naming(self, question):
         logger.info(f"开始执行 run_naming() 方法，待处理内容: {question}")
         if self.llm is None:
-            logger.warning("DEEPSEEK_API_KEY 未配置，跳过标题生成，返回默认标题")
+            logger.warning("Qwen API Key 未配置，跳过标题生成，返回默认标题")
             return "学习咨询"
         try:
             response = self.llm.invoke([

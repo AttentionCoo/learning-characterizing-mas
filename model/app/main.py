@@ -1,14 +1,12 @@
 import asyncio
 import concurrent.futures
 import logging
-import os
 import sys
 import time
 from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI
-from langchain_openai import ChatOpenAI
 
 from app.agents.assistant import LearningAssistant
 from app.agents.core.shared_memory import SharedMemorySystem
@@ -21,6 +19,11 @@ from app.config.config_loader import (
     get_shared_memory_manager,
     get_validation_manager,
 )
+from app.config.qwen import (
+    create_qwen_chat_model,
+    get_qwen_base_url,
+    get_qwen_chat_model_name,
+)
 from app.rag.retrievers import CONFIG, UnifiedSearchEngine
 from app.routers import admin, code, evaluation, medical, profile, stream
 from app.runtime import resources
@@ -31,12 +34,6 @@ from app.services.vision_rag_bridge import VisionRAGBridge
 from app.services.vision_service import VisionAnalysisService
 from app.utils.context_summary import ConversationSummaryService
 from app.utils.naming_model import NamingModel
-from app.utils.xfyun_compat import apply_patches
-
-# 必须在任何 ChatOpenAI 实例化之前应用，修复讯飞星火 choices=null 导致的 TypeError
-apply_patches()
-
-os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -85,59 +82,26 @@ def init_all_resources():
     logger.info(f"     - 最大证据字符数: {limits_mgr.get_max_evidence_chars()}")
     logger.info(f"  ✅ 共享记忆配置: 自动存储={shared_memory_mgr.is_auto_store_enabled()}")
 
-    logger.info("🤖 [2/10] 初始化大语言模型（讯飞星火）...")
-    _spark_base_default = os.getenv("SPARK_BASE_URL") or "https://spark-api-open.xf-yun.com/v1"
-    _spark_password = os.getenv("SPARK_API_PASSWORD")
-
-    if not _spark_password:
-        logger.error("  ❌ 错误: SPARK_API_PASSWORD 未设置")
-        raise ValueError("SPARK_API_PASSWORD 环境变量未设置")
-
-    # 讯飞的 APIPassword 与模型版本绑定，三档若用不同版本需分别配置，缺省共用同一个
-    # 用 or 而非 getenv 默认值兜底：compose 可能注入空字符串
-    _pw_max = os.getenv("SPARK_API_PASSWORD_MAX") or _spark_password
-    _pw_pro = os.getenv("SPARK_API_PASSWORD_PRO") or _spark_password
-    _pw_lite = os.getenv("SPARK_API_PASSWORD_LITE") or _spark_password
-
-    # Base URL 按档位覆盖（支持不同服务端点如 Spark X 的 /x2）
-    _base_max = os.getenv("SPARK_BASE_URL_MAX") or _spark_base_default
-    _base_pro = os.getenv("SPARK_BASE_URL_PRO") or _spark_base_default
-    _base_lite = os.getenv("SPARK_BASE_URL_LITE") or _spark_base_default
-
-    # 星火档位映射（可用 env 覆盖）：
-    #   max → Ultra-32K（最强模型，Agent proposer 长提示词场景）
-    #   pro → Pro（critic / 反思）
-    #   lite → Pro（原 Lite 已无额度，轻量任务复用 Pro）
-    _model_max = os.getenv("SPARK_MODEL_MAX") or "generalv3"
-    _model_pro = os.getenv("SPARK_MODEL_PRO") or "generalv3"
-    _model_lite = os.getenv("SPARK_MODEL_LITE") or "lite"
-
-    logger.info(f"  ✅ APIPassword: {_spark_password[:6]}...{_spark_password[-4:]}")
-
-    llm_max = ChatOpenAI(
-        model=_model_max, base_url=_base_max, api_key=_pw_max,
+    logger.info("🤖 [2/10] 初始化 Qwen 大语言模型...")
+    llm_max = create_qwen_chat_model(
+        "max",
         max_retries=3, request_timeout=90,
     )
-    llm_plus = ChatOpenAI(
-        model=_model_pro, base_url=_base_pro, api_key=_pw_pro,
+    llm_plus = create_qwen_chat_model(
+        "plus",
         max_retries=3, request_timeout=60,
     )
-    llm_turbo = ChatOpenAI(
-        model=_model_lite, base_url=_base_lite, api_key=_pw_lite,
+    llm_turbo = create_qwen_chat_model(
+        "turbo",
         max_retries=2, request_timeout=30,
     )
-
-    _qwen_api_key = os.getenv("QWEN_API_KEY") or os.getenv("DASHSCOPE_API_KEY")
-    _qwen_base_url = os.getenv("QWEN_BASE_URL") or "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    llm_qwen_max = ChatOpenAI(
-        model="qwen-max",
-        base_url=_qwen_base_url,
-        api_key=_qwen_api_key,
-        max_retries=3,
-        request_timeout=120,
+    logger.info(
+        "  ✅ Qwen 模型加载完成: %s / %s / %s @ %s",
+        get_qwen_chat_model_name("max"),
+        get_qwen_chat_model_name("plus"),
+        get_qwen_chat_model_name("turbo"),
+        get_qwen_base_url(),
     )
-
-    logger.info(f"  ✅ 模型加载完成: {_model_max}@{_base_max}, {_model_pro}@{_base_pro}, {_model_lite}@{_base_lite}, qwen-max@{_qwen_base_url}")
 
     logger.info("💬 [3/10] 初始化上下文摘要服务...")
     context_summary = ConversationSummaryService(
@@ -151,14 +115,6 @@ def init_all_resources():
         persist_dir=CONFIG.get("persist_dir", "./chroma_db_unified"),
         top_k=CONFIG.get("top_k_final", 3)
     )
-
-    # 预加载 BGE 兜底模型，避免运行时讯飞 embedding 失败时静默下载 1.3GB 模型导致"假死"
-    logger.info("🔄 [4.5/10] 预加载 BGE 兜底 embedding 模型（避免运行时卡顿）...")
-    try:
-        from app.rag.retrievers import XfyunEmbeddings
-        XfyunEmbeddings.preload_fallback()
-    except Exception as e:
-        logger.warning(f"⚠️ BGE 预加载失败（非致命）: {e}")
 
     if retriever.chunks:
         _loaded_doc_names = sorted(set(
@@ -216,8 +172,8 @@ def init_all_resources():
 
     logger.info("🧠 [9/10] 初始化学习推理智能体...")
     agent = LearningAgent(
-        llm_proposer=llm_qwen_max,
-        llm_critic=llm_qwen_max,
+        llm_proposer=llm_max,
+        llm_critic=llm_max,
         learning_assistant=learning_assistant,
         prompt_manager=prompt_mgr,
         report_manager=report_mgr,

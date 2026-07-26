@@ -2,16 +2,16 @@
 医学OCR服务 — Medical OCR Service
 
 对检验报告、处方等医学文档图片进行结构化文本提取。
-基于 xf-xinghuo-vl-max 多模态模型，输出结构化 JSON。
+基于 Qwen VL 多模态模型，输出结构化 JSON。
 """
 
 import asyncio
 import json
 import logging
-import os
 import threading
 from typing import AsyncGenerator, List, Optional
 
+from app.config.qwen import get_qwen_api_key, get_qwen_vision_model
 from app.schemas.medical_image import LabReport, LabValue, PrescriptionInfo
 
 logger = logging.getLogger(__name__)
@@ -29,9 +29,10 @@ class MedicalOCRService:
 
     def __init__(self, prompt_manager=None):
         self._prompt_manager = prompt_manager
-        self._api_key = os.getenv("DASHSCOPE_API_KEY")
+        self._api_key = get_qwen_api_key(required=False)
+        self._model = get_qwen_vision_model()
         if not self._api_key:
-            logger.warning("⚠️ 未找到 DASHSCOPE_API_KEY，医学OCR功能将不可用")
+            logger.warning("⚠️ 未找到 Qwen API Key，医学OCR功能将不可用")
 
     # ----------------------------------------------------------
     # 公开 API
@@ -159,7 +160,7 @@ class MedicalOCRService:
             "type": "thinking",
             "step": "MedicalOCR",
             "title": f"📄 正在识别{label}...",
-            "content": f"文档类型：{label}，调用 XF-Xinghuo-VL-Max OCR识别",
+            "content": f"文档类型：{label}，调用 {self._model} OCR识别",
         }
 
         system_prompt = f"你是一位医学文档识别专家。请准确识别以下{label}中的所有文字，保持原有的结构和格式。如遇模糊文字，标注[模糊]。不提取患者身份信息。"
@@ -212,7 +213,7 @@ class MedicalOCRService:
 
         try:
             response = MultiModalConversation.call(
-                model="qwen-vl-max",
+                model=self._model,
                 api_key=self._api_key,
                 messages=messages,
                 stream=True,

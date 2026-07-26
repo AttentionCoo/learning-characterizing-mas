@@ -52,10 +52,10 @@ LearnAgent 以高校专业课程知识库为底座，融合 **多智能体协同
 | 特性 | 说明 |
 |:---|:---|
 | 🧠 **三群协同多智能体架构** | 基于 LangGraph StateGraph 构建 9 个专家智能体，YAML 配置驱动，支持动态编排与辩论-仲裁机制，实现从画像构建到学习评估的完整闭环 |
-| 🔍 **证据前置 Hybrid RAG** | 三阶漏斗检索：向量 + BM25 宽召回 → RRF 倒数排名融合粗排 → Reranker 4 模型自动切换精排；QA 生成扩充向量库；强制文献溯源；支持递归分块与语义分块 A/B 评测 |
+| 🔍 **证据前置 Hybrid RAG** | 三阶漏斗检索：Qwen 向量 + BM25 宽召回 → RRF 倒数排名融合粗排 → Qwen Reranker 精排；QA 生成扩充向量库；强制文献溯源；支持递归分块与语义分块 A/B 评测 |
 | 💾 **共享记忆系统** | 物理层（ChromaDB 向量存储）+ 逻辑层（信任加权投票共识）+ 元记忆过滤（四维信息熵计算），跨会话保留高价值洞察，实现学习连续性 |
 | ⚡ **全栈响应式流式管道** | Java WebFlux + Python AsyncIO 深度流式融合，AI 思考过程完全透明可视化，SSE 断线续传，支持 100 并发稳定运行 |
-| 🖼️ **医学多模态影像分析** | 10 类医学影像自动分类 + xf-xinghuo-vl-max 结构化分析 + DICOM 元数据提取 + 多图对比 + Vision-RAG 桥接循证检索 |
+| 🖼️ **医学多模态影像分析** | 10 类医学影像自动分类 + qwen-vl-max 结构化分析 + DICOM 元数据提取 + 多图对比 + Vision-RAG 桥接循证检索 |
 | 🛡️ **防幻觉与质量保障** | 双层校验（规则引擎学术审查 + LLM 反思逻辑审查）+ 动态退火修正 + 辩论-仲裁 + 71 条自动化测试用例，确保输出可靠性 |
 | 🩺 **医学 OCR 结构化提取** | 检验报告 + 处方 + 通用医学文档的 OCR 流式识别与结构化提取，支持多格式文档输入 |
 | 💻 **代码执行与辅助** | 支持 Python 代码在线执行沙箱与 AI 编程辅助，适用于医学数据处理、统计分析与算法教学场景 |
@@ -189,8 +189,8 @@ python -m tests.compare_chunking --output results.json
 │   MySQL 8.0 · MyBatis-Plus 3.5 · 阿里云 OSS                     │
 ├──────────────────────────────────────────────────────────────────┤
 │                        模型推理层 Model                           │
-│   Python 3.11 · FastAPI · LangGraph · LangChain · XF-Xinghuo      │
-│   ChromaDB · gte-rerank · xf-xinghuo-vl-max                       │
+│   Python 3.11 · FastAPI · LangGraph · LangChain · Qwen             │
+│   ChromaDB · qwen3.7-text-embedding · qwen3-rerank · qwen-vl-max   │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -222,7 +222,7 @@ python -m tests.compare_chunking --output results.json
 |:---|:---|:---|:---|
 | **前端** | Vue · Vite · Pinia · marked · DOMPurify · pdfjs-dist | 3.5 · 7 · 3 · 17 · 3.3 · 3.11 | 流式渲染 · Markdown 展示 · 思考步骤折叠 · 学习路径可视化 · PDF 预览 · 医学影像查看器 |
 | **后端** | Java · Spring Boot · WebFlux · Security · Redisson · MySQL · MyBatis-Plus | 21 · 3.3 · 6.1 · 6.3 · 3.27 · 8.0 · 3.5 | 响应式高并发 · JWT 认证 · 分布式限流 · WebClient 流式转发 · SSE 断线续传 · 阿里云 OSS 集成 |
-| **模型** | Python · FastAPI · LangGraph · LangChain · XF-Xinghuo · ChromaDB · gte-rerank | 3.11 · 0.128 · 1.2.9 · 1.3.13 · Max/Plus/Turbo · 0.5 · --- | 多智能体编排 · Hybrid RAG · 流式事件输出 · 多模态识别 · 文献检索 · RAGAS 评测 |
+| **模型** | Python · FastAPI · LangGraph · LangChain · Qwen · ChromaDB · qwen3-rerank | 3.11 · 0.128 · 1.2.9 · 1.3.13 · Max/Plus/Turbo · 0.5 · --- | 多智能体编排 · Hybrid RAG · 流式事件输出 · 多模态识别 · 文献检索 · RAGAS 评测 |
 
 ### Hybrid RAG 检索架构（三阶漏斗）
 
@@ -252,20 +252,17 @@ python -m tests.compare_chunking --output results.json
                             ▼
             ┌───────────────────────────────┐
             │     第三阶：Reranker 精排       │
-            │  4 模型自动切换容灾：            │
-            │  xf-xinghuo-rerank-v1          │
-            │    → gte-rerank-v2            │
-            │    → xf-xinghuo-rerank         │
-            │    → gte-rerank               │
+            │  qwen3-rerank                  │
+            │  失败时回退到 RRF 排序结果       │
             │  20 篇 → 3 篇最终结果           │
             └───────────────────────────────┘
 ```
 
 | 阶段 | 技术 | 输入 → 输出 | 说明 |
 |:---|:---|:---|:---|
-| **宽召回** | DashScope Embedding (text-embedding-v2) + BM25 | 各 20 篇 → 最多 40 篇 | 语义向量 + 关键词双路并行召回，互补覆盖 |
+| **宽召回** | Qwen Embedding (qwen3.7-text-embedding, 1024d) + BM25 | 各 20 篇 → 最多 40 篇 | 语义向量 + 关键词双路并行召回，互补覆盖 |
 | **粗排** | RRF (Reciprocal Rank Fusion) | 40 篇 → 20 篇 | 零成本零延迟，纯排名融合，避开 Dense/Sparse 分值区间差异 |
-| **精排** | BGEReranker (DashScope ReRank API) | 20 篇 → 3 篇 | 深度语义重排序，4 模型自动切换容灾，失败时原始结果兜底 |
+| **精排** | QwenReranker (qwen3-rerank) | 20 篇 → 3 篇 | 深度语义重排序，失败时使用 RRF 结果兜底 |
 
 #### 文档预处理流程
 
@@ -274,7 +271,7 @@ python -m tests.compare_chunking --output results.json
 | PDF 加载 | PyPDFLoader | --- |
 | 文本清洗 | clean_text() 去除换行和多余空格 | --- |
 | 文档切分 | RecursiveCharacterTextSplitter | chunk_size=512, overlap=128 |
-| QA 扩充 | QAGenerator (xf-xinghuo-turbo) | 每 10 个 chunk 合并，生成 3-5 个 QA 对 |
+| QA 扩充 | QAGenerator (qwen-turbo) | 每 10 个 chunk 合并，生成 3-5 个 QA 对 |
 
 #### 检索优化
 
@@ -488,11 +485,17 @@ docker-compose up -d
 # 必需 - 阿里云 DashScope API Key
 DASHSCOPE_API_KEY="sk-your-dashscope-api-key"
 
+# 可选 - Qwen 模型覆盖
+QWEN_MODEL_MAX="qwen-max"
+QWEN_MODEL_PLUS="qwen-plus"
+QWEN_MODEL_TURBO="qwen-turbo"
+QWEN_EMBEDDING_MODEL="qwen3.7-text-embedding"
+QWEN_EMBEDDING_DIMENSION="1024"
+QWEN_RERANK_MODEL="qwen3-rerank"
+QWEN_VISION_MODEL="qwen-vl-max"
+
 # 必需 - JWT 密钥（需与 Java 后端一致）
 SECRET_KEY="your-jwt-secret-key"
-
-# 可选 - DeepSeek API Key（备用 LLM）
-DEEPSEEK-API-KEY="sk-your-deepseek-api-key"
 
 # 可选 - 课程 PDF 目录（默认 model/data/documents/）
 MEDICAL_DOCS_DIR="/path/to/your/pdf/documents"
@@ -778,7 +781,7 @@ A: 编辑 model/app/config/expert_config.yaml 文件，按照现有格式添加�
 
 ### Q6: 支持哪些 LLM 模型？
 
-A: 系统默认使用**讯飞星火（XF-Xinghuo）**大模型（xf-xinghuo-max/plus/turbo）作为主要推理模型，同时使用阿里云 DashScope 平台提供 Embedding（text-embedding-v2）和 ReRank（gte-rerank）服务。预置了 DeepSeek API 接口，可通过 .env 文件配置模型切换。
+A: 系统统一使用阿里云百炼 Qwen 模型：`qwen-max/plus/turbo` 负责推理，`qwen3.7-text-embedding` 负责向量检索，`qwen3-rerank` 负责精排，`qwen-vl-max` 负责视觉理解。模型名可通过环境变量覆盖。
 
 ### Q7: 如何进行性能调优？
 

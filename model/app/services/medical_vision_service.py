@@ -9,17 +9,17 @@
 - 多图对比分析
 - VL 模型输出到结构化 JSON 的解析
 
-基于 xf-xinghuo-vl-max 多模态大模型，专为脑卒中医学教育场景优化。
+基于 Qwen VL 多模态大模型，专为脑卒中医学教育场景优化。
 """
 
 import asyncio
 import json
 import logging
-import os
 import re
 import threading
 from typing import AsyncGenerator, Dict, List, Optional, Tuple
 
+from app.config.qwen import get_qwen_api_key, get_qwen_vision_model
 from app.schemas.medical_image import (
     MEDICAL_IMAGE_TYPES,
     Abnormality,
@@ -460,9 +460,10 @@ class MedicalVisionService:
 
     def __init__(self, prompt_manager=None):
         self._prompt_manager = prompt_manager
-        self._api_key = os.getenv("DASHSCOPE_API_KEY")
+        self._api_key = get_qwen_api_key(required=False)
+        self._model = get_qwen_vision_model()
         if not self._api_key:
-            logger.warning("⚠️ 未找到 DASHSCOPE_API_KEY，医学影像分析功能将不可用")
+            logger.warning("⚠️ 未找到 Qwen API Key，医学影像分析功能将不可用")
 
     # ----------------------------------------------------------
     # 公开 API
@@ -503,7 +504,7 @@ class MedicalVisionService:
             "type": "thinking",
             "step": "MedicalVision",
             "title": f"🔬 正在分析{type_name}影像...",
-            "content": f"影像类型：{type_name}，共 {len(images)} 张图片，调用 XF-Xinghuo-VL-Max 医学影像分析模型",
+            "content": f"影像类型：{type_name}，共 {len(images)} 张图片，调用 {self._model} 医学影像分析模型",
             "image_type": img_type,
         }
 
@@ -799,7 +800,7 @@ class MedicalVisionService:
         system_text: str,
         user_prefix: str,
     ) -> list:
-        """构建 XF-Xinghuo-VL-Max API 消息格式"""
+        """构建 Qwen VL API 消息格式。"""
         messages = []
 
         if system_text and system_text.strip():
@@ -829,7 +830,7 @@ class MedicalVisionService:
 
         try:
             response = MultiModalConversation.call(
-                model="qwen-vl-max",
+                model=self._model,
                 api_key=self._api_key,
                 messages=messages,
                 stream=True,

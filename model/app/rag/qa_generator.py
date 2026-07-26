@@ -3,60 +3,31 @@ import time
 import logging
 from typing import List
 from langchain_core.documents import Document
-from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
+
+from app.config.qwen import create_qwen_chat_model, get_qwen_chat_model_name
 
 logger = logging.getLogger(__name__)
 
 class QAGenerator:
-    def __init__(self, model_name=None, tier: str = "lite"):
+    def __init__(self, model_name=None, tier: str = "turbo"):
         """
-        初始化大模型调用。使用讯飞星火 OpenAI 兼容接口。
+        初始化 Qwen 大模型调用。
 
         参数:
             model_name: 直接指定模型名（优先于 tier）
-            tier: 档位选择 "lite" / "pro" / "max"，默认 "lite"（轻量任务无需强力模型）
+            tier: 档位选择 "turbo" / "plus" / "max"，默认 "turbo"
         """
-        if model_name:
-            pass  # 直接使用传入的 model_name
-        elif tier == "lite":
-            model_name = os.getenv("SPARK_MODEL_LITE") or "lite"
-        elif tier == "pro":
-            model_name = os.getenv("SPARK_MODEL_PRO") or "generalv3"
-        elif tier == "max":
-            model_name = os.getenv("SPARK_MODEL_MAX") or "generalv3"
-        else:
-            model_name = "generalv3"
+        if tier not in {"turbo", "plus", "max"}:
+            raise ValueError(f"不支持的 Qwen 模型档位: {tier}")
+        actual_model = model_name or get_qwen_chat_model_name(tier)
+        logger.info(f"🔑 [QAGenerator] 使用 Qwen 模型: {actual_model}")
 
-        # 按档位读取对应的 API Key
-        tier_key_map = {
-            "lite": "SPARK_API_PASSWORD_LITE",
-            "pro": "SPARK_API_PASSWORD_PRO",
-            "max": "SPARK_API_PASSWORD_MAX",
-        }
-        api_key = (
-            os.getenv(tier_key_map.get(tier, ""))
-            or os.getenv("SPARK_API_PASSWORD")
-        )
-        base_url = (
-            os.getenv(f"SPARK_BASE_URL_{tier.upper()}")
-            or os.getenv("SPARK_BASE_URL")
-            or "https://spark-api-open.xf-yun.com/v1"
-        )
-
-        # 诊断日志：确认实际读取到的凭证与模型
-        _key_preview = f"{api_key[:6]}...{api_key[-4:]}" if api_key else "None"
-        logger.info(f"🔑 [QAGenerator] model={model_name}, api_key={_key_preview}")
-
-        if not api_key:
-            logger.warning("⚠️ 未找到 SPARK_API_PASSWORD，QA生成可能失败。")
-
-        self.llm = ChatOpenAI(
-            model=model_name,
-            api_key=api_key,
-            base_url=base_url,
+        self.llm = create_qwen_chat_model(
+            tier,
+            model_name=model_name,
             max_retries=2,
-            request_timeout=60,  # Lite 模型响应快，60s 足够；过长的 timeout 会让限流排队看起来像死机
+            request_timeout=60,
         )
         self.prompt = ChatPromptTemplate.from_template(
             "你是一个专业的医学助理。请阅读以下由多个连续医学文档片段组合而成的长文本，提取出其中最重要的关联信息，生成3到5个高质量的问答对(Q&A)。\n"
@@ -74,15 +45,13 @@ class QAGenerator:
         """
         将多个 chunk 合并打批传给大模型生成 QA，从而大幅节省接口请求次数并提升速度。
 
-        内置批次间延迟（1.5s），防止短时间内大量调用触发讯飞 Spark Lite 的 QPS/并发限流，
-        导致后续请求被挂起（表现为"死机"）。
+        内置批次间延迟，防止短时间内大量请求触发百炼并发限制。
         """
         qa_docs = []
         total_chunks = len(chunks)
         total_batches = (total_chunks + batch_size - 1) // batch_size
 
-        # 批次间延迟（秒）：Spark Lite 免费档 QPS 极低，保守取 1.5s
-        _BATCH_DELAY = float(os.getenv("QA_BATCH_DELAY_SEC", "1.5"))
+        _BATCH_DELAY = float(os.getenv("QA_BATCH_DELAY_SEC", "0.5"))
 
         logger.info(f"🧠 开始为 {total_chunks} 个 chunk 生成 QA 对")
         logger.info(f"   批次大小: {batch_size} | 总批次数: {total_batches} | 批次延迟: {_BATCH_DELAY}s")
@@ -157,10 +126,7 @@ class QAGenerator:
                 f"耗时 {elapsed:.0f}s | 速度 {speed:.1f} chunk/s | ETA {eta_str}"
             )
 
-            # ═══════════════════════════════════════════════════════════
-            # 批次间延迟：防止讯飞 Spark Lite 免费档 QPS 限流导致请求挂起
-            # 最后一批不需要延迟（循环即将结束）
-            # ═══════════════════════════════════════════════════════════
+            # 最后一批不需要延迟。
             if batch_num < total_batches and _BATCH_DELAY > 0:
                 time.sleep(_BATCH_DELAY)
 

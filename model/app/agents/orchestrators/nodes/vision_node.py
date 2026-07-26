@@ -17,13 +17,13 @@ VisionAnalysisNode — LangGraph 医学影像分析节点
 
 import asyncio
 import logging
-import os
 import re
 import threading
 from typing import Dict, List, Optional, Tuple
 
 from app.agents.core.schema import LearningState
 from app.agents.orchestrators.nodes.base import BaseNode
+from app.config.qwen import get_qwen_api_key, get_qwen_vision_model
 
 logger = logging.getLogger(__name__)
 
@@ -244,7 +244,8 @@ class VisionAnalysisNode(BaseNode):
         self._vision = medical_vision_service
         self._bridge = vision_rag_bridge
         self._llm = llm_fast
-        self._api_key = os.getenv("DASHSCOPE_API_KEY")
+        self._api_key = get_qwen_api_key(required=False)
+        self._vision_model = get_qwen_vision_model()
 
     # ================================================================
     # 主流程
@@ -519,7 +520,7 @@ class VisionAnalysisNode(BaseNode):
 
         try:
             response = MultiModalConversation.call(
-                model="qwen-vl-max",
+                model=self._vision_model,
                 api_key=self._api_key,
                 messages=messages,
                 stream=True,

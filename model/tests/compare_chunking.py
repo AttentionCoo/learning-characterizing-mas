@@ -41,8 +41,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.rag.data_loader import load_pdfs_from_dir, split_documents, clean_text_preserve_nl
 from app.rag.retrievers import (
-    DashScopeEmbeddings,
-    BGEReranker,
+    QwenEmbeddings,
+    QwenReranker,
     HybridRetriever,
     build_or_load_vectorstore,
     reciprocal_rank_fusion,
@@ -77,7 +77,7 @@ SEMANTIC_PERSIST = os.path.join(BASE_DIR, "chroma_db_semantic")
 
 # 评测用 LLM 模型（通义千问 + RAGAS 评测）
 EVAL_LLM_MODEL = "qwen-plus"
-EMBEDDING_MODEL = "text-embedding-v2"
+EMBEDDING_MODEL = "qwen3.7-text-embedding"
 
 # 检索配置
 SEARCH_TOP_K = 5  # 检索返回 5 个文档给 RAGAS 评测
@@ -160,7 +160,7 @@ def build_vectorstore(docs_dir: str, persist_dir: str, use_semantic: bool):
 
     # 分块
     if use_semantic:
-        embeddings = DashScopeEmbeddings(model=EMBEDDING_MODEL)
+        embeddings = QwenEmbeddings(model=EMBEDDING_MODEL)
         chunks = split_documents(
             raw_docs,
             embeddings=embeddings,
@@ -250,13 +250,13 @@ def run_evaluation(
     eval_dataset = EvaluationDataset.from_hf_dataset(hf_dataset)
 
     # RAGAS 评测
-    # 使用 LangchainEmbeddingsWrapper 包装 DashScopeEmbeddings 以兼容 RAGAS
+    # 使用 LangchainEmbeddingsWrapper 包装 QwenEmbeddings 以兼容 RAGAS
     # 也可用 ragas.embeddings.OpenAIEmbeddings 直接传 embed_query 参数
     logger.info(f">> [{strategy_name}] 执行 RAGAS 评测...")
     from ragas.embeddings import LangchainEmbeddingsWrapper
 
     ragas_emb = LangchainEmbeddingsWrapper(
-        DashScopeEmbeddings(model=EMBEDDING_MODEL)
+        QwenEmbeddings(model=EMBEDDING_MODEL)
     )
 
     result = evaluate(
@@ -327,7 +327,7 @@ def main():
         from langchain_chroma import Chroma
         vectordb_rec = Chroma(
             persist_directory=RECURSIVE_PERSIST,
-            embedding_function=DashScopeEmbeddings(model=EMBEDDING_MODEL),
+            embedding_function=QwenEmbeddings(model=EMBEDDING_MODEL),
         )
         retriever_rec = HybridRetriever(
             vectordb_rec, raw_docs,
@@ -344,7 +344,7 @@ def main():
         )
     else:
         raw_docs = load_pdfs_from_dir(DATA_DIR, clean_fn=clean_text_preserve_nl)
-        embeddings = DashScopeEmbeddings(model=EMBEDDING_MODEL)
+        embeddings = QwenEmbeddings(model=EMBEDDING_MODEL)
         chunks_sem = split_documents(
             raw_docs, embeddings=embeddings,
             similarity_threshold=0.80,
@@ -354,7 +354,7 @@ def main():
         from langchain_chroma import Chroma
         vectordb_sem = Chroma(
             persist_directory=SEMANTIC_PERSIST,
-            embedding_function=DashScopeEmbeddings(model=EMBEDDING_MODEL),
+            embedding_function=QwenEmbeddings(model=EMBEDDING_MODEL),
         )
         retriever_sem = HybridRetriever(
             vectordb_sem, raw_docs,

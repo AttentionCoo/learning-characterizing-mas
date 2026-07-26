@@ -1,10 +1,10 @@
 import logging
 import requests
-import os
 from typing import List
 from app.agents.schemas.retrieval import RerankResult
 from app.agents.core.decorators import retry
 from app.agents.infra.base_reranker import BaseReranker
+from app.config.qwen import get_qwen_api_key, get_qwen_rerank_model
 
 logger = logging.getLogger(__name__)
 
@@ -13,11 +13,11 @@ class DashScopeReranker(BaseReranker):
     BASE_URL = "https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank"
 
     def __init__(self):
-        self.api_key = os.getenv("DASHSCOPE_API_KEY")
+        self.api_key = get_qwen_api_key(required=False)
         if not self.api_key:
-            raise ValueError("未找到 DASHSCOPE_API_KEY 环境变量")
-        self.model = "gte-rerank"
-        logger.info("✅ DashScopeReranker 初始化完成")
+            raise ValueError("未找到 QWEN_API_KEY 或 DASHSCOPE_API_KEY 环境变量")
+        self.model = get_qwen_rerank_model()
+        logger.info(f"✅ Qwen Reranker 初始化完成: {self.model}")
 
     @retry(max_retries=3, delay=1)
     def rerank(
