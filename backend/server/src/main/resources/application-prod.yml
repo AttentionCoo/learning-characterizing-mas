@@ -5,7 +5,7 @@ aiserver:
     port: ${DB_PORT:3306}
     database: ${DB_NAME:learningo-agents}
     username: ${DB_USERNAME:learningo-agents}
-    password: ${DB_PASSWORD}
+    password: ${DB_PASSWORD:123456}
 
   redis:
     host: ${REDIS_HOST:127.0.0.1}
@@ -14,7 +14,8 @@ aiserver:
 
   ai-api:
     url: ${AI_API_URL:http://127.0.0.1:8000}
-    shared-jwt-secret: ${AI_API_SHARED_JWT_SECRET}
+    # 宝塔直接运行 JAR 时可复用模型服务的 SECRET_KEY；专用变量仍具有最高优先级。
+    shared-jwt-secret: ${AI_API_SHARED_JWT_SECRET:${SECRET_KEY:your-secret-key-here}}
 
   alioss:
     endpoint: ${OSS_ENDPOINT:https://oss-cn-beijing.aliyuncs.com}
