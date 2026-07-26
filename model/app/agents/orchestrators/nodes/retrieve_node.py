@@ -4,6 +4,7 @@ from typing import Dict, Optional
 from app.agents.core.schema import LearningState
 from app.agents.orchestrators.nodes.base import BaseNode
 from app.agents.constants import MAX_EVIDENCE_CHARS
+from app.agents.utils.reasoning_trace import parse_retrieval_evidence
 from app.agents.utils.text_utils import truncate_text
 
 logger = logging.getLogger(__name__)
@@ -29,7 +30,10 @@ class RetrieveNode(BaseNode):
                     evidence = f"{evidence}\n\n--- 共享记忆 ---\n{memory_evidence}" if evidence else memory_evidence
                     logger.info(f"[retrieve] 融合共享记忆 | 命中={len(shared_memory_hits)} 条")
 
-        result = {"evidence": truncate_text(evidence, MAX_EVIDENCE_CHARS)}
+        result = {
+            "evidence": truncate_text(evidence, MAX_EVIDENCE_CHARS),
+            "retrieval_sources": parse_retrieval_evidence(evidence),
+        }
         if shared_memory_hits:
             result["shared_memory_hits"] = shared_memory_hits
         return result

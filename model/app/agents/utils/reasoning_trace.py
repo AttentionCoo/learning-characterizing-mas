@@ -17,14 +17,14 @@ def _clean_guide_name(source: str) -> str:
     return re.sub(r"\.pdf$", "", name, flags=re.IGNORECASE)
 
 
-def _compact_text(text: str, limit: int = 240) -> str:
+def _compact_text(text: str, limit: int | None = 240) -> str:
     compact = re.sub(r"\s+", " ", text or "").strip()
-    if len(compact) <= limit:
+    if limit is None or len(compact) <= limit:
         return compact
     return f"{compact[:limit].rstrip()}..."
 
 
-def parse_retrieval_evidence(evidence: str, max_sources: int = 8) -> List[Dict[str, str]]:
+def parse_retrieval_evidence(evidence: str, max_sources: int | None = None) -> List[Dict[str, str]]:
     """从现有证据文本中提取指南、页码、检索问题和命中片段。"""
     if not evidence:
         return []
@@ -44,9 +44,9 @@ def parse_retrieval_evidence(evidence: str, max_sources: int = 8) -> List[Dict[s
             "page": match.group(2).strip(),
             "query": query,
             "score": match.group(3).strip(),
-            "excerpt": _compact_text(match.group(4)),
+            "excerpt": _compact_text(match.group(4), limit=None),
         })
-        if len(sources) >= max_sources:
+        if max_sources is not None and len(sources) >= max_sources:
             break
 
     return sources
@@ -68,7 +68,9 @@ def build_node_trace(node: str, output: Any) -> Dict[str, Any]:
         return {"title": "学习需求分析完成", "content": content}
 
     if node == "retrieve":
-        sources = parse_retrieval_evidence(str(data.get("evidence", "")))
+        sources = data.get("retrieval_sources") or parse_retrieval_evidence(
+            str(data.get("evidence", ""))
+        )
         guide_count = len({source["guide"] for source in sources})
         if sources:
             content = f"RAG 共命中 {len(sources)} 条指南证据，来自 {guide_count} 本指南。"

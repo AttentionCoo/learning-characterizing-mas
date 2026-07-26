@@ -130,6 +130,7 @@ class LearningAgent:
             "complexity": "high",
             "difficulty_score": 0.5,
             "evidence": "",
+            "retrieval_sources": [],
             "proposal": "",
             "critique": "",
             "user_questions": [],
@@ -171,6 +172,14 @@ class LearningAgent:
                         if node in self._STREAMING_NODES:
                             streamed_nodes.add(node)
                     yield translated
+                    if (
+                        show_thinking
+                        and event.get("event") == "on_chain_end"
+                        and event.get("name") in self._STREAMING_NODES
+                        and translated.get("type") == "token"
+                    ):
+                        output = event.get("data", {}).get("output", {})
+                        yield self._build_node_done_event(event.get("name", ""), output)
 
         except Exception as e:
             logger.error(f"学习推理管线异常 | {format_error_log(e)}")
@@ -225,21 +234,7 @@ class LearningAgent:
                     return {"type": "token", "content": report_text}
 
             if show_thinking:
-                summary = self._node_summary(name, output)
-                trace = build_node_trace(name, output)
-                sources = trace.get("sources", [])
-                for source in sources:
-                    logger.debug(
-                        "[RAG依据] 指南=%s | 页码=%s",
-                        source.get("guide", "未知指南"),
-                        source.get("page", "?"),
-                    )
-                return {
-                    "type": "node_done",
-                    "node": name,
-                    "summary": summary,
-                    **trace,
-                }
+                return self._build_node_done_event(name, output)
 
         if evt == "on_chat_model_stream" and langgraph_node in self._STREAMING_NODES:
             chunk = event.get("data", {}).get("chunk")
@@ -296,6 +291,22 @@ class LearningAgent:
             }
 
         return None
+
+    def _build_node_done_event(self, name: str, output: dict) -> Dict:
+        summary = self._node_summary(name, output)
+        trace = build_node_trace(name, output)
+        for source in trace.get("sources", []):
+            logger.debug(
+                "[RAG依据] 指南=%s | 页码=%s",
+                source.get("guide", "未知指南"),
+                source.get("page", "?"),
+            )
+        return {
+            "type": "node_done",
+            "node": name,
+            "summary": summary,
+            **trace,
+        }
 
     def _node_summary(self, node: str, output: dict) -> str:
         if not isinstance(output, dict):

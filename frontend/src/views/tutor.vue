@@ -297,13 +297,13 @@ function isDICOMDataUrl(dataUrl) {
                 <div class="thinking-dots"><span></span><span></span><span></span></div>
                 <span class="thinking-text">{{ thinkingHint }}</span>
               </div>
-              <div v-else-if="msg.role === 'assistant'" class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
-              <div v-else class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
               <ReasoningTrace
                 v-if="msg.role === 'assistant' && idx === chatMessages.length - 1"
                 :entries="reasoningEntries"
                 :running="isStreaming"
               />
+              <div v-if="msg.role === 'assistant'" class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
+              <div v-else class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
               <!-- 用户消息中的医学影像 -->
               <div v-if="msg.role === 'user' && msg.images?.length" class="message-images">
                 <div

@@ -29,6 +29,7 @@ class LearningState(TypedDict):
     complexity: str
     difficulty_score: float
     evidence: str
+    retrieval_sources: List[Dict]
     proposal: str
     critique: str
     user_questions: List[str]
