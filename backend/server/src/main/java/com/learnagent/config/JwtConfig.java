@@ -22,6 +22,7 @@ import org.springframework.stereotype.Component;
 public class JwtConfig {
 
     private static final Logger log = LoggerFactory.getLogger(JwtConfig.class);
+    private static final String COMPATIBILITY_DEFAULT_SECRET = "your-secret-key-here";
 
     @Value("${ai.security.shared-jwt-secret}")
     private String sharedJwtSecret;
@@ -36,6 +37,9 @@ public class JwtConfig {
             );
         }
         Jwt.setSecretKey(sharedJwtSecret);
+        if (COMPATIBILITY_DEFAULT_SECRET.equals(sharedJwtSecret)) {
+            log.warn("JWT 正在使用兼容默认密钥。生产环境请同时为 Java 后端和 Python 模型服务配置相同的安全密钥");
+        }
         log.info("JWT 密钥已从配置加载（长度={}）", sharedJwtSecret.length());
     }
 }
