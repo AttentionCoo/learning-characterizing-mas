@@ -7,7 +7,8 @@ import os
 
 from dotenv import load_dotenv
 
-load_dotenv(override=True)
+# 宝塔等生产环境显式配置的 SECRET_KEY 优先于项目目录中的 .env。
+load_dotenv(override=False)
 
 import jwt
 from fastapi import HTTPException
