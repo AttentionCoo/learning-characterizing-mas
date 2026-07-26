@@ -367,11 +367,23 @@ class HybridRetriever:
     - 精排结果质量远高于纯 RRF 或纯 Reranker
     """
 
-    def __init__(self, vectordb, documents, recall_k=20, rrf_top_k=20):
+    def __init__(
+        self,
+        vectordb,
+        documents,
+        recall_k=20,
+        rrf_top_k=20,
+        top_k_final=3,
+    ):
         self.recall_k = recall_k
         self.rrf_top_k = rrf_top_k
-        self.vector_retriever = vectordb.as_retriever(search_kwargs={"k": recall_k})
-        self.reranker = QwenReranker(top_k=CONFIG.get("top_k_final", 3))
+        self.top_k_final = top_k_final
+        self.vector_retriever = (
+            vectordb.as_retriever(search_kwargs={"k": recall_k})
+            if vectordb is not None
+            else None
+        )
+        self.reranker = QwenReranker(top_k=top_k_final)
 
         if documents and len(documents) > 0:
             self.bm25 = BM25Retriever.from_documents(documents)
@@ -383,7 +395,8 @@ class HybridRetriever:
         self._cache: dict = {}
         self._cache_ttl = 300
 
-    def search(self, query: str, top_k_final: int = 3) -> List[Document]:
+    def search(self, query: str, top_k_final: int | None = None) -> List[Document]:
+        top_k_final = top_k_final or self.top_k_final
         cache_key = hashlib.md5(f"{query}_{top_k_final}".encode("utf-8")).hexdigest()
         if cache_key in self._cache:
             result, ts = self._cache[cache_key]
@@ -398,7 +411,11 @@ class HybridRetriever:
         # 第一阶：宽召回 (Wide Recall)
         # ═══════════════════════════════════════════
         try:
-            v_docs = self.vector_retriever.invoke(query)
+            v_docs = (
+                self.vector_retriever.invoke(query)
+                if self.vector_retriever is not None
+                else []
+            )
         except Exception as exc:
             logger.error(f"❌ Qwen 向量检索失败，继续尝试 BM25: {exc}")
             v_docs = []
@@ -492,16 +509,24 @@ class UnifiedSearchEngine:
         else:
             logger.info("✅ Qwen 向量库已存在；原始文档仍用于初始化 BM25")
 
-        self.vectorstore = build_or_load_vectorstore(
-            self.chunks,
-            persist_dir,
-            enable_qa=bool(CONFIG.get("enable_qa_generation", False)),
-        )
+        try:
+            self.vectorstore = build_or_load_vectorstore(
+                self.chunks,
+                persist_dir,
+                enable_qa=bool(CONFIG.get("enable_qa_generation", False)),
+            )
+        except Exception as exc:
+            self.vectorstore = None
+            logger.error(
+                "❌ Qwen 向量库初始化失败，检索引擎将继续使用 BM25: %s",
+                exc,
+            )
         self.retriever = HybridRetriever(
             self.vectorstore,
             self.chunks,
             recall_k=CONFIG.get("recall_k", 20),
             rrf_top_k=CONFIG.get("rrf_top_k", 20),
+            top_k_final=top_k,
         )
 
     def _check_vectorstore_empty(self, persist_dir: str) -> bool:
@@ -516,7 +541,7 @@ class UnifiedSearchEngine:
         except Exception:
             return True
 
-    def search(self, query: str, top_k_final: int = 3) -> List[Document]:
+    def search(self, query: str, top_k_final: int | None = None) -> List[Document]:
         try:
             logger.info(f"🔍 执行检索: {query[:60]}...")
             docs = self.retriever.search(query, top_k_final=top_k_final)

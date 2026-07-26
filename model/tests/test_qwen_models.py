@@ -10,8 +10,9 @@ from app.config.qwen import (
     get_qwen_rerank_model,
     get_qwen_vision_model,
 )
+from app.agents.core.shared_memory import SharedMemoryStore
 from app.rag import retrievers
-from app.rag.retrievers import HybridRetriever, QwenEmbeddings
+from app.rag.retrievers import HybridRetriever, QwenEmbeddings, UnifiedSearchEngine
 from app.services.vision_service import VisionAnalysisService
 
 
@@ -112,6 +113,63 @@ def test_hybrid_retriever_keeps_bm25_when_vector_search_fails():
     result = hybrid.search("什么是脑卒中", top_k_final=1)
 
     assert result == expected
+
+
+def test_search_engine_starts_with_bm25_when_vectorstore_init_fails(
+    monkeypatch,
+    tmp_path,
+):
+    expected = [Document(page_content="TOAST 分型指南", metadata={"source": "指南.pdf"})]
+
+    monkeypatch.setattr(retrievers, "load_pdfs_from_dir", lambda _path: expected)
+    monkeypatch.setattr(retrievers, "split_documents", lambda docs: docs)
+    monkeypatch.setattr(
+        retrievers,
+        "build_or_load_vectorstore",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("建库失败")),
+    )
+    monkeypatch.setattr(
+        retrievers.QwenReranker,
+        "rerank",
+        lambda _self, _query, docs, top_k=None: docs[:top_k],
+    )
+
+    engine = UnifiedSearchEngine(
+        persist_dir=str(tmp_path / "vectorstore"),
+        top_k=1,
+        docs_dir="unused",
+    )
+
+    assert engine.vectorstore is None
+    assert engine.search("TOAST 分型") == expected
+
+
+def test_shared_memory_uses_isolated_qwen_collection(monkeypatch, tmp_path):
+    class FakeQwenEmbeddings:
+        def __init__(self, *, model, dimension):
+            self.model = model
+            self.dimension = dimension
+
+        def embed_query(self, _text):
+            return [0.0, 0.0, 1.0]
+
+        def embed_documents(self, texts):
+            return [[0.0, 0.0, 1.0] for _ in texts]
+
+    monkeypatch.setenv("QWEN_EMBEDDING_MODEL", "qwen-test-embedding")
+    monkeypatch.setenv("QWEN_EMBEDDING_DIMENSION", "3")
+    monkeypatch.setattr(retrievers, "QwenEmbeddings", FakeQwenEmbeddings)
+
+    store = SharedMemoryStore({"persist_dir": str(tmp_path / "memory")})
+    store._ensure_initialized()
+
+    assert store._initialized is True
+    assert store._collection.name == "shared-memory-qwen-test-embedding-3"
+    assert store._collection.metadata["embedding_provider"] == "qwen"
+    assert store._collection.metadata["embedding_dimension"] == 3
+    assert store._ef.name() == "qwen-embeddings"
+    assert store.store("TOAST 分型学习要点", "test", force=True)
+    assert store.retrieve("TOAST 分型", top_k=1)[0]["content"] == "TOAST 分型学习要点"
 
 
 def test_vision_service_builds_qwen_multimodal_messages(monkeypatch):

@@ -173,18 +173,10 @@ class MetaMemoryFilter:
 # ============================================================
 
 class _ChromaEmbeddingFunction:
-    """将 LangChain 的 XfyunEmbeddings 包装为 ChromaDB 原生 EmbeddingFunction。
+    """将 QwenEmbeddings 包装为 ChromaDB 原生 EmbeddingFunction。"""
 
-    ChromaDB 的 get_or_create_collection 在未传入 embedding_function 时会使用默认
-    ONNX 模型（all-MiniLM-L6-v2, 384d），与讯飞 embedding（2560d）或 BGE 降级
-    （1024d）维度冲突，导致后续写入/检索全量失败。
-
-    此包装器确保 ChromaDB 集合的维度与 XfyunEmbeddings 当前有效模型一致，
-    同时保证降级路径（add 时不传 embeddings）也能产出正确维度的向量。
-    """
-
-    def __init__(self, xfyun_embeddings):
-        self._xfyun = xfyun_embeddings
+    def __init__(self, embeddings):
+        self._embeddings = embeddings
 
     def __call__(self, input):
         """ChromaDB 要求: (List[str]) -> List[List[float]]
@@ -193,14 +185,39 @@ class _ChromaEmbeddingFunction:
         否则会抛出签名不匹配错误。
         """
         if isinstance(input, str):
-            return [self._xfyun.embed_query(input)]
-        return self._xfyun.embed_documents(input)
+            return [self._embeddings.embed_query(input)]
+        return self._embeddings.embed_documents(input)
+
+    def embed_query(self, input):
+        """查询向量使用 Qwen 的 query 模式，避免退化为 document 模式。"""
+        if isinstance(input, str):
+            return [self._embeddings.embed_query(input)]
+        return [self._embeddings.embed_query(text) for text in input]
+
+    @staticmethod
+    def name() -> str:
+        return "qwen-embeddings"
+
+    def get_config(self) -> Dict:
+        return {
+            "model": self._embeddings.model,
+            "dimension": self._embeddings.dimension,
+        }
+
+    @staticmethod
+    def build_from_config(config: Dict):
+        from app.rag.retrievers import QwenEmbeddings
+
+        return _ChromaEmbeddingFunction(
+            QwenEmbeddings(
+                model=config["model"],
+                dimension=int(config["dimension"]),
+            )
+        )
 
 
 class SharedMemoryStore:
     """基于 ChromaDB 的共享记忆存储，负责持久化高价值学习洞察"""
-
-    COLLECTION_NAME = "shared_learning_memory"
 
     def __init__(self, config: Optional[Dict] = None):
         cfg = config or {}
@@ -219,24 +236,53 @@ class SharedMemoryStore:
         if self._initialized:
             return
         try:
-            from app.rag.retrievers import XfyunEmbeddings
+            from app.config.qwen import (
+                get_qwen_embedding_dimension,
+                get_qwen_embedding_model,
+            )
+            from app.rag.retrievers import QwenEmbeddings
             import chromadb
 
-            self._embeddings = XfyunEmbeddings()
+            model = get_qwen_embedding_model()
+            dimension = get_qwen_embedding_dimension()
+            collection_suffix = "".join(
+                char if char.isalnum() else "-" for char in model.lower()
+            ).strip("-")
+            collection_name = (
+                f"shared-memory-{collection_suffix}-{dimension}"
+            )[:63].rstrip("-")
+            expected_metadata = {
+                "embedding_provider": "qwen",
+                "embedding_model": model,
+                "embedding_dimension": dimension,
+            }
+
+            self._embeddings = QwenEmbeddings(
+                model=model,
+                dimension=dimension,
+            )
             self._ef = _ChromaEmbeddingFunction(self._embeddings)
 
             client = chromadb.PersistentClient(path=self.persist_dir)
             self._collection = client.get_or_create_collection(
-                name=self.COLLECTION_NAME,
+                name=collection_name,
                 embedding_function=self._ef,
-                metadata={"hnsw:space": "cosine"},
+                metadata={"hnsw:space": "cosine", **expected_metadata},
             )
+            actual_metadata = self._collection.metadata or {}
+            incompatible = {
+                key: (actual_metadata.get(key), value)
+                for key, value in expected_metadata.items()
+                if actual_metadata.get(key) != value
+            }
+            if incompatible:
+                raise RuntimeError(f"共享记忆向量库模型标识不一致: {incompatible}")
+
             self._initialized = True
             count = self._collection.count()
-            actual_dim = self._collection._embedding_function
             logger.info(
                 f"[shared_memory] ✅ 初始化完成 | 已有 {count} 条共享记忆"
-                f" | embedding_function={type(actual_dim).__name__}"
+                f" | model={model} ({dimension}d)"
             )
         except Exception as e:
             logger.error(f"[shared_memory] ❌ 初始化失败: {e}")
@@ -304,14 +350,12 @@ class SharedMemoryStore:
             return mem_id
         except Exception as e:
             err_msg = str(e)
-            # 维度不匹配不可恢复 — 降级重试只会产生同样的错误，直接给出修复指引
+            # 维度不匹配不可恢复，降级重试只会产生同样的错误。
             if "dimension" in err_msg.lower() or "dimensionality" in err_msg.lower():
                 logger.error(
                     f"[shared_memory] ❌ 向量维度冲突，无法存储: {err_msg}\n"
-                    f"   原因：ChromaDB 集合维度与当前 embedding 模型输出维度不一致。\n"
-                    f"   解决：删除向量库目录后重启服务，统一使用一种 embedding 模型。\n"
-                    f"   向量库路径: {self.persist_dir}\n"
-                    f"   建议：在 .env 中设置 XFYUN_EMBEDDING_ENABLED=false 全程使用本地 BGE（1024d）"
+                    f"   当前共享记忆已按 Qwen 模型和维度使用独立集合。\n"
+                    f"   向量库路径: {self.persist_dir}"
                 )
                 return None
             logger.warning(f"[shared_memory] ⚠️ 向量存储失败，降级重试: {err_msg}")
