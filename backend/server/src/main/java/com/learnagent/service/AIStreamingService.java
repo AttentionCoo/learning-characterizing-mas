@@ -12,6 +12,9 @@ public interface AIStreamingService {
     // 创建新对话
     Long createNewTalk(Long userId);
 
+    // 创建带业务模块标记的新对话
+    Long createNewTalk(Long userId, String conversationType);
+
     // 断线重连/获取当前流式缓存
     String getResumeContent(Long userId, Long talkId);
 

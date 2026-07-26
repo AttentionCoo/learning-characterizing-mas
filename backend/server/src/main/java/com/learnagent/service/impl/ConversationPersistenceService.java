@@ -6,6 +6,7 @@ import com.learnagent.dto.Cont;
 import com.learnagent.entity.Talk;
 import com.learnagent.service.IContService;
 import com.learnagent.service.ITalkService;
+import com.learnagent.utils.ConversationType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -76,7 +77,7 @@ public class ConversationPersistenceService {
             }
             // 设置content为answer（或summary，如果有）
             String finalContent = summary != null && !summary.isEmpty() ? summary : answer;
-            talk.setContent(finalContent);
+            talk.setContent(ConversationType.preserveTag(talk.getContent(), finalContent));
             talk.setUpdateTime(now);
             talkService.updateById(talk);
         } else {

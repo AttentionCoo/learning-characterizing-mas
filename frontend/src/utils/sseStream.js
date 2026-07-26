@@ -49,12 +49,46 @@ export function sseStreamRequest(url, params, { onChunk, onThinking, timeout = 3
         if (data.talkId) realTalkId = data.talkId
         if (type === 'init') return
         if (type === 'node_start' && onThinking) {
-          onThinking({ step: '', title: data.label || '', content: '' })
+          const trace = {
+            phase: 'start',
+            step: data.node || '',
+            title: data.label || '',
+            content: '',
+            sources: [],
+          }
+          console.info('[AI 推理]', trace.title)
+          onThinking(trace)
           return
         }
         if (type === 'thinking' && onThinking) {
           const src = data.thinking || data
-          onThinking({ step: src.step || '', title: src.title || '', content: src.content || '' })
+          const trace = {
+            phase: 'progress',
+            step: src.step || '',
+            title: src.title || '',
+            content: src.content || '',
+            sources: Array.isArray(src.sources) ? src.sources : [],
+          }
+          console.info('[AI 推理]', trace.title)
+          onThinking(trace)
+          return
+        }
+        if (type === 'node_done' && onThinking) {
+          const trace = {
+            phase: 'done',
+            step: data.node || '',
+            title: data.title || data.summary || '步骤完成',
+            content: data.content || data.summary || '',
+            sources: Array.isArray(data.sources) ? data.sources : [],
+          }
+          console.info('[AI 推理完成]', trace.title)
+          if (trace.sources.length) {
+            console.table(trace.sources.map(source => ({
+              指南: source.guide,
+              页码: source.page,
+            })))
+          }
+          onThinking(trace)
           return
         }
         if (type === 'chunk' || type === 'result' || type === 'token') {

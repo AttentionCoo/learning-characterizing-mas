@@ -4,6 +4,8 @@ import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { getLearningPathAPI, updateTaskProgressAPI, learningPathStreamAPI } from '@/api/learningPath'
 import { submitBehaviorAPI } from '@/api/assessment'
+import ReasoningTrace from '@/components/ReasoningTrace.vue'
+import { useReasoningTrace } from '@/composables/useReasoningTrace'
 
 marked.setOptions({ gfm: true, breaks: true })
 
@@ -15,6 +17,7 @@ const thinkingHint = ref('')
 const generatedContent = ref('')
 const talkId = ref(null)
 const expandedSteps = ref(new Set([0]))
+const { reasoningEntries, resetReasoningTrace, appendReasoningEvent } = useReasoningTrace()
 
 const courseName = ref('')
 const customGoal = ref('')
@@ -131,6 +134,7 @@ async function handleGenerate() {
   isThinking.value = true
   thinkingHint.value = '正在规划学习路径...'
   generatedContent.value = ''
+  resetReasoningTrace()
 
   let displayText = ''
   const charBuffer = []
@@ -161,7 +165,10 @@ async function handleGenerate() {
         charBuffer.push(...Array.from(chunk))
         startTypewriter()
       },
-      (thinking) => { thinkingHint.value = thinking.title || 'AI 规划中...' },
+      (thinking) => {
+        thinkingHint.value = thinking.title || 'AI 规划中...'
+        appendReasoningEvent(thinking)
+      },
     )
 
     if (timerId !== null) { clearTimeout(timerId); timerId = null }
@@ -330,6 +337,8 @@ const overallProgress = computed(() => {
             </button>
           </div>
         </div>
+
+        <ReasoningTrace :entries="reasoningEntries" :running="isGenerating" />
 
         <div v-if="generatedContent" class="sidebar-card ai-advice-card">
           <div class="card-title">AI 建议</div>

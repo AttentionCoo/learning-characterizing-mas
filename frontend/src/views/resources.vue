@@ -4,6 +4,8 @@ import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { getResourcesAPI, getResourceDetailAPI, resourceStreamAPI } from '@/api/resources'
 import ImageUploader from '@/components/ImageUploader.vue'
+import ReasoningTrace from '@/components/ReasoningTrace.vue'
+import { useReasoningTrace } from '@/composables/useReasoningTrace'
 
 marked.setOptions({ gfm: true, breaks: true })
 
@@ -28,7 +30,7 @@ const isThinking = ref(false)
 const thinkingHint = ref('')
 const currentStage = ref('')
 const generatedContent = ref('')
-const talkId = ref(null)
+const { reasoningEntries, resetReasoningTrace, appendReasoningEvent } = useReasoningTrace()
 
 const resources = ref([])
 const resourceTotal = ref(0)
@@ -90,6 +92,10 @@ const typeEndpointMap = {
 async function handleGenerate() {
   if (!selectedTypes.value.length || isGenerating.value) return
 
+  // 固定本次选择，确保生成过程中不会扩大资源范围。
+  const typesToGenerate = [...selectedTypes.value]
+  resetReasoningTrace()
+
   isGenerating.value = true
   isThinking.value = true
   thinkingHint.value = '正在分析学习需求...'
@@ -119,8 +125,8 @@ async function handleGenerate() {
 
   const points = knowledgePoints.value.split(/[,，、\n]/).map(s => s.trim()).filter(Boolean)
 
-  for (let i = 0; i < selectedTypes.value.length; i++) {
-    const type = selectedTypes.value[i]
+  for (let i = 0; i < typesToGenerate.length; i++) {
+    const type = typesToGenerate[i]
     const endpoint = typeEndpointMap[type]
     const typeLabel = resourceTypes.find(t => t.value === type)?.label || type
 
@@ -129,15 +135,17 @@ async function handleGenerate() {
       generatedContent.value = allContent
     }
 
-    thinkingHint.value = `正在生成 ${typeLabel} (${i + 1}/${selectedTypes.value.length})...`
-    currentStage.value = `正在生成 ${typeLabel} (${i + 1}/${selectedTypes.value.length})...`
+    thinkingHint.value = `正在生成 ${typeLabel} (${i + 1}/${typesToGenerate.length})...`
+    currentStage.value = `正在生成 ${typeLabel} (${i + 1}/${typesToGenerate.length})...`
     isThinking.value = true
 
     try {
       const result = await resourceStreamAPI(
         endpoint,
         {
-          talkId: talkId.value,
+          // 每种资源使用独立上下文，避免前一种资源影响后一种资源的类型。
+          talkId: null,
+          resourceType: type,
           courseName: courseName.value,
           knowledgePoints: points,
           difficulty: difficulty.value,
@@ -155,13 +163,13 @@ async function handleGenerate() {
           const stageText = thinking.title || `AI 生成 ${typeLabel} 中...`
           thinkingHint.value = stageText
           currentStage.value = stageText
+          appendReasoningEvent(thinking, type)
         },
       )
 
       if (timerId !== null) { clearTimeout(timerId); timerId = null }
       allContent += charBuffer.splice(0).join('')
       generatedContent.value = allContent
-      if (result.data?.talkId) talkId.value = result.data.talkId
       isThinking.value = false
       thinkingHint.value = ''
       currentStage.value = ''
@@ -335,6 +343,8 @@ onMounted(() => {
             <div class="stage-pulse"></div>
             <span>{{ currentStage }}</span>
           </div>
+
+          <ReasoningTrace :entries="reasoningEntries" :running="isGenerating" />
 
           <div ref="resultContentRef" class="result-content markdown-body" @scroll="onResultScroll" v-html="renderMarkdown(generatedContent)"></div>
 

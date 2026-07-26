@@ -12,6 +12,7 @@ import com.learnagent.entity.Talk;
 import com.learnagent.service.AIStreamingService;
 import com.learnagent.service.IContService;
 import com.learnagent.service.ITalkService;
+import com.learnagent.utils.ConversationType;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -106,13 +107,19 @@ public class AIStreamingServiceImpl implements AIStreamingService {
     @Transactional
     @Override
     public Long createNewTalk(Long userId) {
+        return createNewTalk(userId, null);
+    }
+
+    @Transactional
+    @Override
+    public Long createNewTalk(Long userId, String conversationType) {
         LocalDateTime now = LocalDateTime.now();
         Long talkId = IdWorker.getId();
         Talk talk = Talk.builder()
                 .id(talkId)
                 .userId(userId)
                 .title("新对话")
-                .content("")
+                .content(ConversationType.tag(conversationType, ""))
                 .createTime(now)
                 .updateTime(now)
                 .build();
@@ -529,10 +536,18 @@ public class AIStreamingServiceImpl implements AIStreamingService {
 
             // thinking 事件
             if ("thinking".equalsIgnoreCase(type)) {
+                JsonNode thinkingNode = json.path("thinking");
+                if (thinkingNode.isMissingNode() || !thinkingNode.isObject()) {
+                    thinkingNode = json;
+                }
                 Map<String, Object> thinkingData = new HashMap<>();
-                thinkingData.put("step", json.path("step").asText(""));
-                thinkingData.put("title", json.path("title").asText(""));
-                thinkingData.put("content", json.path("content").asText(""));
+                thinkingData.put("step", thinkingNode.path("step").asText(""));
+                thinkingData.put("title", thinkingNode.path("title").asText(""));
+                thinkingData.put("content", thinkingNode.path("content").asText(""));
+                if (thinkingNode.path("sources").isArray()) {
+                    thinkingData.put("sources", objectMapper.convertValue(
+                            thinkingNode.path("sources"), new TypeReference<List<Map<String, Object>>>() {}));
+                }
                 Map<String, Object> thinkingResp = baseResponse(talkId, generatedTitle[0], "thinking");
                 thinkingResp.put("thinking", thinkingData);
                 return Flux.just(objectMapper.writeValueAsString(thinkingResp));
@@ -581,9 +596,18 @@ public class AIStreamingServiceImpl implements AIStreamingService {
                 return Flux.just(objectMapper.writeValueAsString(nodeStartResp));
             }
 
-            // node_done 事件：LangGraph 节点执行完毕，Java 侧静默丢弃，不透传前端
+            // node_done 事件：透传可公开的步骤摘要与 RAG 指南依据
             if ("node_done".equalsIgnoreCase(type)) {
-                return Flux.empty();
+                Map<String, Object> nodeDoneResp = baseResponse(talkId, generatedTitle[0], "node_done");
+                nodeDoneResp.put("node", json.path("node").asText(""));
+                nodeDoneResp.put("summary", json.path("summary").asText(""));
+                nodeDoneResp.put("content", json.path("content").asText(""));
+                nodeDoneResp.put("title", json.path("title").asText(""));
+                if (json.path("sources").isArray()) {
+                    nodeDoneResp.put("sources", objectMapper.convertValue(
+                            json.path("sources"), new TypeReference<List<Map<String, Object>>>() {}));
+                }
+                return Flux.just(objectMapper.writeValueAsString(nodeDoneResp));
             }
 
             // ── 旧事件格式兼容（Python 回滚时仍能正常工作）──────────────────────────

@@ -1,5 +1,6 @@
 import logging
 import json
+import re
 from typing import Dict
 from langchain_core.messages import HumanMessage, SystemMessage
 from app.agents.core.schema import LearningState
@@ -139,57 +140,34 @@ class ReportNode(BaseNode):
         logger.info(f"[report] 报告生成完成，长度: {len(report)}, 块数: {chunk_count}")
         return {"report": report}
 
-    # ── 代码辅助专用系统提示词（通用 Python 编程导师） ──
-    _CODE_ASSIST_SYSTEM = """\
-你是一名专业的 Python 编程导师。
-请根据用户提供的代码和诉求，提供代码补全、错误诊断、优化建议或代码讲解。
+    _CODE_ASSIST_TYPE_PATTERN = re.compile(r"【辅助功能代码】\s*(complete|diagnose|optimize|explain)")
+    _CODE_ASSIST_SYSTEMS = {
+        "complete": """你是一名专业的 Python 开发助手，当前唯一任务是代码补全。
+只补齐用户明确缺失的函数、分支或流程，保持已有结构、接口和行为，不执行错误诊断、性能优化或教学讲解。
+输出结构：## 补全后的完整代码、## 补全内容。代码必须放在 ```python 围栏中，完整可运行，不得使用省略号代替实现。用中文回答。""",
+        "diagnose": """你是一名专业的 Python 调试助手，当前唯一任务是错误诊断。
+只定位报错或异常行为的根因并修复，不扩展无关功能，也不附带泛化的优化和教学内容。
+输出结构：## 错误根因、## 修复后的完整代码、## 验证方法。代码必须放在 ```python 围栏中，完整可运行。用中文回答。""",
+        "optimize": """你是一名专业的 Python 代码优化助手，当前唯一任务是代码优化。
+必须保持原有功能、接口与输出语义不变，只优化性能、可读性或健壮性，不新增业务功能，不转为错误诊断或逐行教学。
+输出结构：## 优化点、## 优化后的完整代码、## 效果说明。代码必须放在 ```python 围栏中，完整可运行。用中文回答。""",
+        "explain": """你是一名专业的 Python 编程讲师，当前唯一任务是代码讲解。
+只解释用户现有代码的整体结构、执行流程、关键语句和输入输出，不改写代码，不提供补全、修复或优化后的版本。
+输出结构：## 整体作用、## 执行流程、## 关键代码、## 输入与输出。可引用必要的短代码片段。用中文回答。""",
+    }
 
-如果用户提供了代码，请按以下结构输出：
+    @classmethod
+    def _resolve_code_assist_type(cls, case_text: str):
+        match = cls._CODE_ASSIST_TYPE_PATTERN.search(case_text or "")
+        return match.group(1) if match else None
 
-## 优化后的代码示例
-（给出完整的、可直接运行的 Python 代码，用 ```python 围栏格式包裹。
- 补全场景：在用户代码基础上扩展，使其更丰富、更实用；
- 诊断场景：修复错误后的完整代码；
- 优化场景：优化后的完整代码；
- 讲解场景：被讲解的代码片段。）
-
-## 改动说明
-（逐条列出改动位置、原因和效果；错误诊断场景需先指出错误根因）
-
-## 相关知识点
-（涉及的 Python 语法特性、库用法或编程最佳实践）
-
-## 进阶建议
-（性能、可读性或健壮性方面可进一步优化的方向）
-
-如果用户没有提供代码或需求不够明确，可以先友好地询问具体情况，引导用户补充信息。
-
-其他要求：
-- 用中文回答
-- 解释清晰、步骤分明
-- 代码块中的代码必须完整可运行，不要用 ... 或 # 省略 代替实际代码
-"""
-
-
-    # ── 代码辅助重试提示词（首次未生成代码块时使用） ──
-    _CODE_ASSIST_RETRY_SYSTEM = """\
-你是一名专业的 Python 编程导师。
-你的上一次回复没有包含 Python 代码示例。
-
-如果用户的原始输入中包含了代码，请务必：
-1. 包含一个或多个 ```python ... ``` 代码块
-2. 给出完整的、可运行的改进代码
-3. 按以下结构输出：
-   ## 优化后的代码示例
-   （```python 代码块）
-   ## 改动说明
-   ## 相关知识点
-   ## 进阶建议
-
-如果用户的原始输入确实没有包含任何代码，可以继续询问用户，但请在询问的同时也给出一个与用户诉求相关的示例代码，帮助用户理解你可以提供什么样的帮助。
-
-现在请重新回答。
-"""
+    @classmethod
+    def _build_code_assist_retry_system(cls, assist_type: str) -> str:
+        return (
+            cls._CODE_ASSIST_SYSTEMS[assist_type]
+            + "\n你上一次没有按要求返回完整 Python 代码块。请严格按当前唯一功能重新回答，"
+              "必须包含完整的 ```python ... ``` 代码块。"
+        )
 
     async def _generate_code_assist(self, state: LearningState) -> Dict:
         """code_assist 模式：不依赖 proposal/evidence/critique，
@@ -202,10 +180,19 @@ class ReportNode(BaseNode):
            （流式重试可让 on_chat_model_stream 事件把内容推送到前端）
         """
         case_text = state.get("case_text", "")
-        logger.info(f"[report][code_assist] case_text 长度: {len(case_text)}")
+        assist_type = self._resolve_code_assist_type(case_text)
+        if not assist_type:
+            logger.warning("[report][code_assist] 缺少辅助功能代码，拒绝调用模型")
+            return {
+                "report": "请先选择代码补全、错误诊断、优化建议或代码讲解中的一项功能。"
+            }
+        requires_code_block = assist_type != "explain"
+        logger.info(
+            f"[report][code_assist] case_text 长度: {len(case_text)}, assist_type={assist_type}"
+        )
 
         messages = [
-            SystemMessage(content=self._CODE_ASSIST_SYSTEM),
+            SystemMessage(content=self._CODE_ASSIST_SYSTEMS[assist_type]),
             HumanMessage(content=case_text),
         ]
 
@@ -225,22 +212,24 @@ class ReportNode(BaseNode):
             logger.info(f"[report][code_assist] 内容预览:\n{report[:500]}")
             if has_code_block:
                 logger.info(f"[report][code_assist] 包含代码块: 是 ✓")
-            else:
+            elif requires_code_block:
                 logger.warning(
                     f"[report][code_assist] 包含代码块: 否，"
                     f"疑似 LLM 反问用户或未按格式输出，触发强化重试"
                 )
+            else:
+                logger.info("[report][code_assist] 讲解模式无需强制返回代码块")
 
         # ── 第三轮：内容不含代码块时，用强化提示词重试 ──
         # 只在用户确实提供了代码时才触发重试，避免用户没写代码时白白浪费 LLM 调用
         user_has_code = case_text and ("```" in case_text)
-        if report.strip() and not has_code_block:
+        if report.strip() and not has_code_block and requires_code_block:
             if user_has_code:
                 logger.info(
                     f"[report][code_assist] 用户提供了代码但 LLM 未输出代码块，触发强化重试"
                 )
                 retry_messages = [
-                    SystemMessage(content=self._CODE_ASSIST_RETRY_SYSTEM),
+                    SystemMessage(content=self._build_code_assist_retry_system(assist_type)),
                     HumanMessage(
                         content=(
                             f"用户原始输入：\n{case_text}\n\n"
@@ -272,7 +261,7 @@ class ReportNode(BaseNode):
                 "代码辅助生成失败：LLM 服务当前不可用。\n\n"
                 "请检查模型服务日志或稍后重试。"
             )
-        elif not has_code_block and user_has_code:
+        elif not has_code_block and user_has_code and requires_code_block:
             # 只有用户提供了代码但 LLM 没输出代码块时才追加提示
             logger.warning(
                 f"[report][code_assist] 用户提供了代码但 LLM 未输出代码块，"

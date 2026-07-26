@@ -11,6 +11,7 @@ from app.agents.orchestrators.nodes.retrieve_node import RetrieveNode
 from app.agents.orchestrators.nodes.reason_node import ReasonNode
 from app.agents.orchestrators.nodes.validate_node import ValidateNode
 from app.agents.orchestrators.nodes.report_node import ReportNode
+from app.agents.utils.reasoning_trace import build_node_trace
 from app.utils.error_codes import build_error_event, format_error_log
 
 logger = logging.getLogger(__name__)
@@ -44,6 +45,7 @@ _REPORT_MODE_TO_INTENT: Dict[str, str] = {
     "reading_generate": "resource",
     "case_study_generate": "resource",
     "plan_generate": "resource",
+    "code_generate": "resource",
     "assessment_generate": "assessment",
     "assessment_comprehensive": "assessment",
     "assessment_knowledge": "assessment",
@@ -224,7 +226,20 @@ class LearningAgent:
 
             if show_thinking:
                 summary = self._node_summary(name, output)
-                return {"type": "node_done", "node": name, "summary": summary}
+                trace = build_node_trace(name, output)
+                sources = trace.get("sources", [])
+                for source in sources:
+                    logger.debug(
+                        "[RAG依据] 指南=%s | 页码=%s",
+                        source.get("guide", "未知指南"),
+                        source.get("page", "?"),
+                    )
+                return {
+                    "type": "node_done",
+                    "node": name,
+                    "summary": summary,
+                    **trace,
+                }
 
         if evt == "on_chat_model_stream" and langgraph_node in self._STREAMING_NODES:
             chunk = event.get("data", {}).get("chunk")
@@ -266,10 +281,19 @@ class LearningAgent:
                 base_label = _NODE_PROGRESS_LABELS[langgraph_node]
                 progress_label = f"{base_label}...（思考中 #{count}）"
                 logger.info(f"[event] 节点 {langgraph_node} LLM调用 #{count}")
-                return {"type": "thinking", "thinking": {"title": progress_label}}
+                return {
+                    "type": "thinking",
+                    "thinking": {"step": langgraph_node, "title": progress_label},
+                }
 
         if evt == "on_retriever_start" and langgraph_node == "retrieve" and show_thinking:
-            return {"type": "thinking", "thinking": {"title": "正在检索教育参考资料...（向量检索中）"}}
+            return {
+                "type": "thinking",
+                "thinking": {
+                    "step": "retrieve",
+                    "title": "正在检索教育参考资料...（向量检索中）",
+                },
+            }
 
         return None
 

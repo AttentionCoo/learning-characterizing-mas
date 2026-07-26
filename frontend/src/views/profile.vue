@@ -5,7 +5,9 @@ import DOMPurify from 'dompurify'
 import { getProfileAPI, getProfileConversationsAPI, getProfileConversationHistoryAPI, profileStreamAPI, updateProfileDimensionsAPI, deleteProfileConversationAPI } from '@/api/profile'
 import AppAvatar from '@/components/AppAvatar.vue'
 import ImageUploader from '@/components/ImageUploader.vue'
+import ReasoningTrace from '@/components/ReasoningTrace.vue'
 import { useUserStore } from '@/stores/user'
+import { useReasoningTrace } from '@/composables/useReasoningTrace'
 
 const userStore = useUserStore()
 
@@ -15,6 +17,7 @@ const MAX_CONVERSATIONS = 50
 
 const profile = ref(null)
 const profileLoading = ref(false)
+const isProfileCollapsed = ref(false)
 const chatMessages = ref([])
 const draftMessage = ref('')
 const isStreaming = ref(false)
@@ -27,6 +30,7 @@ const hasLoadedHistory = ref(false)
 const editingDim = ref(null)
 const editForm = reactive({})
 const saving = ref(false)
+const { reasoningEntries, resetReasoningTrace, appendReasoningEvent } = useReasoningTrace()
 
 const conversations = ref([])
 const conversationsLoading = ref(false)
@@ -170,11 +174,13 @@ async function fetchConversations() {
 }
 
 async function selectConversation(conv) {
+  resetReasoningTrace()
   talkId.value = conv.talkId
   await loadConversationHistory(conv.talkId)
 }
 
 function startNewConversation() {
+  resetReasoningTrace()
   talkId.value = null
   chatMessages.value = [WELCOME_MESSAGE]
 }
@@ -304,6 +310,7 @@ async function handleSend() {
   isStreaming.value = true
   isThinking.value = true
   thinkingHint.value = '正在分析你的学习特征...'
+  resetReasoningTrace()
 
   await nextTick()
   scrollToBottom()
@@ -340,6 +347,7 @@ async function handleSend() {
       },
       (thinking) => {
         thinkingHint.value = thinking.title || 'AI 思考中...'
+        appendReasoningEvent(thinking)
       },
     )
 
@@ -503,7 +511,7 @@ function isDICOMDataUrl(dataUrl) {
               <AppAvatar v-else :src="userStore.image" :name="userStore.name" :size="40" />
             </div>
             <div class="message-body">
-              <div v-if="msg.role === 'assistant' && idx === chatMessages.length - 1 && isThinking && !msg.content" class="thinking-indicator">
+              <div v-if="msg.role === 'assistant' && idx === chatMessages.length - 1 && isThinking && !msg.content && !reasoningEntries.length" class="thinking-indicator">
                 <div class="thinking-dots">
                   <span></span><span></span><span></span>
                 </div>
@@ -511,6 +519,11 @@ function isDICOMDataUrl(dataUrl) {
               </div>
               <div v-else-if="msg.role === 'assistant'" class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
               <div v-else class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
+              <ReasoningTrace
+                v-if="msg.role === 'assistant' && idx === chatMessages.length - 1"
+                :entries="reasoningEntries"
+                :running="isStreaming"
+              />
               <!-- 用户消息中的医学影像 -->
               <div v-if="msg.role === 'user' && msg.images?.length" class="message-images">
                 <div
@@ -589,28 +602,39 @@ function isDICOMDataUrl(dataUrl) {
         </div>
       </div>
 
-      <div class="profile-panel">
+      <div class="profile-panel" :class="{ collapsed: isProfileCollapsed }">
         <div class="panel-title">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
             <circle cx="12" cy="7" r="4"/>
           </svg>
-          <span>我的学习画像</span>
-          <span v-if="hasProfile" class="edit-hint">点击卡片可编辑</span>
+          <span v-if="!isProfileCollapsed">我的学习画像</span>
+          <span v-if="!isProfileCollapsed && hasProfile" class="edit-hint">点击卡片可编辑</span>
+          <button
+            class="profile-collapse-btn"
+            :title="isProfileCollapsed ? '展开学习画像' : '收起学习画像'"
+            :aria-label="isProfileCollapsed ? '展开学习画像' : '收起学习画像'"
+            @click="isProfileCollapsed = !isProfileCollapsed"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline :points="isProfileCollapsed ? '9 18 15 12 9 6' : '15 18 9 12 15 6'"/>
+            </svg>
+          </button>
         </div>
 
-        <div v-if="profileLoading" class="profile-loading">
-          <div class="loading-spinner"></div>
-          <span>加载画像中...</span>
-        </div>
+        <template v-if="!isProfileCollapsed">
+          <div v-if="profileLoading" class="profile-loading">
+            <div class="loading-spinner"></div>
+            <span>加载画像中...</span>
+          </div>
 
-        <div v-else-if="!hasProfile" class="profile-empty">
-          <div class="empty-icon">🎯</div>
-          <div class="empty-title">尚未构建画像</div>
-          <div class="empty-desc">请在左侧对话中描述你的学习情况，系统将自动为你构建学习画像</div>
-        </div>
+          <div v-else-if="!hasProfile" class="profile-empty">
+            <div class="empty-icon">🎯</div>
+            <div class="empty-title">尚未构建画像</div>
+            <div class="empty-desc">请在左侧对话中描述你的学习情况，系统将自动为你构建学习画像</div>
+          </div>
 
-        <div v-else class="profile-dimensions">
+          <div v-else class="profile-dimensions">
           <div
             v-for="dim in dimensionList"
             :key="dim.key"
@@ -733,7 +757,8 @@ function isDICOMDataUrl(dataUrl) {
           <div class="profile-meta">
             <span>更新时间：{{ profile.updateTime || '刚刚' }}</span>
           </div>
-        </div>
+          </div>
+        </template>
       </div>
     </div>
   </div>
@@ -1192,6 +1217,18 @@ function isDICOMDataUrl(dataUrl) {
   backdrop-filter: blur(var(--glass-blur));
   -webkit-backdrop-filter: blur(var(--glass-blur));
   overflow-y: auto;
+  transition: width var(--transition-fast), min-width var(--transition-fast), max-height var(--transition-fast);
+
+  &.collapsed {
+    width: 56px;
+    min-width: 56px;
+    overflow: hidden;
+
+    .panel-title {
+      flex-direction: column;
+      padding: 14px 8px;
+    }
+  }
 }
 
 .panel-title {
@@ -1219,6 +1256,32 @@ function isDICOMDataUrl(dataUrl) {
   background: rgba(17, 150, 127, 0.08);
   padding: 2px 10px;
   border-radius: var(--radius-pill);
+}
+
+.profile-collapse-btn {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-medium);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+
+  &:hover {
+    border-color: var(--color-primary);
+    background: var(--color-hover-bg);
+    color: var(--color-primary);
+  }
+
+  .collapsed & {
+    margin-left: 0;
+  }
 }
 
 .profile-loading,
@@ -1564,6 +1627,17 @@ function isDICOMDataUrl(dataUrl) {
     min-width: 100%;
     max-height: 40vh;
     border-top: 1px solid var(--color-border-light);
+
+    &.collapsed {
+      width: 100%;
+      min-width: 100%;
+      max-height: 52px;
+
+      .panel-title {
+        flex-direction: row;
+        padding: 11px 16px;
+      }
+    }
   }
 }
 

@@ -4,6 +4,8 @@ import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { getAssessmentReportsAPI, getAssessmentReportDetailAPI, assessmentStreamAPI, getAssessmentReportAPI, optimizeLearningPathAPI } from '@/api/assessment'
 import { getLearningPathsAPI } from '@/api/learningPath'
+import ReasoningTrace from '@/components/ReasoningTrace.vue'
+import { useReasoningTrace } from '@/composables/useReasoningTrace'
 
 marked.setOptions({ gfm: true, breaks: true })
 
@@ -20,6 +22,7 @@ const isThinking = ref(false)
 const thinkingHint = ref('')
 const generatedContent = ref('')
 const talkId = ref(null)
+const { reasoningEntries, resetReasoningTrace, appendReasoningEvent } = useReasoningTrace()
 
 const assessmentType = ref('comprehensive')
 const courseName = ref('')
@@ -118,6 +121,7 @@ async function handleGenerate() {
   isThinking.value = true
   thinkingHint.value = '正在评估学习效果...'
   generatedContent.value = ''
+  resetReasoningTrace()
   reportDetail.value = null
   selectedReportId.value = null
   userScrolled.value = false
@@ -154,7 +158,10 @@ async function handleGenerate() {
         charBuffer.push(...Array.from(chunk))
         startTypewriter()
       },
-      (thinking) => { thinkingHint.value = thinking.title || 'AI 评估中...' },
+      (thinking) => {
+        thinkingHint.value = thinking.title || 'AI 评估中...'
+        appendReasoningEvent(thinking)
+      },
     )
 
     if (timerId !== null) { clearTimeout(timerId); timerId = null }
@@ -273,6 +280,8 @@ function getScoreColor(score) {
             <div class="thinking-dots"><span></span><span></span><span></span></div>
             <span>{{ thinkingHint }}</span>
           </div>
+
+          <ReasoningTrace :entries="reasoningEntries" :running="isGenerating" />
 
           <div v-if="reportDetail?.scores" class="score-cards">
             <div v-for="(score, key) in reportDetail.scores" :key="key" class="score-card">

@@ -13,6 +13,7 @@ import com.learnagent.service.AIStreamingService;
 import com.learnagent.service.IInitialPageService;
 import com.learnagent.mapper.StudentProfileMapper;
 import com.learnagent.utils.ThreadLocalUtil;
+import com.learnagent.utils.ConversationType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -133,6 +134,9 @@ public class ProfileController {
     @GetMapping("/conversation/{talkId}")
     public Result getConversationHistory(@PathVariable Long talkId) {
         Long userId = ThreadLocalUtil.getCurrentUser().getId();
+        if (!initialPageService.isConversationType(userId, talkId, ConversationType.PROFILE)) {
+            return Result.error("该对话不属于学习画像模块");
+        }
         List<ContDTO> history = streamingService.getPreContent(userId, talkId);
         return Result.success(history);
     }
@@ -140,13 +144,16 @@ public class ProfileController {
     @GetMapping("/conversations")
     public Result getConversationList() {
         Long userId = ThreadLocalUtil.getCurrentUser().getId();
-        List<InitialPageVO> talks = initialPageService.getPage(userId);
+        List<InitialPageVO> talks = initialPageService.getPage(userId, ConversationType.PROFILE);
         return Result.success(talks);
     }
 
     @DeleteMapping("/conversation/{talkId}")
     public Result deleteConversation(@PathVariable Long talkId) {
         Long userId = ThreadLocalUtil.getCurrentUser().getId();
+        if (!initialPageService.isConversationType(userId, talkId, ConversationType.PROFILE)) {
+            return Result.error("该对话不属于学习画像模块");
+        }
         initialPageService.deleteTalk(userId, talkId);
         return Result.success();
     }
@@ -168,13 +175,14 @@ public class ProfileController {
         boolean needCreate = (talkId == null || talkId <= 0);
         if (!needCreate) {
             Talk dbTalk = streamingService.getTalkById(talkId);
-            if (dbTalk == null || !dbTalk.getUserId().equals(userId)) {
+            if (dbTalk == null || !dbTalk.getUserId().equals(userId)
+                    || !ConversationType.matches(dbTalk.getContent(), ConversationType.PROFILE)) {
                 needCreate = true;
             }
         }
 
         if (needCreate) {
-            talkId = streamingService.createNewTalk(userId);
+            talkId = streamingService.createNewTalk(userId, ConversationType.PROFILE);
         }
 
         final Long finalTalkId = talkId;

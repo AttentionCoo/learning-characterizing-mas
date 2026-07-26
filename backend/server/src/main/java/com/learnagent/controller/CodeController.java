@@ -9,6 +9,8 @@ import com.learnagent.param.CodeAssistParam;
 import com.learnagent.param.CodeExecuteParam;
 import com.learnagent.param.QuesParam;
 import com.learnagent.service.AIStreamingService;
+import com.learnagent.utils.CodeAssistType;
+import com.learnagent.utils.ConversationType;
 import com.learnagent.utils.ThreadLocalUtil;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -99,6 +101,11 @@ public class CodeController {
         String upstreamToken = resolveToken(token, authorization);
         Long userId = ThreadLocalUtil.getCurrentUser().getId();
 
+        CodeAssistType selectedType = CodeAssistType.fromValue(param.getAssistType()).orElse(null);
+        if (selectedType == null) {
+            return Flux.just(sse("error", json("error", mapOf("message", "请先选择一种代码辅助功能"))));
+        }
+
         log.info("[code_assist] SSE 请求进入: userId={}, assistType={}, promptLen={}, codeLen={}, talkId={}",
                 userId, param.getAssistType(),
                 param.getPrompt() != null ? param.getPrompt().length() : 0,
@@ -106,9 +113,9 @@ public class CodeController {
                 param.getTalkId());
 
         StringBuilder questionBuilder = new StringBuilder();
-        if (param.getAssistType() != null) {
-            questionBuilder.append("辅助类型：").append(resolveAssistTypeLabel(param.getAssistType()));
-        }
+        questionBuilder.append("【辅助功能代码】").append(selectedType.getValue());
+        questionBuilder.append("\n【唯一辅助功能】").append(selectedType.getLabel());
+        questionBuilder.append("\n【执行约束】").append(selectedType.getInstruction());
         if (param.getPrompt() != null && !param.getPrompt().isBlank()) {
             questionBuilder.append("\n诉求：").append(param.getPrompt());
         }
@@ -127,16 +134,6 @@ public class CodeController {
         return buildSSEStream(userId, quesParam, upstreamToken, lastEventId);
     }
 
-    private String resolveAssistTypeLabel(String assistType) {
-        return switch (assistType) {
-            case "complete" -> "代码补全";
-            case "diagnose" -> "错误诊断";
-            case "optimize" -> "优化建议";
-            case "explain" -> "代码讲解";
-            default -> assistType;
-        };
-    }
-
     private Flux<ServerSentEvent<String>> buildSSEStream(Long userId, QuesParam quesParam,
                                                           String upstreamToken, String lastEventId) {
         String talkIdStr = quesParam.getTalkId();
@@ -153,9 +150,10 @@ public class CodeController {
         boolean needCreate = (talkId == null || talkId <= 0);
         if (!needCreate) {
             Talk dbTalk = streamingService.getTalkById(talkId);
-            if (dbTalk == null || !dbTalk.getUserId().equals(userId)) needCreate = true;
+            if (dbTalk == null || !dbTalk.getUserId().equals(userId)
+                    || !ConversationType.matches(dbTalk.getContent(), ConversationType.CODE_ASSIST)) needCreate = true;
         }
-        if (needCreate) talkId = streamingService.createNewTalk(userId);
+        if (needCreate) talkId = streamingService.createNewTalk(userId, ConversationType.CODE_ASSIST);
 
         final Long finalTalkId = talkId;
         final boolean finalNeedCreate = needCreate;

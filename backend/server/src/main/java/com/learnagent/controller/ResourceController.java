@@ -14,6 +14,7 @@ import com.learnagent.vo.InitialPageVO;
 import com.learnagent.service.AIStreamingService;
 import com.learnagent.service.IInitialPageService;
 import com.learnagent.utils.ThreadLocalUtil;
+import com.learnagent.utils.ConversationType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -37,6 +38,28 @@ import java.util.function.BiConsumer;
 @RequestMapping("/api/resources")
 @RequiredArgsConstructor
 public class ResourceController {
+
+    private static final Map<String, String> RESOURCE_REPORT_MODES = Map.of(
+            "document", "document_generate",
+            "mindmap", "mindmap_generate",
+            "quiz", "quiz_generate",
+            "reading", "reading_generate",
+            "case_study", "case_study_generate",
+            "plan", "plan_generate",
+            "assessment", "assessment_generate",
+            "code_practice", "code_generate"
+    );
+
+    private static final Map<String, String> RESOURCE_TYPE_LABELS = Map.of(
+            "document", "课程讲解文档",
+            "mindmap", "知识体系思维导图",
+            "quiz", "练习题目",
+            "reading", "临床指南与文献",
+            "case_study", "临床案例",
+            "plan", "资源设计方案",
+            "assessment", "学习评估报告",
+            "code_practice", "代码实操案例"
+    );
 
     private final AIStreamingService streamingService;
     private final ObjectMapper objectMapper;
@@ -62,9 +85,19 @@ public class ResourceController {
         String upstreamToken = resolveToken(token, authorization);
         Long userId = ThreadLocalUtil.getCurrentUser().getId();
 
+        if (param.getResourceTypes() == null || param.getResourceTypes().size() != 1) {
+            return Flux.just(sse("error", json("error", mapOf("message", "每次请求必须且只能指定一种资源类型"))));
+        }
+        String resourceType = param.getResourceTypes().get(0);
+        String reportMode = RESOURCE_REPORT_MODES.get(resourceType);
+        if (reportMode == null) {
+            return Flux.just(sse("error", json("error", mapOf("message", "不支持的资源类型：" + resourceType))));
+        }
+
         StringBuilder questionBuilder = new StringBuilder();
         questionBuilder.append("【任务类型：学习资源内容生成】\n");
-        questionBuilder.append("请为以下学习需求生成具体的教学内容和知识点讲解。\n\n");
+        appendExclusiveResourceConstraint(questionBuilder, RESOURCE_TYPE_LABELS.get(resourceType));
+        questionBuilder.append("请为以下学习需求生成对应内容。\n\n");
         questionBuilder.append("【学生资源需求】\n");
         questionBuilder.append(param.getMessage() != null ? param.getMessage() : "请生成相关学习资料");
         questionBuilder.append("\n\n【课程信息】\n");
@@ -77,23 +110,13 @@ public class ResourceController {
         if (param.getDifficulty() != null && !param.getDifficulty().isEmpty()) {
             questionBuilder.append("- 难度级别：").append(param.getDifficulty()).append("\n");
         }
-        if (param.getResourceTypes() != null && !param.getResourceTypes().isEmpty()) {
-            questionBuilder.append("- 资源格式要求：").append(String.join("、", param.getResourceTypes())).append("\n");
-        }
-        questionBuilder.append("\n【输出要求】\n");
-        questionBuilder.append("1. 生成具体的知识内容，包括定义、要点、临床应用等\n");
-        questionBuilder.append("2. 提供详细的知识点讲解（每个知识点200-300字）\n");
-        questionBuilder.append("3. 包含典型案例和实践应用\n");
-        questionBuilder.append("4. 给出自测检查点和拓展阅读材料\n");
-        questionBuilder.append("5. 使用通俗易懂的语言，适合学习者理解\n");
+        questionBuilder.append("- 资源格式要求：").append(RESOURCE_TYPE_LABELS.get(resourceType)).append("\n");
 
         QuesParam quesParam = new QuesParam();
         quesParam.setTalkId(param.getTalkId());
         quesParam.setQuestion(questionBuilder.toString());
         quesParam.setImages(param.getImages());
 
-        String resourceType = param.getResourceTypes() != null && !param.getResourceTypes().isEmpty()
-                ? param.getResourceTypes().get(0) : "document";
         String courseName = param.getCourseName() != null ? param.getCourseName() : "";
         String knowledgePoints = param.getKnowledgePoints() != null
                 ? String.join(",", param.getKnowledgePoints()) : null;
@@ -103,7 +126,7 @@ public class ResourceController {
                 persistResource(userId, buildTitle(courseName, "学习资源"), resourceType,
                         courseName, knowledgePoints, difficulty, fullAnswer, talkId);
 
-        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId, persistCallback, "resource_generate");
+        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId, persistCallback, reportMode);
     }
 
     @GetMapping
@@ -223,6 +246,7 @@ public class ResourceController {
         Long userId = ThreadLocalUtil.getCurrentUser().getId();
 
         StringBuilder questionBuilder = new StringBuilder("请生成课程讲解文档：");
+        appendExclusiveResourceConstraint(questionBuilder, "课程讲解文档");
         appendIfNotNull(questionBuilder, "课程", body.get("courseName"));
         appendListIfNotNull(questionBuilder, "知识点", (List<String>) body.get("knowledgePoints"));
         appendIfNotNull(questionBuilder, "难度", body.get("difficulty"));
@@ -267,6 +291,7 @@ public class ResourceController {
         Long userId = ThreadLocalUtil.getCurrentUser().getId();
 
         StringBuilder questionBuilder = new StringBuilder("请生成知识点思维导图：");
+        appendExclusiveResourceConstraint(questionBuilder, "知识体系思维导图");
         appendIfNotNull(questionBuilder, "课程", body.get("courseName"));
         appendListIfNotNull(questionBuilder, "知识点", (List<String>) body.get("knowledgePoints"));
         appendIfNotNull(questionBuilder, "格式", body.get("format"));
@@ -306,6 +331,7 @@ public class ResourceController {
         Long userId = ThreadLocalUtil.getCurrentUser().getId();
 
         StringBuilder questionBuilder = new StringBuilder("请生成练习题目：");
+        appendExclusiveResourceConstraint(questionBuilder, "练习题目");
         appendIfNotNull(questionBuilder, "课程", body.get("courseName"));
         appendListIfNotNull(questionBuilder, "知识点", (List<String>) body.get("knowledgePoints"));
         appendIfNotNull(questionBuilder, "难度", body.get("difficulty"));
@@ -348,6 +374,7 @@ public class ResourceController {
         Long userId = ThreadLocalUtil.getCurrentUser().getId();
 
         StringBuilder questionBuilder = new StringBuilder("请生成拓展阅读材料：");
+        appendExclusiveResourceConstraint(questionBuilder, "临床指南与文献");
         appendIfNotNull(questionBuilder, "课程", body.get("courseName"));
         appendListIfNotNull(questionBuilder, "知识点", (List<String>) body.get("knowledgePoints"));
         appendIfNotNull(questionBuilder, "阅读类型", body.get("readingType"));
@@ -388,6 +415,7 @@ public class ResourceController {
         Long userId = ThreadLocalUtil.getCurrentUser().getId();
 
         StringBuilder questionBuilder = new StringBuilder("请生成临床案例分析：");
+        appendExclusiveResourceConstraint(questionBuilder, "临床案例");
         appendIfNotNull(questionBuilder, "课程", body.get("courseName"));
         appendListIfNotNull(questionBuilder, "知识点", (List<String>) body.get("knowledgePoints"));
         appendIfNotNull(questionBuilder, "难度", body.get("difficulty"));
@@ -428,6 +456,7 @@ public class ResourceController {
         Long userId = ThreadLocalUtil.getCurrentUser().getId();
 
         StringBuilder questionBuilder = new StringBuilder("请生成资源学习方案：");
+        appendExclusiveResourceConstraint(questionBuilder, "资源设计方案");
         appendIfNotNull(questionBuilder, "课程", body.get("courseName"));
         appendListIfNotNull(questionBuilder, "知识点", (List<String>) body.get("knowledgePoints"));
         appendIfNotNull(questionBuilder, "难度", body.get("difficulty"));
@@ -468,6 +497,7 @@ public class ResourceController {
         Long userId = ThreadLocalUtil.getCurrentUser().getId();
 
         StringBuilder questionBuilder = new StringBuilder("请生成医学数据分析代码实操案例：");
+        appendExclusiveResourceConstraint(questionBuilder, "代码实操案例");
         appendIfNotNull(questionBuilder, "课程", body.get("courseName"));
         appendListIfNotNull(questionBuilder, "知识点", (List<String>) body.get("knowledgePoints"));
         appendIfNotNull(questionBuilder, "代码类型", body.get("codeType"));
@@ -510,6 +540,7 @@ public class ResourceController {
         Long userId = ThreadLocalUtil.getCurrentUser().getId();
 
         StringBuilder questionBuilder = new StringBuilder("请生成学习评估报告：");
+        appendExclusiveResourceConstraint(questionBuilder, "学习评估报告");
         appendIfNotNull(questionBuilder, "课程", body.get("courseName"));
         appendListIfNotNull(questionBuilder, "知识点", (List<String>) body.get("knowledgePoints"));
         appendIfNotNull(questionBuilder, "难度", body.get("difficulty"));
@@ -550,9 +581,10 @@ public class ResourceController {
         boolean needCreate = (talkId == null || talkId <= 0);
         if (!needCreate) {
             Talk dbTalk = streamingService.getTalkById(talkId);
-            if (dbTalk == null || !dbTalk.getUserId().equals(userId)) needCreate = true;
+            if (dbTalk == null || !dbTalk.getUserId().equals(userId)
+                    || !ConversationType.matches(dbTalk.getContent(), ConversationType.RESOURCE)) needCreate = true;
         }
-        if (needCreate) talkId = streamingService.createNewTalk(userId);
+        if (needCreate) talkId = streamingService.createNewTalk(userId, ConversationType.RESOURCE);
 
         final Long finalTalkId = talkId;
         final boolean finalNeedCreate = needCreate;
@@ -685,6 +717,11 @@ public class ResourceController {
     }
     private void appendListIfNotNull(StringBuilder sb, String label, List<String> list) {
         if (list != null && !list.isEmpty()) sb.append("\n").append(label).append("：").append(String.join("、", list));
+    }
+
+    private void appendExclusiveResourceConstraint(StringBuilder sb, String resourceTypeLabel) {
+        sb.append("\n【唯一资源类型】").append(resourceTypeLabel);
+        sb.append("\n【硬性约束】只生成上述资源类型，不得附带或生成任何其他资源类型。\n");
     }
 
     private void appendContent(StringBuilder sb, String data) {

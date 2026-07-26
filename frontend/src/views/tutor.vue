@@ -5,7 +5,9 @@ import DOMPurify from 'dompurify'
 import { getTutorConversationsAPI, getTutorConversationHistoryAPI, deleteTutorConversationAPI, tutorStreamAPI } from '@/api/tutor'
 import AppAvatar from '@/components/AppAvatar.vue'
 import ImageUploader from '@/components/ImageUploader.vue'
+import ReasoningTrace from '@/components/ReasoningTrace.vue'
 import { useUserStore } from '@/stores/user'
+import { useReasoningTrace } from '@/composables/useReasoningTrace'
 
 const userStore = useUserStore()
 
@@ -26,6 +28,7 @@ const talkId = ref(null)
 const chatContainerRef = ref(null)
 const inputRef = ref(null)
 const shouldAutoScroll = ref(true)
+const { reasoningEntries, resetReasoningTrace, appendReasoningEvent } = useReasoningTrace()
 
 const showSidebar = ref(true)
 const uploadedImages = ref([])
@@ -66,6 +69,7 @@ async function fetchConversations() {
 }
 
 async function selectConversation(conv) {
+  resetReasoningTrace()
   activeConversationId.value = conv.talkId
   talkId.value = conv.talkId
   try {
@@ -82,6 +86,7 @@ async function selectConversation(conv) {
 }
 
 function startNewConversation() {
+  resetReasoningTrace()
   activeConversationId.value = null
   talkId.value = null
   chatMessages.value = [{
@@ -127,6 +132,7 @@ async function handleSend() {
   isStreaming.value = true
   isThinking.value = true
   thinkingHint.value = '正在思考...'
+  resetReasoningTrace()
 
   let displayText = ''
   const charBuffer = []
@@ -161,6 +167,7 @@ async function handleSend() {
         const title = thinking.title || 'AI 思考中...'
         thinkingHint.value = title
         currentStage.value = title
+        appendReasoningEvent(thinking)
       },
     )
 
@@ -286,12 +293,17 @@ function isDICOMDataUrl(dataUrl) {
               <AppAvatar v-else :src="userStore.image" :name="userStore.name" :size="40" />
             </div>
             <div class="message-body">
-              <div v-if="msg.role === 'assistant' && idx === chatMessages.length - 1 && isThinking && !msg.content" class="thinking-indicator">
+              <div v-if="msg.role === 'assistant' && idx === chatMessages.length - 1 && isThinking && !msg.content && !reasoningEntries.length" class="thinking-indicator">
                 <div class="thinking-dots"><span></span><span></span><span></span></div>
                 <span class="thinking-text">{{ thinkingHint }}</span>
               </div>
               <div v-else-if="msg.role === 'assistant'" class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
               <div v-else class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
+              <ReasoningTrace
+                v-if="msg.role === 'assistant' && idx === chatMessages.length - 1"
+                :entries="reasoningEntries"
+                :running="isStreaming"
+              />
               <!-- 用户消息中的医学影像 -->
               <div v-if="msg.role === 'user' && msg.images?.length" class="message-images">
                 <div

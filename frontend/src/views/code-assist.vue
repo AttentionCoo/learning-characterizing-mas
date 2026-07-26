@@ -1,19 +1,21 @@
 <script setup>
-import { ref, nextTick, onMounted, onActivated, onDeactivated, onBeforeUnmount } from 'vue'
+import { ref, computed, nextTick, onMounted, onActivated, onDeactivated, onBeforeUnmount } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { executeCodeAPI, codeAssistStreamAPI } from '@/api/code'
+import ReasoningTrace from '@/components/ReasoningTrace.vue'
+import { useReasoningTrace } from '@/composables/useReasoningTrace'
 
 marked.setOptions({ gfm: true, breaks: true })
 
 const assistTypes = [
-  { value: 'complete', label: '代码补全', icon: '✍️' },
-  { value: 'diagnose', label: '错误诊断', icon: '🔍' },
-  { value: 'optimize', label: '优化建议', icon: '⚡' },
-  { value: 'explain', label: '代码讲解', icon: '📖' },
+  { value: 'complete', label: '代码补全', icon: '✍️', detail: '补齐缺失实现，保持现有结构', placeholder: '描述需要补全的函数、流程或预期结果' },
+  { value: 'diagnose', label: '错误诊断', icon: '🔍', detail: '定位报错根因并给出修复', placeholder: '补充复现步骤、期望结果或报错现象' },
+  { value: 'optimize', label: '优化建议', icon: '⚡', detail: '保持行为不变并改进代码质量', placeholder: '说明要重点优化性能、可读性还是健壮性' },
+  { value: 'explain', label: '代码讲解', icon: '📖', detail: '梳理结构、流程与关键语句', placeholder: '填写希望重点讲解的代码片段或概念' },
 ]
 
-const assistType = ref('complete')
+const assistType = ref('')
 const code = ref('')
 const prompt = ref('')
 const stdinData = ref('')
@@ -32,9 +34,21 @@ const assistError = ref('')
 const resultPaneRef = ref(null)
 const userScrolled = ref(false)
 const inlineError = ref('')
+const { reasoningEntries, resetReasoningTrace, appendReasoningEvent } = useReasoningTrace()
 
 let assistSafetyTimer = null
 let assistAbortController = null
+
+const selectedAssist = computed(() => assistTypes.find(type => type.value === assistType.value) || null)
+
+function selectAssistType(type) {
+  if (assistType.value === type) return
+  if (isAssisting.value) cancelAssist()
+  else resetAssistState()
+  assistType.value = type
+  // 不同功能不共享历史，防止上一种功能影响当前结果。
+  talkId.value = null
+}
 
 /** 重置所有 AI 辅助相关状态 */
 function resetAssistState() {
@@ -45,6 +59,7 @@ function resetAssistState() {
   assistError.value = ''
   inlineError.value = ''
   userScrolled.value = false
+  resetReasoningTrace()
 }
 
 /** 取消当前 AI 请求 */
@@ -150,6 +165,12 @@ async function requestAssist() {
     await nextTick()
   }
 
+  if (!assistType.value) {
+    assistError.value = '请先选择一种代码辅助功能'
+    inlineError.value = assistError.value
+    return
+  }
+
   if (!code.value.trim() && !prompt.value.trim()) {
     assistError.value = '请先输入代码或描述你的诉求'
     inlineError.value = assistError.value
@@ -159,11 +180,12 @@ async function requestAssist() {
 
   isAssisting.value = true
   isThinking.value = true
-  thinkingHint.value = 'AI 正在分析代码...'
+  thinkingHint.value = `AI 正在执行${selectedAssist.value?.label || '代码辅助'}...`
   assistContent.value = ''
   assistError.value = ''
   inlineError.value = ''
   userScrolled.value = false
+  resetReasoningTrace()
 
   assistAbortController = new AbortController()
   startSafetyTimer()
@@ -189,7 +211,8 @@ async function requestAssist() {
         }
       },
       (thinking) => {
-        thinkingHint.value = thinking.title || 'AI 正在分析代码...'
+        thinkingHint.value = thinking.title || `AI 正在执行${selectedAssist.value?.label || '代码辅助'}...`
+        appendReasoningEvent(thinking)
       },
       (error) => {
         console.error('[code-assist] SSE 收到错误事件:', error)
@@ -246,15 +269,20 @@ async function requestAssist() {
         <div class="panel">
           <div class="panel-title">
             <span>Python 代码</span>
-            <div class="type-chips">
+            <div class="type-chips" aria-label="代码辅助功能">
               <button
                 v-for="t in assistTypes"
                 :key="t.value"
                 class="type-chip"
                 :class="{ active: assistType === t.value }"
-                @click="assistType = t.value"
+                :aria-pressed="assistType === t.value"
+                @click="selectAssistType(t.value)"
               >
-                {{ t.icon }} {{ t.label }}
+                <span class="type-icon">{{ t.icon }}</span>
+                <span class="type-copy">
+                  <strong>{{ t.label }}</strong>
+                  <small>{{ t.detail }}</small>
+                </span>
               </button>
             </div>
           </div>
@@ -272,7 +300,8 @@ print(df.describe())"
           <input
             v-model="prompt"
             class="prompt-input"
-            placeholder="多写一点"
+            :placeholder="selectedAssist?.placeholder || '请先选择上方的一种代码辅助功能'"
+            :disabled="!assistType"
           />
           <input
             v-model="stdinData"
@@ -283,8 +312,8 @@ print(df.describe())"
             <button class="btn run-btn" :disabled="isRunning || !code.trim()" @click="runCode">
               {{ isRunning ? '运行中...' : '▶ 运行代码' }}
             </button>
-            <button class="btn assist-btn" :disabled="isAssisting" @click="requestAssist">
-              {{ isAssisting ? 'AI 分析中...' : '✨ AI 辅助' }}
+            <button class="btn assist-btn" :disabled="isAssisting || !assistType" @click="requestAssist">
+              {{ isAssisting ? `${selectedAssist?.label || 'AI 辅助'}中...` : (selectedAssist ? `执行${selectedAssist.label}` : '请选择辅助功能') }}
             </button>
           </div>
         </div>
@@ -312,11 +341,14 @@ print(df.describe())"
       </div>
 
       <div class="assist-column panel">
-        <div class="panel-title"><span>AI 辅助结果</span></div>
+        <div class="panel-title">
+          <span>{{ selectedAssist ? `${selectedAssist.label}结果` : 'AI 辅助结果' }}</span>
+        </div>
         <div class="assist-pane" ref="resultPaneRef" @scroll="onPaneScroll">
           <div v-if="isThinking" class="thinking-hint">
             <span class="thinking-dot"></span>{{ thinkingHint }}
           </div>
+          <ReasoningTrace :entries="reasoningEntries" :running="isAssisting" />
           <div v-if="assistError" class="output-error">{{ assistError }}</div>
           <div
             v-if="assistContent"
@@ -324,7 +356,7 @@ print(df.describe())"
             v-html="renderMarkdown(assistContent)"
           ></div>
           <div v-if="!assistContent && !isThinking && !assistError" class="output-empty">
-            选择辅助类型并点击「✨ AI 辅助」，结果将在此流式呈现
+            选择一种辅助功能后，结果将在此流式呈现
           </div>
         </div>
       </div>
@@ -402,15 +434,29 @@ print(df.describe())"
 
 .run-meta { font-size: 12px; font-weight: 500; color: var(--color-text-weak); }
 
-.type-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.editor-column .panel-title {
+  align-items: stretch;
+  flex-direction: column;
+}
+
+.type-chips {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
 
 .type-chip {
-  padding: 4px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 7px 9px;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--color-text-medium);
-  font-size: 12px;
+  font: inherit;
+  text-align: left;
   cursor: pointer;
   transition: all 0.15s;
 
@@ -419,6 +465,30 @@ print(df.describe())"
     color: var(--color-primary-dark);
     background: var(--color-secondary-bg);
     font-weight: 700;
+  }
+}
+
+.type-icon {
+  flex-shrink: 0;
+  font-size: 16px;
+}
+
+.type-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+
+  strong {
+    font-size: 12px;
+    line-height: 1.2;
+  }
+
+  small {
+    color: var(--color-text-weak);
+    font-size: 10px;
+    font-weight: 500;
+    line-height: 1.3;
   }
 }
 

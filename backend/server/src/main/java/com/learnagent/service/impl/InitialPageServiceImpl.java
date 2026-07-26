@@ -8,6 +8,7 @@ import com.learnagent.vo.InitialPageVO;
 import com.learnagent.entity.Talk; // 确保引入正确的实体类（对应数据库表）
 import com.learnagent.service.IContService;
 import com.learnagent.service.IInitialPageService;
+import com.learnagent.utils.ConversationType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -41,6 +42,31 @@ public class InitialPageServiceImpl extends ServiceImpl<InitialPageMapper, Talk>
 
         // 将 Entity (Talk) 转换为 VO (InitialPageVO)
         // 确保 InitialPageVO 加了 @AllArgsConstructor 注解
+        return toPageVO(talks);
+    }
+
+    @Override
+    public List<InitialPageVO> getPage(Long userId, String conversationType) {
+        List<Talk> talks = this.lambdaQuery()
+                .eq(Talk::getUserId, userId)
+                .likeRight(Talk::getContent, ConversationType.marker(conversationType))
+                .orderByDesc(Talk::getUpdateTime)
+                .list();
+        return toPageVO(talks);
+    }
+
+    @Override
+    public boolean isConversationType(Long userId, Long talkId, String conversationType) {
+        if (userId == null || talkId == null) {
+            return false;
+        }
+        Talk talk = this.getById(talkId);
+        return talk != null
+                && userId.equals(talk.getUserId())
+                && ConversationType.matches(talk.getContent(), conversationType);
+    }
+
+    private List<InitialPageVO> toPageVO(List<Talk> talks) {
         return talks.stream()
                 .map(talk -> new InitialPageVO(talk.getId(), talk.getTitle(), talk.getCreateTime(), talk.getUpdateTime()))
                 .collect(Collectors.toList());
