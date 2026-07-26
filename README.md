@@ -12,11 +12,14 @@ https://8.141.124.251/login
 [![Java 21](https://img.shields.io/badge/Java-21+-ED8B00?style=flat-square&logo=openjdk&logoColor=white)](https://openjdk.org/)
 [![Python 3.11](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![Vue 3.5](https://img.shields.io/badge/Vue-3.5-4FC08D?style=flat-square&logo=vue.js&logoColor=white)](https://vuejs.org/)
-[![Spring Boot 3.3](https://img.shields.io/badge/Spring%20Boot-3.3-6DB33F?style=flat-square&logo=springboot&logoColor=white)](https://spring.io/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.128-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![LangGraph](https://img.shields.io/badge/LangGraph-1.2.9-1C3C3C?style=flat-square&logo=langchain&logoColor=white)](https://github.com/langchain-ai/langgraph)
-[![LangChain](https://img.shields.io/badge/LangChain-1.3.13-1C3C3C?style=flat-square&logo=langchain&logoColor=white)](https://www.langchain.com/)
-[![RAGAS](https://img.shields.io/badge/RAGAS-0.4.x-6C5CE7?style=flat-square)](https://docs.ragas.io/)
+[![Spring Boot 3.3.13](https://img.shields.io/badge/Spring%20Boot-3.3.13-6DB33F?style=flat-square&logo=springboot&logoColor=white)](https://spring.io/)
+[![FastAPI 0.128](https://img.shields.io/badge/FastAPI-0.128-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![LangGraph 1.2.9](https://img.shields.io/badge/LangGraph-1.2.9-1C3C3C?style=flat-square&logo=langchain&logoColor=white)](https://github.com/langchain-ai/langgraph)
+[![LangChain 1.3.13](https://img.shields.io/badge/LangChain-1.3.13-1C3C3C?style=flat-square&logo=langchain&logoColor=white)](https://www.langchain.com/)
+[![RAGAS 0.4.x](https://img.shields.io/badge/RAGAS-0.4.x-6C5CE7?style=flat-square)](https://docs.ragas.io/)
+[![MySQL 8.0](https://img.shields.io/badge/MySQL-8.0-4479A1?style=flat-square&logo=mysql&logoColor=white)](https://www.mysql.com/)
+[![Redis 7](https://img.shields.io/badge/Redis-7-DC382D?style=flat-square&logo=redis&logoColor=white)](https://redis.io/)
+[![Qwen](https://img.shields.io/badge/LLM-Qwen-615FFF?style=flat-square)](https://tongyi.aliyun.com/)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
 
 </div>
@@ -69,30 +72,20 @@ LearnAgent 以高校专业课程知识库为底座，融合 **多智能体协同
 
 系统基于 LangGraph StateGraph 构建 9 个领域专家智能体，通过 YAML 配置驱动，支持动态编排与辩论-仲裁机制。每个智能体拥有独立的系统提示词、知识边界和输出规范。
 
-```
-                           ┌──────────────────┐
-                           │   学生输入/请求    │
-                           └────────┬─────────┘
-                                    │
-                           ┌────────▼─────────┐
-                           │   Orchestrator    │
-                           │  (意图识别+路由)   │
-                           └────────┬─────────┘
-                                    │
-            ┌───────────┬───────────┼───────────┬───────────┐
-            │           │           │           │           │
-     ┌──────▼──────┐ ┌──▼────┐ ┌───▼────┐ ┌───▼────┐ ┌───▼────┐
-     │  Profile    │ │Resource│ │Learning│ │ Tutor  │ │Evaluate│
-     │   Agent     │ │ Agent  │ │  Path  │ │ Agent  │ │ Agent  │
-     │  画像构建    │ │ 资源生成│ │  Agent  │ │ 智能辅导│ │ 学习评估│
-     └─────────────┘ └────────┘ │ 路径规划│ └────────┘ └────────┘
-                                └────────┘
-            ┌───────────┬───────────┬───────────┐
-     ┌──────▼──────┐ ┌──▼────┐ ┌───▼────┐ ┌───▼────────┐
-     │   Vision    │ │  OCR  │ │  Code  │ │   Bailian   │
-     │   Agent     │ │ Agent │ │ Agent  │ │   Agent     │
-     │  医学影像    │ │ 文档识别│ │ 代码执行│ │  学习风险    │
-     └─────────────┘ └────────┘ └────────┘ └─────────────┘
+```mermaid
+graph TD
+    A[学生输入/请求] --> B[Orchestrator<br/>意图识别+路由]
+
+    B --> C[Profile Agent<br/>画像构建]
+    B --> D[Resource Agent<br/>资源生成]
+    B --> E[Learning Path Agent<br/>路径规划]
+    B --> F[Tutor Agent<br/>智能辅导]
+    B --> G[Evaluate Agent<br/>学习评估]
+
+    B --> H[Vision Agent<br/>医学影像]
+    B --> I[OCR Agent<br/>文档识别]
+    B --> J[Code Agent<br/>代码执行]
+    B --> K[Bailian Agent<br/>学习风险]
 ```
 
 | 智能体 | 职责 | 核心能力 |
@@ -179,41 +172,46 @@ python -m tests.compare_chunking --output results.json
 
 ### 三层解耦架构
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                        前端交互层 Frontend                        │
-│   Vue 3.5 · Vite 7 · Pinia 3 · marked 17 · DOMPurify · pdfjs   │
-├──────────────────────────────────────────────────────────────────┤
-│                        后端服务层 Backend                         │
-│   Java 21 · Spring Boot 3.3 · WebFlux · Security · Redisson     │
-│   MySQL 8.0 · MyBatis-Plus 3.5 · 阿里云 OSS                     │
-├──────────────────────────────────────────────────────────────────┤
-│                        模型推理层 Model                           │
-│   Python 3.11 · FastAPI · LangGraph · LangChain · Qwen             │
-│   ChromaDB · qwen3.7-text-embedding · qwen3-rerank · qwen-vl-max   │
-└──────────────────────────────────────────────────────────────────┘
+```mermaid
+graph LR
+    subgraph Frontend[前端交互层]
+        Vue[Vue 3.5 · Vite 7 · Pinia 3]
+        Marked[marked 17 · DOMPurify · pdfjs]
+    end
+
+    subgraph Backend[后端服务层]
+        Java[Java 21 · Spring Boot 3.3.13 · WebFlux]
+        Security[Security · Redisson]
+        DB[MySQL 8.0 · MyBatis-Plus 3.5.5 · OSS]
+    end
+
+    subgraph Model[模型推理层]
+        Python[Python 3.11 · FastAPI · LangGraph · LangChain]
+        Qwen[Qwen Max/Plus/Turbo]
+        Chroma[ChromaDB · qwen3.7-text-embedding · qwen3-rerank · qwen-vl-max]
+    end
+
+    Frontend <--> Backend
+    Backend <--> Model
 ```
 
 ### 全链路流式数据管道
 
-```
- 学生输入                                                    前端渲染
-    │                                                          ▲
-    ▼                                                          │
-┌─────────┐  WebClient   ┌─────────┐  AsyncTaskManager  ┌──────────┐
-│  Java   │ ──────────►  │ FastAPI │ ─────────────────► │ Learning │
-│ 鉴权限流 │   异步调用     │  接收    │    创建任务         │  Agent   │
-└─────────┘              └─────────┘                    └──────────┘
-                                                              │
-                         ┌────────────────────────────────────┘
-                         ▼
-              LangGraph astream_events
-                         │
-                         ▼
-              _translate_event 翻译标准事件
-                         │
-                         ▼
-              asyncio.Queue ──► Java Flux 转发 ──► Vue3 ReadableStream
+```mermaid
+sequenceDiagram
+    participant Student as 学生输入
+    participant Java as Java WebFlux<br/>鉴权限流
+    participant FastAPI as FastAPI 接收
+    participant Agent as Learning Agent<br/>LangGraph
+    participant Vue as Vue3 前端渲染
+
+    Student->>Java: HTTP 请求
+    Java->>FastAPI: WebClient 异步调用
+    FastAPI->>Agent: AsyncTaskManager 创建任务
+    Agent-->>FastAPI: astream_events 流式输出
+    FastAPI-->>Java: _translate_event 翻译标准事件
+    Java-->>Vue: Flux 转发 SSE
+    Vue-->>Student: ReadableStream 渲染
 ```
 
 ### 技术矩阵
@@ -221,41 +219,27 @@ python -m tests.compare_chunking --output results.json
 | 层级 | 核心技术 | 版本 | 职责 |
 |:---|:---|:---|:---|
 | **前端** | Vue · Vite · Pinia · marked · DOMPurify · pdfjs-dist | 3.5 · 7 · 3 · 17 · 3.3 · 3.11 | 流式渲染 · Markdown 展示 · 思考步骤折叠 · 学习路径可视化 · PDF 预览 · 医学影像查看器 |
-| **后端** | Java · Spring Boot · WebFlux · Security · Redisson · MySQL · MyBatis-Plus | 21 · 3.3 · 6.1 · 6.3 · 3.27 · 8.0 · 3.5 | 响应式高并发 · JWT 认证 · 分布式限流 · WebClient 流式转发 · SSE 断线续传 · 阿里云 OSS 集成 |
+| **后端** | Java · Spring Boot · WebFlux · Security · Redisson · MySQL · MyBatis-Plus | 21 · 3.3.13 · 6.1 · 6.3 · 3.27 · 8.0 · 3.5.5 | 响应式高并发 · JWT 认证 · 分布式限流 · WebClient 流式转发 · SSE 断线续传 · 阿里云 OSS 集成 |
 | **模型** | Python · FastAPI · LangGraph · LangChain · Qwen · ChromaDB · qwen3-rerank | 3.11 · 0.128 · 1.2.9 · 1.3.13 · Max/Plus/Turbo · 0.5 · --- | 多智能体编排 · Hybrid RAG · 流式事件输出 · 多模态识别 · 文献检索 · RAGAS 评测 |
 
 ### Hybrid RAG 检索架构（三阶漏斗）
 
-```
-                         用户查询
-                            │
-                            ▼
-            ┌───────────────────────────────┐
-            │     第一阶：宽召回              │
-            │  ┌──────────┐  ┌──────────┐   │
-            │  │ 向量检索   │  │  BM25    │   │
-            │  │ (语义相似) │  │ (关键词)  │   │
-            │  │ top-20    │  │ top-20   │   │
-            │  └──────────┘  └──────────┘   │
-            │        最多 40 篇候选            │
-            └───────────────┬───────────────┘
-                            │
-                            ▼
-            ┌───────────────────────────────┐
-            │     第二阶：RRF 粗排            │
-            │  倒数排名融合                    │
-            │  RRF(d) = 1/(60+Rank_v)        │
-            │         + 1/(60+Rank_b)       │
-            │  40 篇 → 20 篇候选              │
-            └───────────────┬───────────────┘
-                            │
-                            ▼
-            ┌───────────────────────────────┐
-            │     第三阶：Reranker 精排       │
-            │  qwen3-rerank                  │
-            │  失败时回退到 RRF 排序结果       │
-            │  20 篇 → 3 篇最终结果           │
-            └───────────────────────────────┘
+```mermaid
+graph TD
+    Query[用户查询] --> Stage1
+
+    subgraph Stage1[第一阶：宽召回]
+        Vector[向量检索<br/>语义相似<br/>top-20]
+        BM25[BM25<br/>关键词<br/>top-20]
+    end
+
+    Stage1 --> Stage2[第二阶：RRF 粗排<br/>倒数排名融合<br/>40篇 → 20篇]
+
+    Stage2 --> Stage3[第三阶：Reranker 精排<br/>qwen3-rerank<br/>20篇 → 3篇]
+
+    Stage3 --> Result[最终结果 3篇]
+
+    Stage3 -.->|Reranker 失败降级| Stage2
 ```
 
 | 阶段 | 技术 | 输入 → 输出 | 说明 |
@@ -287,6 +271,8 @@ python -m tests.compare_chunking --output results.json
 ```
 learning-multi-agent-system/
 ├── frontend/                        # 前端交互层（Vue 3）
+│   ├── Dockerfile                   # 多阶段构建（Node 构建 + Nginx 提供静态文件）
+│   ├── nginx.conf                   # Nginx 反向代理配置（/api → 后端，SSE 缓冲关闭）
 │   └── src/
 │       ├── api/                     # API 请求（画像/资源/路径/辅导/评估/用户/医学影像）
 │       ├── components/              # 组件（表单/头像/加载/对话/SVG图标/医学影像查看器/图片上传）
@@ -297,8 +283,10 @@ learning-multi-agent-system/
 │       └── router/                  # 路由配置
 │
 ├── backend/server/                  # 后端服务层（Java Spring Boot）
+│   ├── Dockerfile                   # 多阶段构建（Maven 构建 + JRE 运行）
+│   ├── learningo_agents.sql         # 数据库初始化脚本
 │   └── src/main/java/com/learnagent/
-│       ├── controller/              # REST 控制器（15 个：画像/资源/路径/辅导/评估/医学影像/代码/监控/用户/课程/文档/题目/登录/上传/首页）  
+│       ├── controller/              # REST 控制器（15 个：画像/资源/路径/辅导/评估/医学影像/代码/监控/用户/课程/文档/题目/登录/上传/首页）
 │       ├── service/                 # 业务逻辑（AI 流式/对话持久化/OSS）
 │       ├── cache/                   # SSE 事件缓存
 │       ├── config/                  # 配置（Security/WebClient/Redisson/OSS/Jackson/MyBatisPlus）
@@ -310,6 +298,8 @@ learning-multi-agent-system/
 │       └── utils/                   # JWT/OSS/IP 工具
 │
 ├── model/                           # 模型推理层（Python FastAPI）
+│   ├── Dockerfile                   # Python 3.11 镜像（含 onnxruntime 运行库）
+│   ├── start.bat / start.sh         # 快速启动脚本
 │   └── app/
 │       ├── main.py                  # FastAPI 入口 & API 路由（9 大模块 30+ 接口）
 │       ├── agents/                  # 多智能体核心
@@ -334,6 +324,8 @@ learning-multi-agent-system/
 │       ├── evaluation/              # 评估模块
 │       └── utils/                   # 任务管理 / 上下文摘要 / Token 聚合 / 错误码 / 命名模型 / 模型下载
 │
+├── scripts/                         # 辅助脚本
+│   └── fill_test_results.py         # 自动调用模型接口填充测试结果
 ├── tests/                           # 测试套件
 │   ├── test_full_suite.py           # 全链路黑盒测试
 │   └── locustfile.py                # Locust 并发压测脚本
@@ -348,6 +340,7 @@ learning-multi-agent-system/
 │       ├── 数据库设计手册.md              # 14 表DDL+索引+外键+数据字典
 │       ├── 共享记忆系统.md                # 共享记忆实现细节
 │       └── 医学影像识别与拦截系统.md       # 影像识别流水线细节
+├── docker-compose.yml               # Docker Compose 一键部署编排
 └── LICENSE                          # 许可证
 ```
 
@@ -418,15 +411,44 @@ locust -f locustfile.py --host=http://localhost:8080
 | Python | 3.11+ | 模型推理层 |
 | Node.js | 20+ | 前端构建 |
 | MySQL | 8.0+ | 数据存储 |
-| Redis | 6.0+ | 缓存与限流 |
+| Redis | 7.0+ | 缓存与限流 |
 | DashScope API Key | --- | 阿里云大模型服务（必需） |
 
-### 启动步骤
+### 方式一：Docker Compose 一键部署（推荐）
+
+```bash
+# 1. 创建环境变量文件（参考下方配置说明填写）
+cp .env.example .env   # 如无 .env.example，手动创建 .env 并填入必需变量
+vim .env
+
+# 2. 启动全部服务
+docker compose up -d --build
+
+# 3. 查看服务状态
+docker compose ps
+
+# 4. 查看日志
+docker compose logs -f
+```
+
+首次启动时模型服务会自动加载 PDF 文献并构建向量库（约 5-10 分钟），可通过 `docker compose logs -f model` 观察进度。
+
+Docker Compose 网络拓扑：
+
+| 服务 | 内部端口 | 外部端口 | 说明 |
+|:---|:---|:---|:---|
+| frontend (Nginx) | 80 | 5173 | 前端静态文件 + `/api` 反向代理到后端 |
+| backend (Java) | 8080 | --- | 仅内网暴露，由 Nginx 代理 |
+| model (Python) | 8000 | --- | 仅内网暴露 |
+| mysql | 3306 | --- | 数据持久化（Volume: mysql-data） |
+| redis | 6379 | --- | 缓存与限流 |
+
+### 方式二：手动启动各服务
 
 **Step 1 — 初始化数据库**
 
 ```bash
-mysql -u root -p < backend/server/learningo-agents.sql
+mysql -u root -p < backend/server/learningo_agents.sql
 ```
 
 **Step 2 — 启动模型推理服务**
@@ -468,18 +490,37 @@ npm run dev
 
 - 前端地址：`http://localhost:5173`
 
-### 一站式启动（Docker Compose）
-
-```bash
-# 确保已安装 Docker 和 Docker Compose
-docker-compose up -d
-```
-
 ---
 
 ## ⚙️ 配置说明
 
-### 模型层环境变量（model/.env）
+### Docker Compose 环境变量（`.env` 文件）
+
+使用 Docker Compose 部署时，需在项目根目录创建 `.env` 文件，包含以下必需变量：
+
+```bash
+# 数据库
+DB_PASSWORD=your-db-password
+
+# 阿里云 DashScope API Key
+DASHSCOPE_API_KEY=sk-your-dashscope-api-key
+
+# JWT 共享密钥（Java 后端与 Python 模型层双向认证）
+AI_API_SHARED_JWT_SECRET=your-jwt-secret
+
+# 阿里云 OSS（文件上传）
+OSS_ACCESS_KEY_ID=your-access-key-id
+OSS_ACCESS_KEY_SECRET=your-access-key-secret
+OSS_ENDPOINT=https://oss-cn-beijing.aliyuncs.com
+OSS_BUCKET=your-bucket-name
+OSS_REGION=cn-beijing
+```
+
+> **注意**：项目根目录不含 `.env.example` 模板文件，请参照上表手动创建 `.env`。环境变量中的密钥请勿提交到版本控制（`.env` 已在 `.gitignore` 中排除）。
+
+### 模型层环境变量（`model/.env`）
+
+手动启动模型服务时，需在 `model/` 目录下配置 `.env`：
 
 ```bash
 # 必需 - 阿里云 DashScope API Key
@@ -495,6 +536,7 @@ QWEN_RERANK_MODEL="qwen3-rerank"
 QWEN_VISION_MODEL="qwen-vl-max"
 
 # 必需 - JWT 密钥（需与 Java 后端一致）
+# 优先级：环境变量 AI_API_SHARED_JWT_SECRET > SECRET_KEY
 SECRET_KEY="your-jwt-secret-key"
 
 # 可选 - 课程 PDF 目录（默认 model/data/documents/）
@@ -504,6 +546,8 @@ MEDICAL_DOCS_DIR="/path/to/your/pdf/documents"
 REDIS_HOST="localhost"
 REDIS_PORT="6379"
 ```
+
+> **JWT 环境变量优先级**：模型服务启动时优先读取 `AI_API_SHARED_JWT_SECRET`，若未设置则回退到 `SECRET_KEY`。Docker Compose 部署使用 `AI_API_SHARED_JWT_SECRET`。
 
 ### 模型层 YAML 配置
 
@@ -518,7 +562,19 @@ REDIS_PORT="6379"
 
 ### 后端配置
 
-通过 application-dev.yml（开发）或 application-prod.yml（生产）配置数据库、Redis、AI 服务地址、JWT 共享密钥和阿里云 OSS。
+通过 `application-dev.yml`（开发）或 `application-prod.yml`（生产）配置数据库、Redis、AI 服务地址、JWT 共享密钥和阿里云 OSS。
+
+### 配置热更新
+
+运行时可通过管理接口热更新 YAML 配置，无需重启服务：
+
+```bash
+# 热更新模型层配置
+curl -X POST http://localhost:8000/admin/reload_config
+
+# 查看可用的报告模式
+curl http://localhost:8000/admin/report_modes
+```
 
 ---
 
