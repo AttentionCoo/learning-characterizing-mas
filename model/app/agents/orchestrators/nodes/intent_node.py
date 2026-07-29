@@ -1,5 +1,6 @@
 import logging
 import json
+import re
 from typing import Dict, NamedTuple
 from langchain_core.messages import HumanMessage
 from langchain_core.output_parsers import StrOutputParser
@@ -39,6 +40,48 @@ _LEARNING_KEYWORDS = [
     "路径", "计划", "规划", "进度",
     "画像", "水平", "基础", "薄弱",
 ]
+
+_ASSESSMENT_ACTION_KEYWORDS = (
+    "评估", "评价", "测验", "测试", "考核", "成绩", "得分",
+)
+_ASSESSMENT_SUBJECT_KEYWORDS = (
+    "学习", "知识", "掌握", "能力", "技能", "进度", "效率",
+    "投入", "表现", "完成率", "复盘",
+)
+_RESOURCE_REQUEST_KEYWORDS = (
+    "生成", "制作", "整理", "学习资料", "学习资源",
+)
+_MODE_EVIDENCE_GROUPS = {
+    "profile_build": ((
+        "学生", "专业", "年级", "大一", "大二", "大三", "大四", "大五",
+        "研究生", "规培", "基础", "目标", "薄弱", "习惯", "偏好", "每周",
+        "学时", "掌握", "经验", "画像", "学习",
+    ),),
+    "resource_generate": ((_RESOURCE_REQUEST_KEYWORDS + ("文档", "课程", "题", "导图", "案例", "方案", "代码")),),
+    "document_generate": ((_RESOURCE_REQUEST_KEYWORDS + ("文档", "讲解", "课程", "教材")),),
+    "mindmap_generate": ((_RESOURCE_REQUEST_KEYWORDS + ("思维导图", "导图", "知识图谱", "知识结构")),),
+    "quiz_generate": ((_RESOURCE_REQUEST_KEYWORDS + ("练习题", "测验题", "试题", "题库", "选择题", "题目")),),
+    "reading_generate": ((_RESOURCE_REQUEST_KEYWORDS + ("指南", "文献", "共识", "论文", "阅读")),),
+    "case_study_generate": ((_RESOURCE_REQUEST_KEYWORDS + ("病例", "案例", "诊疗推理", "临床推理")),),
+    "plan_generate": ((_RESOURCE_REQUEST_KEYWORDS + ("方案", "计划", "阶段", "安排", "资源组合")),),
+    "code_generate": ((_RESOURCE_REQUEST_KEYWORDS + ("代码", "Python", "python", "数据分析", "编程", "实操")),),
+    "assessment_generate": (_ASSESSMENT_ACTION_KEYWORDS, _ASSESSMENT_SUBJECT_KEYWORDS),
+    "assessment": (_ASSESSMENT_ACTION_KEYWORDS, _ASSESSMENT_SUBJECT_KEYWORDS),
+    "assessment_comprehensive": (_ASSESSMENT_ACTION_KEYWORDS, _ASSESSMENT_SUBJECT_KEYWORDS),
+    "assessment_knowledge": (_ASSESSMENT_ACTION_KEYWORDS, ("学习", "知识", "理解", "记忆", "掌握", "体系")),
+    "assessment_skill": (_ASSESSMENT_ACTION_KEYWORDS, ("学习", "技能", "临床", "实践", "操作", "病例", "推理")),
+    "assessment_progress": (_ASSESSMENT_ACTION_KEYWORDS, ("学习", "进度", "完成率", "速度", "时间", "目标", "效率")),
+    "learning_path_generate": (("学习", "路径", "规划", "计划", "目标", "课程", "知识", "截止", "每周", "学时"),),
+    "learning_path": (("学习", "路径", "规划", "计划", "目标", "课程", "知识", "截止", "每周", "学时"),),
+    "emergency": (("学习", "复习", "知识", "问题", "需求", "病例", "课程"),),
+    "code_assist": (("代码", "补全", "报错", "错误", "优化", "解释", "函数", "Python", "python", "```"),),
+}
+
+_RESOURCE_MODES = {
+    "resource_generate", "document_generate", "mindmap_generate",
+    "quiz_generate", "reading_generate", "case_study_generate",
+    "plan_generate", "code_generate",
+}
 
 
 class InputRule(NamedTuple):
@@ -274,6 +317,72 @@ class IntentNode(BaseNode):
             return value.lower() == "true"
         return False
 
+    @staticmethod
+    def _labeled_value(text: str, label: str):
+        match = re.search(
+            rf"(?:^|\n)\s*{re.escape(label)}[：:]\s*([^\r\n]*)",
+            text,
+        )
+        return match.group(1).strip() if match else None
+
+    def _extract_guard_input(self, report_mode: str, case_text: str) -> str:
+        """从后端任务包装中提取用户真正输入的内容。"""
+        if report_mode.startswith("assessment"):
+            supplement = self._labeled_value(case_text, "补充说明")
+            if supplement is not None:
+                return supplement
+
+        if report_mode in _RESOURCE_MODES:
+            section = re.search(
+                r"【学生资源需求】\s*(.*?)(?=\n\s*【|\Z)",
+                case_text,
+                flags=re.DOTALL,
+            )
+            if section:
+                request_text = section.group(1).strip()
+                if request_text != "请生成相关学习资料":
+                    return request_text
+
+            supplement = self._labeled_value(case_text, "补充说明")
+            if supplement is not None:
+                return supplement
+
+        if report_mode == "tutor":
+            metadata = re.search(
+                r"\n\s*(?:辅导模式|回复格式|课程|知识点|代码片段)[：:]",
+                case_text,
+            )
+            if metadata:
+                return case_text[:metadata.start()].strip()
+
+        # 没有自由输入时，保留课程、知识点等用户填写的结构化字段。
+        structured_values = []
+        for label in (
+            "课程", "课程名称", "知识点", "目标知识点", "学习目标",
+            "已掌握知识点", "诉求", "现有代码", "运行报错",
+        ):
+            value = self._labeled_value(case_text, label)
+            if value:
+                structured_values.append(value)
+        return "\n".join(structured_values) if structured_values else case_text.strip()
+
+    def _has_mode_evidence(self, report_mode: str, text: str) -> bool:
+        if report_mode == "tutor":
+            return bool(text.strip())
+        if report_mode == "code_assist" and re.search(
+            r"(?:\bdef\b|\bclass\b|\bimport\b|[(){}\[\]=;/])",
+            text,
+        ):
+            return True
+        groups = _MODE_EVIDENCE_GROUPS.get(report_mode)
+        if not groups:
+            return False
+        text_lower = text.lower()
+        return all(
+            any(keyword.lower() in text_lower for keyword in group)
+            for group in groups
+        )
+
     async def run(self, state: LearningState) -> Dict:
         case_text = (state.get("case_text") or "").strip()
         preset_intent = state.get("intent_type", "")
@@ -296,6 +405,27 @@ class IntentNode(BaseNode):
             function_name = rule.name
             function_scope = rule.scope
             require_stroke = rule.require_stroke
+            guard_text = self._extract_guard_input(report_mode, case_text)
+
+            if not has_images and require_stroke and not self._has_stroke_keyword(guard_text):
+                logger.info(
+                    "[intent] 用户原始输入缺少脑卒中领域信息，已拦截: mode=%s",
+                    report_mode,
+                )
+                return self._reject_input(
+                    "你的输入与脑卒中学习无关，本系统仅处理脑卒中（中风）相关的学习需求。"
+                )
+
+            if not has_images and not self._has_mode_evidence(report_mode, guard_text):
+                logger.info(
+                    "[intent] 用户原始输入缺少当前功能所需信息，已拦截: mode=%s",
+                    report_mode,
+                )
+                return self._reject_input(
+                    f"当前功能为「{function_name}」，{function_scope}。"
+                    "你的输入与该功能无关，请修改后重试。"
+                )
+
             try:
                 content = await self.input_guard_chain.ainvoke({
                     "function_name": function_name,
@@ -309,7 +439,7 @@ class IntentNode(BaseNode):
                             else "仅校验当前功能相关性，不要求输入重复声明脑卒中主题"
                         )
                     ),
-                    "case_text": case_text,
+                    "case_text": guard_text,
                 })
             except Exception as exc:
                 logger.error(

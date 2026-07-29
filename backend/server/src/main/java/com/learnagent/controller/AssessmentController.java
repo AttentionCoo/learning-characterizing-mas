@@ -762,24 +762,35 @@ public class AssessmentController {
 
     private Map<String, Object> extractDimensionsFromContent(String content, int overallScore) {
         Map<String, Object> dimensions = new LinkedHashMap<>();
-        String[] dimensionKeywords = {"知识掌握", "临床应用", "学习效率", "学习进度", "技能应用", "复盘质量", "自主学习", "学习投入"};
-        int[] baseOffsets = {0, -5, 3, 5, -3, -8, 2, -2};
+        Map<String, List<String>> dimensionAliases = new LinkedHashMap<>();
+        dimensionAliases.put("知识掌握度", List.of("知识掌握度", "知识掌握", "测验表现"));
+        dimensionAliases.put("学习效率", List.of("学习效率", "复盘质量"));
+        dimensionAliases.put("技能应用", List.of("技能应用", "临床应用", "临床技能"));
+        dimensionAliases.put("学习一致性", List.of("学习一致性", "学习投入", "学习活跃度", "自主学习"));
+        dimensionAliases.put("进度对齐度", List.of("进度对齐度", "学习进度"));
+        int[] baseOffsets = {0, 3, -3, -2, 5};
 
-        for (int i = 0; i < dimensionKeywords.length; i++) {
-            String keyword = dimensionKeywords[i];
+        int index = 0;
+        for (Map.Entry<String, List<String>> dimension : dimensionAliases.entrySet()) {
             int extractedScore = -1;
             if (content != null) {
-                java.util.regex.Matcher dimMatcher = java.util.regex.Pattern
-                        .compile(keyword + "[^0-9]{0,10}(\\d{1,3})")
-                        .matcher(content);
-                if (dimMatcher.find()) {
-                    int val = Integer.parseInt(dimMatcher.group(1));
-                    if (val >= 0 && val <= 100) extractedScore = val;
+                for (String alias : dimension.getValue()) {
+                    java.util.regex.Matcher dimMatcher = java.util.regex.Pattern
+                            .compile(java.util.regex.Pattern.quote(alias) + "[^0-9]{0,16}(\\d{1,3})")
+                            .matcher(content);
+                    if (dimMatcher.find()) {
+                        int val = Integer.parseInt(dimMatcher.group(1));
+                        if (val >= 0 && val <= 100) {
+                            extractedScore = val;
+                            break;
+                        }
+                    }
                 }
             }
             int finalScore = extractedScore >= 0 ? extractedScore
-                    : Math.max(0, Math.min(100, overallScore + baseOffsets[i]));
-            dimensions.put(keyword, finalScore);
+                    : Math.max(0, Math.min(100, overallScore + baseOffsets[index]));
+            dimensions.put(dimension.getKey(), finalScore);
+            index++;
         }
         return dimensions;
     }

@@ -8,6 +8,7 @@ import ImageUploader from '@/components/ImageUploader.vue'
 import ReasoningTrace from '@/components/ReasoningTrace.vue'
 import { useUserStore } from '@/stores/user'
 import { useReasoningTrace } from '@/composables/useReasoningTrace'
+import { normalizeAiMarkdown } from '@/utils/aiMarkdown'
 
 const userStore = useUserStore()
 
@@ -36,7 +37,7 @@ const showImageUploader = ref(false)
 
 function renderMarkdown(text) {
   if (!text) return ''
-  return DOMPurify.sanitize(marked.parse(text))
+  return DOMPurify.sanitize(marked.parse(normalizeAiMarkdown(text)))
 }
 
 onMounted(() => {

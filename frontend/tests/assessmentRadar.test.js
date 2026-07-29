@@ -15,11 +15,11 @@ test('将评估数据转换为固定的五维雷达轴', () => {
   assert.deepEqual(
     result.map(({ label, score }) => ({ label, score })),
     [
-      { label: '知识掌握', score: 88 },
-      { label: '临床应用', score: 76 },
+      { label: '知识掌握度', score: 88 },
       { label: '学习效率', score: 64 },
-      { label: '学习进度', score: 92 },
-      { label: '学习投入', score: 70 },
+      { label: '技能应用', score: 76 },
+      { label: '学习一致性', score: 70 },
+      { label: '进度对齐度', score: 92 },
     ],
   )
 })
@@ -35,7 +35,7 @@ test('兼容 JSON 字符串、按优先级选取同义维度并限制异常分�
     自主学习: 70,
   }))
 
-  assert.deepEqual(result.map(item => item.score), [82, 74, 100, 0, 90])
+  assert.deepEqual(result.map(item => item.score), [82, 100, 74, 90, 0])
 })
 
 test('缺失维度保持为空且不使用综合分填充', () => {
@@ -49,4 +49,16 @@ test('空综合分保持为空，不转换为零分', () => {
   assert.equal(normalizeScore(null), null)
   assert.equal(normalizeScore(''), null)
   assert.equal(normalizeScore('88.6'), 88.6)
+})
+
+test('兼容接口文档中的英文嵌套五维分数', () => {
+  const result = buildAssessmentRadar({
+    knowledgeMastery: { score: 68, level: 'moderate' },
+    learningEfficiency: { score: 75, level: 'good' },
+    skillApplication: { score: 70, level: 'good' },
+    learningConsistency: { score: 65, level: 'moderate' },
+    progressAlignment: { score: 80, level: 'good' },
+  })
+
+  assert.deepEqual(result.map(item => item.score), [68, 75, 70, 65, 80])
 })

@@ -7,6 +7,8 @@ import { getLearningPathsAPI } from '@/api/learningPath'
 import ReasoningTrace from '@/components/ReasoningTrace.vue'
 import AssessmentRadarChart from '@/components/AssessmentRadarChart.vue'
 import { useReasoningTrace } from '@/composables/useReasoningTrace'
+import { normalizeAiMarkdown } from '@/utils/aiMarkdown'
+import { buildAssessmentRadar } from '@/utils/assessmentRadar'
 
 marked.setOptions({ gfm: true, breaks: true })
 
@@ -38,11 +40,18 @@ const resultContentRef = ref(null)
 const userScrolled = ref(false)
 
 const radarDimensions = computed(() => {
-  if (isGenerating.value) return {}
-  return reportDetail.value?.scores
-    || reportDetail.value?.dimensions
-    || currentReportData.value?.dimensions
-    || {}
+  const generatedSource = generatedContent.value
+  if (isGenerating.value) return generatedSource
+
+  const sources = [
+    reportDetail.value?.scores,
+    reportDetail.value?.dimensions,
+    generatedSource,
+    currentReportData.value?.dimensions,
+  ]
+  return sources.find(source => (
+    buildAssessmentRadar(source).some(item => item.hasData)
+  )) || {}
 })
 
 const radarOverallScore = computed(() => (
@@ -75,7 +84,7 @@ const assessmentTypes = [
 
 function renderMarkdown(text) {
   if (!text) return ''
-  return DOMPurify.sanitize(marked.parse(text))
+  return DOMPurify.sanitize(marked.parse(normalizeAiMarkdown(text)))
 }
 
 onMounted(() => {
@@ -289,7 +298,7 @@ function getScoreColor(score) {
           </button>
         </div>
 
-        <div v-if="isThinking || generatedContent || reportDetail || currentReportData" class="result-section">
+        <div class="result-section">
           <div class="section-title">评估结果</div>
 
           <div v-if="isThinking && !generatedContent" class="thinking-bar">

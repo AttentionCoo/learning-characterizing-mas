@@ -79,21 +79,22 @@ function scoreColor(score) {
 </script>
 
 <template>
-  <section v-if="hasData" class="radar-analysis" aria-labelledby="radar-title">
+  <section class="radar-analysis" aria-labelledby="radar-title">
     <div class="radar-heading">
       <div>
-        <h3 id="radar-title">五维能力量化</h3>
-        <p>基于最近一次评估数据</p>
+        <h3 id="radar-title">五维评估量化雷达图</h3>
+        <p>{{ hasData ? '基于当前评估数据' : '完成评估后将在此显示量化结果' }}</p>
       </div>
       <div class="radar-summary">
         <span v-if="normalizedOverallScore !== null">综合 {{ normalizedOverallScore }}</span>
-        <span>五维均值 {{ averageScore }}</span>
+        <span v-if="averageScore !== null">五维均值 {{ averageScore }}</span>
+        <span v-else>暂无量化分数</span>
       </div>
     </div>
 
     <div class="radar-layout">
       <figure class="radar-figure">
-        <svg viewBox="0 0 420 340" role="img" :aria-label="`五维能力量化雷达图，平均分 ${averageScore}`">
+        <svg viewBox="0 0 420 340" role="img" :aria-label="hasData ? `五维评估量化雷达图，平均分 ${averageScore}` : '五维评估量化雷达图，暂无数据'">
           <g class="radar-grid">
             <polygon v-for="level in levels" :key="level" :points="polygonPoints(level)" />
             <line
@@ -107,6 +108,10 @@ function scoreColor(score) {
           </g>
 
           <polygon v-if="hasRadarArea" class="radar-area" :points="dataPolygon" />
+
+          <text v-if="!hasData" class="radar-empty" :x="center.x" :y="center.y + 5" text-anchor="middle">
+            暂无量化数据
+          </text>
 
           <g class="radar-points">
             <circle
@@ -251,6 +256,12 @@ function scoreColor(score) {
 .radar-points circle {
   stroke: var(--color-bg-base);
   stroke-width: 2;
+}
+
+.radar-empty {
+  fill: var(--color-text-weak);
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .radar-label {

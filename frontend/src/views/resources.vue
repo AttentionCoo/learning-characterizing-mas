@@ -6,6 +6,7 @@ import { getResourcesAPI, getResourceDetailAPI, resourceStreamAPI } from '@/api/
 import ImageUploader from '@/components/ImageUploader.vue'
 import ReasoningTrace from '@/components/ReasoningTrace.vue'
 import { useReasoningTrace } from '@/composables/useReasoningTrace'
+import { normalizeAiMarkdown } from '@/utils/aiMarkdown'
 
 marked.setOptions({ gfm: true, breaks: true })
 
@@ -75,7 +76,7 @@ function toggleType(type) {
 
 function renderMarkdown(text) {
   if (!text) return ''
-  return DOMPurify.sanitize(marked.parse(text))
+  return DOMPurify.sanitize(marked.parse(normalizeAiMarkdown(text)))
 }
 
 const typeEndpointMap = {

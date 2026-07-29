@@ -5,6 +5,7 @@ import DOMPurify from 'dompurify'
 import { executeCodeAPI, codeAssistStreamAPI } from '@/api/code'
 import ReasoningTrace from '@/components/ReasoningTrace.vue'
 import { useReasoningTrace } from '@/composables/useReasoningTrace'
+import { normalizeAiMarkdown } from '@/utils/aiMarkdown'
 
 marked.setOptions({ gfm: true, breaks: true })
 
@@ -127,7 +128,7 @@ function scrollToBottom() {
 function renderMarkdown(text) {
   if (!text) return ''
   try {
-    return DOMPurify.sanitize(marked.parse(text))
+    return DOMPurify.sanitize(marked.parse(normalizeAiMarkdown(text)))
   } catch (e) {
     console.error('[code-assist] Markdown 渲染失败:', e)
     return '<pre style="white-space:pre-wrap;word-break:break-word">' +

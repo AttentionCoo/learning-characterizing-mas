@@ -136,6 +136,191 @@ async def test_guard_call_failure_is_rejected_by_default():
     assert "无法确认" in result["input_rejection_message"]
 
 
+@pytest.mark.asyncio
+async def test_assessment_wrapper_cannot_hide_unrelated_user_input():
+    node = _node_with_result({
+        "type": "assessment",
+        "difficulty_score": 0.2,
+        "is_stroke_related": True,
+        "is_function_related": True,
+        "reason": "固定包装中包含评估任务说明",
+    })
+    wrapped_input = """请为我生成学习效果评估报告：
+=== 学生真实学习数据 ===
+【学习进度】已完成 3/10
+=== 数据结束 ===
+补充说明：今天天气怎么样
+评估类型：comprehensive
+请严格基于以上真实学习数据进行分析评估。"""
+
+    result = await node.run(_state(
+        "assessment_comprehensive",
+        "assessment",
+        wrapped_input,
+    ))
+
+    assert result["intent_type"] == "non_stroke"
+    assert "综合学习评估" in result["input_rejection_message"]
+
+
+@pytest.mark.asyncio
+async def test_tutor_metadata_cannot_hide_unrelated_user_input():
+    node = _node_with_result({
+        "type": "tutor",
+        "difficulty_score": 0.2,
+        "is_stroke_related": True,
+        "is_function_related": True,
+        "reason": "元数据中包含脑卒中课程",
+    })
+
+    result = await node.run(_state(
+        "tutor",
+        "tutor",
+        "帮我写一首诗\n辅导模式：详细讲解\n课程：脑卒中诊疗",
+    ))
+
+    assert result["intent_type"] == "non_stroke"
+
+
+@pytest.mark.asyncio
+async def test_valid_wrapped_assessment_input_is_allowed():
+    node = _node_with_result({
+        "type": "assessment",
+        "difficulty_score": 0.4,
+        "is_stroke_related": True,
+        "is_function_related": True,
+        "reason": "用户明确要求评估学习效果",
+    })
+    wrapped_input = """请为我生成学习效果评估报告：
+=== 学生真实学习数据 ===
+【学习进度】已完成 3/10
+=== 数据结束 ===
+补充说明：重点评估我的脑卒中诊疗知识掌握情况
+评估类型：comprehensive"""
+
+    result = await node.run(_state(
+        "assessment_comprehensive",
+        "assessment",
+        wrapped_input,
+    ))
+
+    assert result["intent_type"] == "assessment"
+
+
+@pytest.mark.parametrize(
+    ("report_mode", "intent_type"),
+    _REPORT_MODE_TO_INTENT.items(),
+)
+@pytest.mark.asyncio
+async def test_every_preset_function_rejects_plain_unrelated_input(
+    report_mode,
+    intent_type,
+):
+    node = _node_with_result({
+        "type": intent_type,
+        "difficulty_score": 0.2,
+        "is_stroke_related": True,
+        "is_function_related": True,
+        "reason": "错误地认为输入相关",
+    })
+
+    result = await node.run(_state(report_mode, intent_type, "今天天气怎么样"))
+
+    assert result["intent_type"] == "non_stroke"
+
+
+_VALID_MODE_INPUTS = {
+    "profile_build": "我是临床医学大三学生，每周学习六小时，偏好病例视频。",
+    "resource_generate": "请生成脑卒中静脉溶栓学习资料。",
+    "document_generate": "请生成脑卒中静脉溶栓课程讲解文档。",
+    "mindmap_generate": "请生成脑卒中诊疗知识思维导图。",
+    "quiz_generate": "请生成脑卒中二级预防练习题。",
+    "reading_generate": "请整理脑卒中诊疗指南阅读材料。",
+    "case_study_generate": "请生成脑卒中急诊病例分析。",
+    "plan_generate": "请生成脑卒中复习阶段方案。",
+    "code_generate": "请生成脑卒中数据分析 Python 代码案例。",
+    "assessment_generate": "请评估我的脑卒中知识掌握情况。",
+    "assessment": "请评估我的学习效果和知识掌握情况。",
+    "assessment_comprehensive": "请综合评估我的学习能力和知识掌握情况。",
+    "assessment_knowledge": "请评估我的脑卒中知识掌握程度。",
+    "assessment_skill": "请评估我的脑卒中临床技能水平。",
+    "assessment_progress": "请评估我的脑卒中学习进度和完成率。",
+    "tutor": "请讲解脑卒中静脉溶栓时间窗。",
+    "learning_path_generate": "请规划我的脑卒中课程学习路径。",
+    "learning_path": "请规划我的脑卒中课程学习路径。",
+    "emergency": "请分析我的脑卒中学习需求。",
+    "code_assist": "现有代码：print(1/0)",
+}
+
+
+@pytest.mark.parametrize(
+    ("report_mode", "case_text"),
+    _VALID_MODE_INPUTS.items(),
+)
+@pytest.mark.asyncio
+async def test_every_preset_function_keeps_valid_input(report_mode, case_text):
+    intent_type = _REPORT_MODE_TO_INTENT[report_mode]
+    node = _node_with_result({
+        "type": intent_type,
+        "difficulty_score": 0.3,
+        "is_stroke_related": True,
+        "is_function_related": True,
+        "reason": "输入属于当前功能",
+    })
+
+    result = await node.run(_state(report_mode, intent_type, case_text))
+
+    assert result["intent_type"] == intent_type
+
+
+@pytest.mark.parametrize("report_mode", [
+    "document_generate", "mindmap_generate", "quiz_generate",
+    "reading_generate", "case_study_generate", "plan_generate",
+    "code_generate",
+])
+@pytest.mark.asyncio
+async def test_resource_modes_allow_frontend_default_request(report_mode):
+    intent_type = _REPORT_MODE_TO_INTENT[report_mode]
+    node = _node_with_result({
+        "type": intent_type,
+        "difficulty_score": 0.2,
+        "is_stroke_related": True,
+        "is_function_related": True,
+        "reason": "用户已在页面选择资源类型",
+    })
+
+    result = await node.run(_state(
+        report_mode,
+        intent_type,
+        "请为我生成脑卒中相关的学习资料",
+    ))
+
+    assert result["intent_type"] == intent_type
+
+
+@pytest.mark.parametrize("report_mode", [
+    "assessment_comprehensive", "assessment_knowledge",
+    "assessment_skill", "assessment_progress",
+])
+@pytest.mark.asyncio
+async def test_assessment_modes_allow_frontend_default_request(report_mode):
+    node = _node_with_result({
+        "type": "assessment",
+        "difficulty_score": 0.2,
+        "is_stroke_related": True,
+        "is_function_related": True,
+        "reason": "用户已在页面选择评估类型",
+    })
+
+    result = await node.run(_state(
+        report_mode,
+        "assessment",
+        "请为我进行学习评估",
+    ))
+
+    assert result["intent_type"] == "assessment"
+
+
 def test_every_preset_function_has_an_input_rule():
     assert set(_REPORT_MODE_TO_INTENT) == set(_MODE_INPUT_RULES)
 
