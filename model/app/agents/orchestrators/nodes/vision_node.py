@@ -461,8 +461,8 @@ class VisionAnalysisNode(BaseNode):
         所有图片都被判定为"否"才拒绝。任一图片通过即放行。
         """
         if not self._api_key:
-            logger.warning("[vision_node] 无 API KEY，跳过门控（放行）")
-            return True
+            logger.warning("[vision_node] 无 API KEY，无法验证图片相关性（拦截）")
+            return False
 
         for i, img in enumerate(images[:3]):
             try:

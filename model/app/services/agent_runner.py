@@ -40,7 +40,6 @@ async def run_agent_background(
     executor=None,
     naming_input: str = None,
     images: List[str] = None,
-    image_question: str = None,
     update_all_info: bool = False,
     original_all_info: str = "",
 ):
@@ -52,31 +51,12 @@ async def run_agent_background(
         if naming_model and executor and naming_input:
             naming_future = loop.run_in_executor(executor, naming_model.run_naming, naming_input)
 
-        if images:
-            vision_svc = resources.get("vision_service")
-            if vision_svc:
-                async for event in vision_svc.analyze_stream(
-                    images=images,
-                    question=image_question or "",
-                    all_info="",
-                ):
-                    if event.get("type") == "thinking":
-                        task_mgr.add_event(task_id, {
-                            "type": "node_start",
-                            "node": "vision",
-                            "label": event.get("title", "正在分析图片..."),
-                        })
-                    elif event.get("type") == "chunk":
-                        content_str = str(event.get("content", ""))
-                        if content_str:
-                            final_parts.append(content_str)
-                            task_mgr.add_event(task_id, {"type": "token", "content": content_str})
-
         async for event in agent.run_learning_reasoning(
             case_text=case_text,
             all_info=all_info,
             report_mode=report_mode,
             show_thinking=True,
+            images=images,
         ):
             if not isinstance(event, dict):
                 continue

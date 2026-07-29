@@ -11,7 +11,6 @@ from sse_starlette.sse import EventSourceResponse
 
 from app.runtime import resources, verify_token
 from app.services.agent_runner import run_agent_background, stream_task_events
-from app.utils.error_codes import build_error_event
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -39,39 +38,6 @@ async def get_model_result(request: QueryRequest):
     task_mgr = resources["task_manager"]
     task_id = uuid.uuid4().hex
 
-    if request.images:
-        vision_svc = resources.get("vision_service")
-        if not vision_svc:
-            return EventSourceResponse(iter([json.dumps({"type": "token", "content": "影像识别服务未就绪，请稍后重试。"}, ensure_ascii=False)]), ping=15)
-
-        task_mgr.create_task(task_id, "legacy_vision", {})
-
-        async def _run_vision():
-            try:
-                final_parts = []
-                async for event in vision_svc.analyze_stream(
-                    images=request.images,
-                    question=request.question,
-                    all_info=request.all_info,
-                ):
-                    if event.get("type") == "thinking":
-                        task_mgr.add_event(task_id, {"type": "node_start", "node": "vision", "label": event.get("title", "正在分析图片...")})
-                    elif event.get("type") == "chunk":
-                        content_str = str(event.get("content", ""))
-                        if content_str:
-                            final_parts.append(content_str)
-                            task_mgr.add_event(task_id, {"type": "token", "content": content_str})
-
-                task_mgr.add_event(task_id, {"type": "done", "taskId": task_id, "request_id": task_id, "name": "影像分析", "all_info": request.all_info})
-                task_mgr.complete_task(task_id, result="".join(final_parts))
-            except Exception as e:
-                task_mgr.add_event(task_id, build_error_event(e, talk_id=None))
-                task_mgr.fail_task(task_id, str(e))
-
-        asyncio.create_task(_run_vision())
-        init_event = {"type": "init", "taskId": task_id}
-        return EventSourceResponse(stream_task_events(task_id, task_mgr, init_event), ping=15)
-
     task_mgr.create_task(task_id, "legacy_query", {})
 
     asyncio.create_task(run_agent_background(
@@ -86,6 +52,7 @@ async def get_model_result(request: QueryRequest):
         naming_input=request.question if not request.all_info else None,
         update_all_info=True,
         original_all_info=request.all_info,
+        images=request.images,
     ))
 
     init_event = {"type": "init", "taskId": task_id}

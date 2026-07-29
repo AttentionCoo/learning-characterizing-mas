@@ -23,6 +23,7 @@ class LearningState(TypedDict):
     all_info: str
     report_mode: str
     intent_type: str
+    input_rejection_message: str
     context: Dict
     learning_questions: List[str]
     key_risks: List[str]

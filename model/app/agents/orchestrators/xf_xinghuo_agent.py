@@ -5,7 +5,7 @@ from typing import AsyncGenerator, Dict
 from langchain_core.messages import SystemMessage, HumanMessage
 from app.agents.core.schema import LearningState
 from app.agents.orchestrators.clinical_graph import LearningGraphBuilder
-from app.agents.orchestrators.nodes.intent_node import IntentNode
+from app.agents.orchestrators.nodes.intent_node import IntentNode, REPORT_MODE_TO_INTENT
 from app.agents.orchestrators.nodes.analysis_node import AnalysisNode
 from app.agents.orchestrators.nodes.retrieve_node import RetrieveNode
 from app.agents.orchestrators.nodes.reason_node import ReasonNode
@@ -37,26 +37,7 @@ _NODE_PROGRESS_LABELS: Dict[str, str] = {
     "generate_report": "正在生成报告",
 }
 
-_REPORT_MODE_TO_INTENT: Dict[str, str] = {
-    "resource_generate": "resource",
-    "document_generate": "resource",
-    "mindmap_generate": "resource",
-    "quiz_generate": "resource",
-    "reading_generate": "resource",
-    "case_study_generate": "resource",
-    "plan_generate": "resource",
-    "code_generate": "resource",
-    "assessment_generate": "assessment",
-    "assessment_comprehensive": "assessment",
-    "assessment_knowledge": "assessment",
-    "assessment_skill": "assessment",
-    "assessment_progress": "assessment",
-    "profile_build": "profile",
-    "tutor": "tutor",
-    "learning_path_generate": "learning_path",
-    "emergency": "profile",
-    "code_assist": "code_assist",
-}
+_REPORT_MODE_TO_INTENT: Dict[str, str] = REPORT_MODE_TO_INTENT
 
 
 class LearningAgent:
@@ -114,6 +95,13 @@ class LearningAgent:
         profile_summary: str = "",
         images: list = None,
     ) -> AsyncGenerator[Dict, None]:
+        if report_mode not in _REPORT_MODE_TO_INTENT:
+            yield {
+                "type": "token",
+                "content": f"不支持的功能类型「{report_mode}」，请求已被拦截。",
+            }
+            return
+
         if not profile_summary and all_info:
             profile_summary = all_info
 
@@ -124,6 +112,7 @@ class LearningAgent:
             "all_info": all_info,
             "report_mode": report_mode,
             "intent_type": preset_intent,
+            "input_rejection_message": "",
             "context": {},
             "learning_questions": [],
             "key_risks": [],

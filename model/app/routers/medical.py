@@ -104,7 +104,6 @@ async def medical_analyze_case(request: MedicalCaseAnalysisRequest):
         executor=resources.get("executor"),
         naming_input=request.message if new_talk else None,
         images=request.images if request.images else None,
-        image_question=request.message,
     ))
 
     init_event = {"type": "init", "taskId": task_id, "talkId": talk_id, "newTalk": new_talk, "mode": "medical_case_analysis"}

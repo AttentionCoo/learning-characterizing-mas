@@ -180,6 +180,9 @@ class LearningGraphBuilder:
         return "retrieve"
 
     async def _reject_node(self, state: LearningState) -> dict:
+        message = state.get("input_rejection_message")
+        if message:
+            return {"report": message}
         return {"report": "您的问题与脑卒中学习不相关，本系统仅支持脑卒中（中风）相关的学习问答，包括脑卒中的病因、症状、诊断、治疗、康复、预防、护理、并发症等方面。请提出与脑卒中学习相关的问题。"}
 
     async def _reject_image_node(self, state: LearningState) -> dict:
