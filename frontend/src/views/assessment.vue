@@ -178,8 +178,15 @@ async function handleGenerate() {
         assessmentType: assessmentType.value,
         courseName: courseName.value,
       },
-      (chunk) => {
+      (chunk, event = {}) => {
         if (isThinking.value) { isThinking.value = false; thinkingHint.value = '' }
+        if (event.replace) {
+          if (timerId !== null) { clearTimeout(timerId); timerId = null }
+          charBuffer.length = 0
+          displayText = chunk
+          generatedContent.value = displayText
+          return
+        }
         charBuffer.push(...Array.from(chunk))
         startTypewriter()
       },

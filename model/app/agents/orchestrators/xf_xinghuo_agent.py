@@ -165,7 +165,7 @@ class LearningAgent:
                         show_thinking
                         and event.get("event") == "on_chain_end"
                         and event.get("name") in self._STREAMING_NODES
-                        and translated.get("type") == "token"
+                        and translated.get("type") in {"token", "replace"}
                     ):
                         output = event.get("data", {}).get("output", {})
                         yield self._build_node_done_event(event.get("name", ""), output)
@@ -210,17 +210,16 @@ class LearningAgent:
                 return {"type": "token", "content": report_text} if report_text else None
 
             if name in self._STREAMING_NODES:
-                # ── code_assist 场景特殊处理 ──
-                # 如果报告长度明显大于已流式传输的内容（说明触发了强化重试），
-                # 必须将完整报告作为 token 事件再次发送，确保前端一定能收到。
-                # 正常场景流式已完整发送时，此处的重复前端会自动去重。
                 if report_text:
                     if name not in streamed_nodes:
                         logger.info(f"[event] 节点 {name} 输出报告内容（首次），长度: {len(report_text)}")
                         streamed_nodes.add(name)
-                    else:
-                        logger.info(f"[event] 节点 {name} 重新输出完整报告（可能触发过重试），长度: {len(report_text)}")
-                    return {"type": "token", "content": report_text}
+                        return {"type": "token", "content": report_text}
+
+                    # 流式内容已经发送过，节点结束时用完整报告覆盖它。
+                    # 既避免正常场景重复，也保留强化重试产生的最终版本。
+                    logger.info(f"[event] 节点 {name} 使用完整报告替换流式内容，长度: {len(report_text)}")
+                    return {"type": "replace", "content": report_text}
 
             if show_thinking:
                 return self._build_node_done_event(name, output)

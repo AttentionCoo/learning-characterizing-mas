@@ -67,3 +67,24 @@ async def test_image_gate_rejects_when_visual_model_is_unavailable():
     node._api_key = None
 
     assert await node._run_stroke_gate_cn(["image-data"]) is False
+
+
+@pytest.mark.asyncio
+async def test_complete_report_replaces_streamed_parts_in_task_result():
+    class ReplacingAgent:
+        async def run_learning_reasoning(self, **_kwargs):
+            yield {"type": "token", "content": "一、旧内容\n"}
+            yield {"type": "replace", "content": "一、新内容\n二、下一项"}
+
+    task_manager = _TaskManager()
+
+    await run_agent_background(
+        task_id="task-replace",
+        agent=ReplacingAgent(),
+        case_text="生成报告",
+        all_info="",
+        report_mode="tutor",
+        task_mgr=task_manager,
+    )
+
+    assert task_manager.result == "一、新内容\n二、下一项"

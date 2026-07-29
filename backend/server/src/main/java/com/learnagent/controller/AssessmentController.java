@@ -889,7 +889,10 @@ public class AssessmentController {
         try {
             JsonNode node = objectMapper.readTree(data);
             String type = node.path("type").asText("");
-            if ("chunk".equals(type) || "result".equals(type)) {
+            if ("replace".equals(type)) {
+                target.setLength(0);
+                target.append(node.path("content").asText(""));
+            } else if ("chunk".equals(type) || "result".equals(type)) {
                 target.append(node.path("content").asText(""));
             }
         } catch (Exception ignored) {}

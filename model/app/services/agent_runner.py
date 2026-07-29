@@ -64,8 +64,14 @@ async def run_agent_background(
                 task_mgr.add_event(task_id, event)
                 task_mgr.fail_task(task_id, event.get("content", "Unknown error"))
                 return
-            if event.get("type") == "token":
+            event_type = event.get("type")
+            if event_type == "token":
                 content_str = str(event.get("content", ""))
+                if content_str:
+                    final_parts.append(content_str)
+            elif event_type == "replace":
+                content_str = str(event.get("content", ""))
+                final_parts.clear()
                 if content_str:
                     final_parts.append(content_str)
             task_mgr.add_event(task_id, event)

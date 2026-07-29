@@ -573,6 +573,16 @@ public class AIStreamingServiceImpl implements AIStreamingService {
 
             // ── 新事件格式（Python 重构后，LangGraph astream_events 翻译层输出）────────
 
+            // replace 事件：节点结束时以完整报告覆盖已流式接收的 token，防止整段重复。
+            if ("replace".equalsIgnoreCase(type)) {
+                String completeContent = json.path("content").asText("");
+                fullAnswer.setLength(0);
+                fullAnswer.append(completeContent);
+                Map<String, Object> replaceResp = baseResponse(talkId, generatedTitle[0], "replace");
+                replaceResp.put("content", completeContent);
+                return Flux.just(objectMapper.writeValueAsString(replaceResp));
+            }
+
             // token 事件：LLM 流式输出每个 token（替代旧版 chunk/result），追加全文并透传前端
             if ("token".equalsIgnoreCase(type)) {
                 String tokenContent = json.path("content").asText("");

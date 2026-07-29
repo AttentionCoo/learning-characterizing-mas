@@ -729,7 +729,11 @@ public class ResourceController {
         try {
             var node = objectMapper.readTree(data);
             String type = node.path("type").asText("");
-            if ("chunk".equals(type) || "result".equals(type)) {
+            if ("replace".equals(type)) {
+                String content = node.path("content").asText("");
+                sb.setLength(0);
+                sb.append(content);
+            } else if ("chunk".equals(type) || "result".equals(type)) {
                 String content = node.path("content").asText("");
                 if (!content.isEmpty()) sb.append(content);
             }

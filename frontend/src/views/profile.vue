@@ -338,10 +338,17 @@ async function handleSend() {
   try {
     const result = await profileStreamAPI(
       { talkId: talkId.value, message, images: currentImages },
-      (chunk) => {
+      (chunk, event = {}) => {
         if (isThinking.value) {
           isThinking.value = false
           thinkingHint.value = ''
+        }
+        if (event.replace) {
+          if (timerId !== null) { clearTimeout(timerId); timerId = null }
+          charBuffer.length = 0
+          displayText = chunk
+          chatMessages.value[aiIndex] = { role: 'assistant', content: displayText }
+          return
         }
         charBuffer.push(...Array.from(chunk))
         startTypewriter()

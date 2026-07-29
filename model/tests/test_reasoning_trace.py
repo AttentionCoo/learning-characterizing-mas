@@ -116,3 +116,35 @@ def test_streaming_report_emits_token_and_completion_audit_event():
 
     assert [event["type"] for event in events] == ["token", "node_done"]
     assert events[1]["title"] == "回答生成完成"
+
+
+def test_streaming_report_replaces_tokens_with_complete_report_at_chain_end():
+    class Chunk:
+        content = "一、总体评估\n"
+
+    class FakeGraph:
+        async def astream_events(self, _state, config, version):
+            yield {
+                "event": "on_chat_model_stream",
+                "name": "ChatModel",
+                "metadata": {"langgraph_node": "generate_report"},
+                "data": {"chunk": Chunk()},
+            }
+            yield {
+                "event": "on_chain_end",
+                "name": "generate_report",
+                "metadata": {"langgraph_node": "generate_report"},
+                "data": {"output": {"report": "一、总体评估\n二、改进建议"}},
+            }
+
+    agent = LearningAgent.__new__(LearningAgent)
+    agent.graph = FakeGraph()
+    agent._event_log_counts = {}
+
+    async def collect_events():
+        return [event async for event in agent.run_learning_reasoning("问题")]
+
+    events = asyncio.run(collect_events())
+
+    assert [event["type"] for event in events] == ["token", "replace", "node_done"]
+    assert events[1]["content"] == "一、总体评估\n二、改进建议"

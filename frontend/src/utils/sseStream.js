@@ -7,6 +7,11 @@
  * resolve 结构：{ data: { talkId, content, profileDimensions } }
  * profileDimensions 仅画像构建场景的 done 事件携带，其余场景为 null。
  */
+export function mergeStreamContent(current, type, incoming) {
+  const content = incoming || ''
+  return type === 'replace' ? content : `${current || ''}${content}`
+}
+
 export function sseStreamRequest(url, params, { onChunk, onThinking, timeout = 300000, signal: externalSignal } = {}) {
   const token = localStorage.getItem('Synapse_MD_USER')
     ? JSON.parse(localStorage.getItem('Synapse_MD_USER')).token
@@ -91,9 +96,11 @@ export function sseStreamRequest(url, params, { onChunk, onThinking, timeout = 3
           onThinking(trace)
           return
         }
-        if (type === 'chunk' || type === 'result' || type === 'token') {
-          fullAnswer += data.content || ''
-          if (onChunk) onChunk(data.content || '')
+        if (type === 'chunk' || type === 'result' || type === 'token' || type === 'replace') {
+          const content = data.content || ''
+          const replace = type === 'replace'
+          fullAnswer = mergeStreamContent(fullAnswer, type, content)
+          if (onChunk) onChunk(content, { replace })
           console.log('[sseStream] chunk received, type:', type, 'len:', (data.content || '').length, 'preview:', (data.content || '').slice(0, 80))
           return
         }

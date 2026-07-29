@@ -204,10 +204,10 @@ async function requestAssist() {
         existingCode: code.value,
         errorMessage: runResult.value && !runResult.value.success ? runResult.value.stderr : null,
       },
-      (chunk) => {
+      (chunk, event = {}) => {
         if (isThinking.value) isThinking.value = false
         if (chunk != null && chunk !== '') {
-          assistContent.value += chunk
+          assistContent.value = event.replace ? chunk : assistContent.value + chunk
           nextTick(scrollToBottom)
         }
       },
@@ -225,10 +225,8 @@ async function requestAssist() {
     console.log('[code-assist] SSE 请求完成: talkId=', result.data?.talkId, 'contentLen=', result.data?.content?.length || 0)
     if (result.data?.talkId) talkId.value = result.data.talkId
 
-    // ── 兜底：若 SSE 流式块未能正确累积到 assistContent，但 Promise 解析结果中有完整内容，
-    //        直接使用完整内容填充，避免因前端解析时序问题导致空白。 ──
-    if (!assistContent.value && result.data?.content) {
-      console.log('[code-assist] 流式块未累积到 assistContent，使用 Promise 结果兜底填充')
+    // 以 SSE 累积出的最终内容收口，避免打字缓冲或完整报告替换产生时序差异。
+    if (result.data?.content) {
       assistContent.value = result.data.content
       isThinking.value = false
     }

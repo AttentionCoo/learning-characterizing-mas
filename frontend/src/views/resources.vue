@@ -139,6 +139,7 @@ async function handleGenerate() {
     thinkingHint.value = `正在生成 ${typeLabel} (${i + 1}/${typesToGenerate.length})...`
     currentStage.value = `正在生成 ${typeLabel} (${i + 1}/${typesToGenerate.length})...`
     isThinking.value = true
+    const resourceContentStart = allContent.length
 
     try {
       const result = await resourceStreamAPI(
@@ -153,9 +154,16 @@ async function handleGenerate() {
           message: customMessage.value || `请为我生成${courseName.value || '脑卒中'}相关的学习资料`,
           images: uploadedImages.value,
         },
-        (chunk) => {
+        (chunk, event = {}) => {
           if (!isGenerating.value) return
           if (isThinking.value) { isThinking.value = false }
+          if (event.replace) {
+            if (timerId !== null) { clearTimeout(timerId); timerId = null }
+            charBuffer.length = 0
+            allContent = allContent.slice(0, resourceContentStart) + chunk
+            generatedContent.value = allContent
+            return
+          }
           charBuffer.push(...Array.from(chunk))
           startTypewriter()
         },
@@ -169,7 +177,10 @@ async function handleGenerate() {
       )
 
       if (timerId !== null) { clearTimeout(timerId); timerId = null }
-      allContent += charBuffer.splice(0).join('')
+      charBuffer.length = 0
+      if (result.data?.content != null) {
+        allContent = allContent.slice(0, resourceContentStart) + result.data.content
+      }
       generatedContent.value = allContent
       isThinking.value = false
       thinkingHint.value = ''
