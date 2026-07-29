@@ -74,7 +74,14 @@ _MODE_EVIDENCE_GROUPS = {
     "learning_path_generate": (("学习", "路径", "规划", "计划", "目标", "课程", "知识", "截止", "每周", "学时"),),
     "learning_path": (("学习", "路径", "规划", "计划", "目标", "课程", "知识", "截止", "每周", "学时"),),
     "emergency": (("学习", "复习", "知识", "问题", "需求", "病例", "课程"),),
-    "code_assist": (("代码", "补全", "报错", "错误", "优化", "解释", "函数", "Python", "python", "```"),),
+    "code_assist": (
+        (
+            "代码", "函数", "python", "程序", "脚本", "算法", "排序", "类", "方法",
+            "变量", "循环", "接口", "模块", "报错", "错误", "异常", "堆栈", "数据库",
+            "sql", "java", "javascript", "typescript", "c++", "html", "css", "补全",
+            "优化", "调试", "修复", "重构", "实现", "编写", "```",
+        ),
+    ),
 }
 
 _RESOURCE_MODES = {
@@ -327,6 +334,25 @@ class IntentNode(BaseNode):
 
     def _extract_guard_input(self, report_mode: str, case_text: str) -> str:
         """从后端任务包装中提取用户真正输入的内容。"""
+        if report_mode == "code_assist":
+            structured_values = []
+            request_text = self._labeled_value(case_text, "诉求")
+            if request_text:
+                structured_values.append(request_text)
+
+            sections = re.finditer(
+                r"(?:^|\n)\s*(?:现有代码|运行报错)[：:]\s*(.*?)"
+                r"(?=\n\s*(?:现有代码|运行报错)[：:]|\Z)",
+                case_text,
+                flags=re.DOTALL,
+            )
+            structured_values.extend(
+                section.group(1).strip()
+                for section in sections
+                if section.group(1).strip()
+            )
+            return "\n".join(structured_values)
+
         if report_mode.startswith("assessment"):
             supplement = self._labeled_value(case_text, "补充说明")
             if supplement is not None:
@@ -425,6 +451,14 @@ class IntentNode(BaseNode):
                     f"当前功能为「{function_name}」，{function_scope}。"
                     "你的输入与该功能无关，请修改后重试。"
                 )
+
+            # 代码或明确的编程诉求已由确定性规则验证，无需再让 LLM 重复判定。
+            if report_mode == "code_assist":
+                logger.info("[intent] 代码辅助结构化校验通过，跳过 LLM 输入守卫")
+                return {
+                    "intent_type": preset_intent,
+                    "input_rejection_message": "",
+                }
 
             try:
                 content = await self.input_guard_chain.ainvoke({

@@ -51,7 +51,8 @@ def _build_code_assist_question(params: CodeAssistRequest) -> str:
     """将 CodeAssistRequest 拼接为模型推理用的完整提示词。"""
     parts = []
     label = _ASSIST_TYPE_LABELS.get(params.assistType, params.assistType)
-    parts.append(f"辅助类型：{label}")
+    parts.append(f"【辅助功能代码】{params.assistType}")
+    parts.append(f"【唯一辅助功能】{label}")
 
     if params.prompt and params.prompt.strip():
         parts.append(f"诉求：{params.prompt.strip()}")

@@ -8,6 +8,7 @@ from app.agents.orchestrators.xf_xinghuo_agent import (
     LearningAgent,
     _REPORT_MODE_TO_INTENT,
 )
+from app.routers.code import CodeAssistRequest, _build_code_assist_question
 
 
 def _node_with_result(result):
@@ -92,6 +93,74 @@ async def test_code_assist_allows_code_input_outside_stroke_domain():
     ))
 
     assert result["intent_type"] == "code_assist"
+
+
+@pytest.mark.parametrize("case_text", [
+    "【辅助功能代码】complete\n诉求：补全这个函数\n现有代码：\n```python\ndef add(a, b):\n    \n```",
+    "【辅助功能代码】complete\n诉求：请实现冒泡排序算法",
+])
+@pytest.mark.asyncio
+async def test_code_assist_uses_structural_evidence_before_llm_guard(case_text):
+    node = _node_with_result({
+        "type": "irrelevant",
+        "difficulty_score": 0.2,
+        "is_stroke_related": False,
+        "is_function_related": False,
+        "reason": "无法确认输入是否属于代码辅助",
+    })
+
+    result = await node.run(_state("code_assist", "code_assist", case_text))
+
+    assert result["intent_type"] == "code_assist"
+    assert result["input_rejection_message"] == ""
+
+
+@pytest.mark.parametrize(("prompt", "existing_code"), [
+    ("帮我看看", "def add(a, b):\n    return a + b"),
+    ("冒泡排序算法", ""),
+])
+@pytest.mark.asyncio
+async def test_code_assist_route_payload_accepts_selected_mode_and_programming_evidence(
+    prompt,
+    existing_code,
+):
+    node = _node_with_result({
+        "type": "irrelevant",
+        "difficulty_score": 0.2,
+        "is_stroke_related": False,
+        "is_function_related": False,
+        "reason": "无法确认输入是否属于代码辅助",
+    })
+    question = _build_code_assist_question(CodeAssistRequest(
+        assistType="complete",
+        prompt=prompt,
+        existingCode=existing_code,
+    ))
+
+    result = await node.run(_state("code_assist", "code_assist", question))
+
+    assert result["intent_type"] == "code_assist"
+    assert result["input_rejection_message"] == ""
+
+
+@pytest.mark.asyncio
+async def test_code_assist_still_rejects_non_programming_request():
+    node = _node_with_result({
+        "type": "code_assist",
+        "difficulty_score": 0.2,
+        "is_stroke_related": False,
+        "is_function_related": True,
+        "reason": "用户选择了代码讲解",
+    })
+
+    question = _build_code_assist_question(CodeAssistRequest(
+        assistType="explain",
+        prompt="解释一下今天的天气",
+    ))
+    result = await node.run(_state("code_assist", "code_assist", question))
+
+    assert result["intent_type"] == "non_stroke"
+    assert "代码辅助" in result["input_rejection_message"]
 
 
 @pytest.mark.asyncio
