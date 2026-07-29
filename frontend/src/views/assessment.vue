@@ -5,6 +5,7 @@ import DOMPurify from 'dompurify'
 import { getAssessmentReportsAPI, getAssessmentReportDetailAPI, assessmentStreamAPI, getAssessmentReportAPI, optimizeLearningPathAPI } from '@/api/assessment'
 import { getLearningPathsAPI } from '@/api/learningPath'
 import ReasoningTrace from '@/components/ReasoningTrace.vue'
+import AssessmentRadarChart from '@/components/AssessmentRadarChart.vue'
 import { useReasoningTrace } from '@/composables/useReasoningTrace'
 
 marked.setOptions({ gfm: true, breaks: true })
@@ -35,6 +36,21 @@ const learningPathId = ref(null)
 
 const resultContentRef = ref(null)
 const userScrolled = ref(false)
+
+const radarDimensions = computed(() => {
+  if (isGenerating.value) return {}
+  return reportDetail.value?.scores
+    || reportDetail.value?.dimensions
+    || currentReportData.value?.dimensions
+    || {}
+})
+
+const radarOverallScore = computed(() => (
+  reportDetail.value?.score
+  ?? reportDetail.value?.overallScore
+  ?? currentReportData.value?.overallScore
+  ?? null
+))
 
 function onResultScroll() {
   const el = resultContentRef.value
@@ -273,7 +289,7 @@ function getScoreColor(score) {
           </button>
         </div>
 
-        <div v-if="isThinking || generatedContent" class="result-section">
+        <div v-if="isThinking || generatedContent || reportDetail || currentReportData" class="result-section">
           <div class="section-title">评估结果</div>
 
           <div v-if="isThinking && !generatedContent" class="thinking-bar">
@@ -283,23 +299,10 @@ function getScoreColor(score) {
 
           <ReasoningTrace :entries="reasoningEntries" :running="isGenerating" />
 
-          <div v-if="reportDetail?.scores" class="score-cards">
-            <div v-for="(score, key) in reportDetail.scores" :key="key" class="score-card">
-              <div class="score-ring">
-                <svg viewBox="0 0 100 100">
-                  <circle cx="50" cy="50" r="40" fill="none" stroke="var(--color-border-light)" stroke-width="6"/>
-                  <circle cx="50" cy="50" r="40" fill="none" :stroke="getScoreColor(score)" stroke-width="6"
-                    :stroke-dasharray="`${score * 2.51} 251`"
-                    stroke-linecap="round"
-                    transform="rotate(-90 50 50)"
-                    style="transition: stroke-dasharray 0.6s ease"
-                  />
-                </svg>
-                <div class="score-value" :style="{ color: getScoreColor(score) }">{{ score }}</div>
-              </div>
-              <div class="score-label">{{ key }}</div>
-            </div>
-          </div>
+          <AssessmentRadarChart
+            :dimensions="radarDimensions"
+            :overall-score="radarOverallScore"
+          />
 
           <div ref="resultContentRef" v-if="generatedContent" class="result-content markdown-body" @scroll="onResultScroll" v-html="renderMarkdown(generatedContent)"></div>
 
@@ -581,48 +584,6 @@ function getScoreColor(score) {
 @keyframes bounce {
   0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
   40% { transform: scale(1); opacity: 1; }
-}
-
-.score-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 14px;
-  margin-bottom: 20px;
-}
-
-.score-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 16px 12px;
-  background: var(--color-bg-base);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-lg);
-}
-
-.score-ring {
-  position: relative;
-  width: 64px;
-  height: 64px;
-  svg { width: 100%; height: 100%; }
-}
-
-.score-value {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.1rem;
-  font-weight: 800;
-}
-
-.score-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--color-text-medium);
-  text-align: center;
 }
 
 .result-content {

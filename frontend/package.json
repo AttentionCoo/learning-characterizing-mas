@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "vite --open",
     "build": "vite build",
+    "test": "node --test tests/*.test.js",
     "preview": "vite preview",
     "lint": "eslint . --fix",
     "format": "prettier --write src/"
