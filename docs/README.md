@@ -34,6 +34,7 @@
 ## 竞赛交付材料
 
 - [中国软件杯技术说明](competition/中国软件杯.md)
+- [竞赛报名表](competition/20260324.docx)
 - [答辩演示稿（2026-06-19 快照）](competition/LearnAgent答辩稿-2026-06-19.pptx)
 - [演示视频](competition/LearnAgent演示视频.mp4)
 
