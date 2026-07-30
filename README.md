@@ -200,7 +200,7 @@ learning-multi-agent-system/
 |-- docs/
 |   |-- api/                  权威接口文档
 |   |-- architecture/         需求、设计、算法、数据库、测试专题
-|   `-- competition/          竞赛说明与 Office 成品
+|   `-- competition/          竞赛说明与交付材料
 |-- scripts/                  辅助脚本
 |-- docker-compose.yml        本地容器编排
 `-- .env.example              环境变量模板
