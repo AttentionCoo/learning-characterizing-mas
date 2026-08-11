@@ -28,6 +28,9 @@ from app.config.qwen import (
 
 from .data_loader import load_pdfs_from_dir, split_documents
 from .qa_generator import QAGenerator
+from .labels import COLLECTIONS, partition_chunks_by_collection
+from .router import classify_evidence_type, route_collections
+from .scoring import MedicalEvidenceReranker
 
 
 load_dotenv(override=True)
@@ -46,6 +49,12 @@ CONFIG = {
         "data",
         "vector_stores",
         f"chroma_qwen_{_QWEN_VECTORSTORE_SUFFIX}_{_QWEN_EMBEDDING_DIMENSION}",
+    ),
+    "multi_persist_dir": os.getenv("QWEN_MULTI_VECTORSTORE_DIR") or os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+        "data",
+        "vector_stores",
+        f"chroma_multi_{_QWEN_VECTORSTORE_SUFFIX}_{_QWEN_EMBEDDING_DIMENSION}",
     ),
     "docs_dir": os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
@@ -196,8 +205,13 @@ class QwenReranker:
             )
             return reranked
         except Exception as exc:
-            logger.error(f"❌ Qwen Rerank 调用失败，使用 RRF 结果兜底: {exc}")
-            return docs[:actual_top_k]
+            # 兜底修复：rerank API 失败时不再退化为原始 embedding 顺序，
+            # 而是走 RRF 归一化 + 医学评分规则排序，保住医学排序。
+            logger.error(
+                f"❌ Qwen Rerank 调用失败，使用 RRF 归一化 + 医学评分兜底: {exc}"
+            )
+            fallback = MedicalEvidenceReranker(top_k=actual_top_k, api_key=None)
+            return fallback.fallback_rerank(query, docs, top_k=actual_top_k)
 
 
 def reciprocal_rank_fusion(
@@ -553,3 +567,321 @@ class UnifiedSearchEngine:
 
     def clear_cache(self):
         self.retriever.clear_cache()
+
+
+# ═══════════════════════════════════════════════════════════════
+# Multi-Collection 物理隔离检索引擎（v2.7）
+#
+# 链路：
+#   问题 → Clinical Decision Planner（决策节点）
+#        → Evidence Router（证据类型）
+#        → 路由到隔离 collection（anatomy/guideline/etiology/treatment/prevention）
+#            → 各库内 向量+BM25 混合检索
+#                → 跨库 RRF 融合
+#                    → BGEReranker 医学评分重排（语义+类型+权威+时效+主题+干预+惩罚）
+#                        → Mismatch Filter → 输出
+#
+# 核心收益：把"事后过滤"变成"入口约束"——血脂指南 chunk 物理上不在
+# anatomy collection 里，连候选集都进不了。
+# ═══════════════════════════════════════════════════════════════
+
+
+def build_multi_collection_vectorstore(
+    chunks_by_collection: dict,
+    persist_dir: str,
+    client=None,
+    embeddings=None,
+):
+    """
+    按主题把带标签的 chunks 写入 5 个隔离 collection。
+
+    每个 collection 使用独立 collection_name（anatomy/guideline/etiology/
+    treatment/prevention），共享同一个 PersistentClient 目录。
+    已有数据的 collection 跳过写入（幂等重建）。
+    """
+    import chromadb
+
+    embeddings = embeddings or QwenEmbeddings()
+    expected_metadata = {
+        "embedding_provider": "qwen",
+        "embedding_model": embeddings.model,
+        "embedding_dimension": embeddings.dimension,
+    }
+    client = client or chromadb.PersistentClient(path=persist_dir)
+
+    created = {}
+    for collection_name in COLLECTIONS:
+        chunks = chunks_by_collection.get(collection_name, [])
+        vectordb = Chroma(
+            client=client,
+            collection_name=collection_name,
+            collection_metadata=expected_metadata,
+            embedding_function=embeddings,
+        )
+        count = vectordb._collection.count()
+        if count > 0:
+            logger.info(
+                f"✅ collection[{collection_name}] 已有 {count} 条，跳过写入"
+            )
+            created[collection_name] = vectordb
+            continue
+        if not chunks:
+            logger.info(f"ℹ️ collection[{collection_name}] 为空且无候选 chunk")
+            created[collection_name] = vectordb
+            continue
+
+        batch_size = 32
+        total = len(chunks)
+        logger.info(
+            f"📝 collection[{collection_name}] 写入 {total} 条 chunk..."
+        )
+        for start in range(0, total, batch_size):
+            batch = chunks[start:start + batch_size]
+            try:
+                vectordb.add_documents(documents=batch)
+            except Exception as exc:
+                raise RuntimeError(
+                    f"collection[{collection_name}] 写入失败（起始索引 {start}）: {exc}"
+                ) from exc
+            processed = min(start + batch_size, total)
+            logger.info(
+                f"  collection[{collection_name}] 进度: {processed}/{total}"
+            )
+        created[collection_name] = vectordb
+    return created
+
+
+class MultiCollectionSearchEngine:
+    """
+    决策驱动路由 + 物理隔离知识库 + 医学规则重排 的统一检索入口。
+
+    对外保持与 UnifiedSearchEngine 兼容的接口：
+        - .chunks         所有带标签的 chunk（main.py 统计文档列表用）
+        - .search(query, top_k_final=None, top_k=None) -> List[Document]
+        - .clear_cache()
+        - .get_collection_stats() -> dict  （每库数量，诊断/测试用）
+    """
+
+    def __init__(
+        self,
+        persist_dir: str | None = None,
+        top_k: int = 3,
+        docs_dir=None,
+        enable_qa: bool = False,
+    ):
+        logger.info("🔧 初始化 MultiCollectionSearchEngine（5 库物理隔离）...")
+        self.top_k = top_k
+        self.docs_dir = (
+            docs_dir
+            or os.getenv("MEDICAL_DOCS_DIR")
+            or CONFIG.get("docs_dir", "./data/documents")
+        )
+        self.persist_dir = persist_dir or CONFIG.get("multi_persist_dir")
+        self.recall_k = CONFIG.get("recall_k", 20)
+        self.rrf_top_k = CONFIG.get("rrf_top_k", 20)
+        logger.info(f"📂 文档目录: {self.docs_dir}")
+        logger.info(f"🗄️  向量库目录: {self.persist_dir}")
+
+        # 1. 加载 + 分块
+        try:
+            raw_docs = load_pdfs_from_dir(self.docs_dir)
+        except Exception as exc:
+            logger.error(f"❌ 加载文档失败: {exc}")
+            raw_docs = []
+        self.chunks = split_documents(raw_docs) if raw_docs else []
+        logger.info(f"🔀 分块完成: {len(self.chunks)} 个 chunk")
+
+        # 2. chunk 级结构化标签 + 分库
+        self.collection_chunks = partition_chunks_by_collection(self.chunks)
+
+        # 3. 构建/加载各库（Chroma + BM25）
+        self.stores: dict = {}
+        self._init_stores(enable_qa=enable_qa)
+
+        # 4. 医学评分重排器（BGEReranker API 优先，RRF 归一化兜底）
+        self.reranker = MedicalEvidenceReranker(
+            top_k=top_k,
+            api_key=get_qwen_api_key(required=False),
+            model=get_qwen_rerank_model(),
+        )
+
+        self._cache: dict = {}
+        self._cache_ttl = 300
+        logger.info("✅ MultiCollectionSearchEngine 初始化完成")
+        self.log_collection_stats()
+
+    # ── 构建 ──
+    def _init_stores(self, enable_qa: bool = False):
+        """每个 collection 一个 Chroma + BM25。空库自动写入（幂等）。"""
+        try:
+            vectorstores = build_multi_collection_vectorstore(
+                self.collection_chunks,
+                self.persist_dir,
+            )
+        except Exception as exc:
+            logger.error(
+                f"❌ 多库向量库初始化失败，检索将仅使用 BM25: {exc}"
+            )
+            vectorstores = {c: None for c in COLLECTIONS}
+
+        for collection in COLLECTIONS:
+            chunks = self.collection_chunks.get(collection, [])
+            bm25 = None
+            if chunks:
+                try:
+                    bm25 = BM25Retriever.from_documents(chunks)
+                    bm25.k = self.recall_k
+                except Exception as exc:
+                    logger.warning(
+                        f"⚠️ collection[{collection}] BM25 初始化失败: {exc}"
+                    )
+            self.stores[collection] = {
+                "vectorstore": vectorstores.get(collection),
+                "bm25": bm25,
+                "chunks": chunks,
+            }
+
+    def log_collection_stats(self):
+        for collection in COLLECTIONS:
+            store = self.stores.get(collection, {})
+            chunks = store.get("chunks", [])
+            vectorstore = store.get("vectorstore")
+            vec_count = (
+                vectorstore._collection.count()
+                if vectorstore is not None
+                else 0
+            )
+            logger.info(
+                f"  📚 collection[{collection}]: {len(chunks)} chunks | "
+                f"向量 {vec_count} 条"
+            )
+
+    def get_collection_stats(self) -> dict:
+        """每库 chunk 数（测试与诊断用）。"""
+        return {
+            collection: len(self.stores.get(collection, {}).get("chunks", []))
+            for collection in COLLECTIONS
+        }
+
+    # ── 检索 ──
+    def search(
+        self,
+        query: str,
+        top_k_final: int | None = None,
+        evidence_type: str | None = None,
+        decision_nodes=None,
+        top_k: int | None = None,
+    ) -> List[Document]:
+        """
+        决策驱动检索主入口。
+
+        参数:
+            query: 用户查询（临床语言）
+            top_k_final / top_k: 最终返回条数（兼容两种调用方）
+            evidence_type: 证据类型；None 时自动路由（Evidence Router）
+            decision_nodes: Clinical Decision Planner 输出的决策节点（可空）
+
+        返回:
+            按 medical_score 降序的 top-k 文档
+        """
+        actual_top_k = top_k_final or top_k or self.top_k
+        cache_key = hashlib.md5(
+            f"{query}_{actual_top_k}_{evidence_type or ''}_{(decision_nodes or [])}"
+            .encode("utf-8")
+        ).hexdigest()
+        if cache_key in self._cache:
+            result, ts = self._cache[cache_key]
+            if time.time() - ts < self._cache_ttl:
+                logger.info(f"⚡ [MultiCollection] 缓存命中: {query[:50]}...")
+                return result
+            del self._cache[cache_key]
+
+        logger.info(f"🔍 [MultiCollection] 检索: {query[:60]}...")
+
+        # 1. Evidence Router：判定证据类型
+        if evidence_type is None:
+            evidence_type = classify_evidence_type(query, decision_nodes)
+        # 2. 路由到隔离 collection（入口约束）
+        #    主库 + 相关库（如 treatment+guideline），实现"跨 collection RRF 融合"；
+        #    anatomy 等无相关库的类型仍严格隔离——血脂 chunk 物理上进不了候选集。
+        collections = route_collections(evidence_type, strict=False)
+        logger.info(
+            f"🚦 [路由] evidence_type={evidence_type} → collections={collections}"
+        )
+
+        # 3. 各库内 向量 + BM25 混合检索（宽召回）
+        v_docs: List[Document] = []
+        b_docs: List[Document] = []
+        for collection in collections:
+            store = self.stores.get(collection)
+            if store is None:
+                continue
+            vectorstore = store.get("vectorstore")
+            if vectorstore is not None:
+                try:
+                    v_docs.extend(
+                        vectorstore.as_retriever(
+                            search_kwargs={"k": self.recall_k}
+                        ).invoke(query)
+                    )
+                except Exception as exc:
+                    logger.error(
+                        f"❌ collection[{collection}] 向量检索失败: {exc}"
+                    )
+            bm25 = store.get("bm25")
+            if bm25 is not None:
+                try:
+                    b_docs.extend(bm25.invoke(query))
+                except Exception as exc:
+                    logger.error(
+                        f"❌ collection[{collection}] BM25 检索失败: {exc}"
+                    )
+
+        if not v_docs and not b_docs:
+            logger.warning("⚠️ 所有目标 collection 检索结果为空")
+            self._cache[cache_key] = ([], time.time())
+            return []
+
+        logger.info(
+            f"📥 [宽召回] 向量 {len(v_docs)} 条 + BM25 {len(b_docs)} 条"
+        )
+
+        # 4. 跨库 RRF 粗排
+        coarse = reciprocal_rank_fusion(
+            v_docs, b_docs, k=60, top_k=self.rrf_top_k
+        )
+        logger.info(f"🎯 [RRF 粗排] {len(v_docs) + len(b_docs)} → {len(coarse)} 条")
+
+        # 5. Mismatch Filter：剔除主题不匹配的 chunk（防御性，入口约束已兜底）
+        filtered = [
+            doc for doc in coarse
+            if doc.metadata.get("collection") in collections
+        ]
+        if filtered:
+            coarse = filtered
+
+        # 6. BGEReranker 医学评分重排
+        result = self.reranker.rerank(
+            query,
+            coarse,
+            evidence_type=evidence_type,
+            top_k=actual_top_k,
+        )
+
+        for i, doc in enumerate(result):
+            logger.info(
+                f"  Final #{i+1}: medical={doc.metadata.get('medical_score', '?')} "
+                f"| {doc.metadata.get('source', '?')} "
+                f"p.{doc.metadata.get('page', '?')} "
+                f"[{doc.metadata.get('subtopic_name', doc.metadata.get('subtopic', '?'))}] "
+                f"{doc.page_content[:50]}..."
+            )
+
+        self._cache[cache_key] = (result, time.time())
+        return result
+
+    def clear_cache(self):
+        count = len(self._cache)
+        self._cache.clear()
+        if count > 0:
+            logger.info(f"🗑️ [MultiCollection] 清空 {count} 条检索缓存")
