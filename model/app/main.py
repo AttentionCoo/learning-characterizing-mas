@@ -24,7 +24,7 @@ from app.config.qwen import (
     get_qwen_base_url,
     get_qwen_chat_model_name,
 )
-from app.rag.retrievers import CONFIG, UnifiedSearchEngine
+from app.rag.retrievers import CONFIG, MultiCollectionSearchEngine
 from app.routers import admin, code, evaluation, medical, profile, stream
 from app.runtime import resources
 from app.agents.orchestrators.nodes.vision_node import VisionAnalysisNode
@@ -111,8 +111,8 @@ def init_all_resources():
     logger.info("  ✅ 上下文摘要服务初始化完成")
 
     logger.info("🔍 [4/10] 初始化向量检索引擎...")
-    retriever = UnifiedSearchEngine(
-        persist_dir=CONFIG.get("persist_dir", "./chroma_db_unified"),
+    retriever = MultiCollectionSearchEngine(
+        persist_dir=CONFIG.get("multi_persist_dir", "./chroma_db_multi"),
         top_k=CONFIG.get("top_k_final", 3)
     )
 
