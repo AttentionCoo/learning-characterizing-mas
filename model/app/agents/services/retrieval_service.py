@@ -82,12 +82,15 @@ class EvidenceRetrievalService:
             if authority:
                 tags.append(f"权威:{authority}")
             tag_str = f"({')('.join(tags)})" if tags else ""
+            # 标签单独放一行，保证 "(相关度:score)" 后紧跟换行，
+            # 否则 reasoning_trace.parse_retrieval_evidence 的正则无法解析证据
+            tag_line = f"{tag_str}\n" if tag_str else ""
 
             results.append(
                 f"【文献{i+1}】"
                 f"[来源:{source} p.{page}]"
-                f"(相关度:{score})"
-                f"{tag_str}\n"
+                f"(相关度:{score})\n"
+                f"{tag_line}"
                 f"{content}"
             )
 

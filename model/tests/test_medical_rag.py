@@ -368,3 +368,40 @@ def test_route_collections_treatment_with_related():
     """非 strict 模式：treatment 主库 + guideline 相关库（跨库 RRF 融合）。"""
     collections = route_collections("treatment", strict=False)
     assert collections == ["treatment", "guideline"]
+
+
+# ═══════════════════════════════════════════════════════════════
+# 8. 检索证据格式与解析（防止标签破坏 parse_retrieval_evidence 回归）
+# ═══════════════════════════════════════════════════════════════
+
+
+def test_retrieve_single_format_parseable():
+    """retrieve_single 输出(带主题/干预/年份/权威标签)必须能被 parse_retrieval_evidence 解析。"""
+    from app.agents.services.retrieval_service import EvidenceRetrievalService
+    from app.agents.utils.reasoning_trace import parse_retrieval_evidence
+
+    class FakeRetriever:
+        def search(self, query, top_k=None, evidence_type=None, decision_nodes=None):
+            return [Document(
+                page_content="静脉溶栓治疗急性缺血性卒中的推荐意见",
+                metadata={
+                    "source": "中国急性缺血性卒中诊治指南2023.pdf",
+                    "page": 5,
+                    "medical_score": 0.85,
+                    "subtopic_name": "再灌注治疗",
+                    "interventions": ["iv_thrombolysis"],
+                    "year": 2023,
+                    "authority": "guideline",
+                },
+            )]
+
+    service = EvidenceRetrievalService(FakeRetriever(), top_k=3)
+    evidence = service.retrieve_single("静脉溶栓的适应证")
+
+    # 关键：第一行 "(相关度:0.85)" 后必须紧跟换行，标签独立成行
+    assert "(相关度:0.85)\n" in evidence
+
+    sources = parse_retrieval_evidence(evidence)
+    assert sources, f"检索证据应能被解析出 sources，实际 evidence={evidence!r}"
+    assert sources[0]["guide"] == "中国急性缺血性卒中诊治指南2023"
+    assert sources[0]["page"] == "5"
