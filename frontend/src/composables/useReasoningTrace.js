@@ -20,6 +20,7 @@ export function useReasoningTrace() {
       title: event.title || 'AI 正在处理',
       content: event.content || '',
       sources: event.sources || [],
+      debate: event.debate || null,
     })
   }
 

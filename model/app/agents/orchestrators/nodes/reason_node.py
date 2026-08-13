@@ -179,6 +179,7 @@ class ReasonNode(BaseNode):
             "critique": critique_text,
             "active_experts": active_experts,
             "debate_history": debate_history,
+            "arbitration_result": arbitration_result or "",
             "motivational_feedback": motivational_feedback,
         }
 

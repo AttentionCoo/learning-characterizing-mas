@@ -96,6 +96,23 @@ export function sseStreamRequest(url, params, { onChunk, onThinking, timeout = 3
           onThinking(trace)
           return
         }
+        if (type === 'debate' && onThinking) {
+          const trace = {
+            phase: 'debate',
+            step: 'debate',
+            title: '多专家辩论与仲裁',
+            content: '',
+            sources: [],
+            debate: {
+              rounds: data.rounds || 0,
+              history: Array.isArray(data.history) ? data.history : [],
+              arbitration: data.arbitration || '',
+            },
+          }
+          console.info('[AI 辩论]', `${trace.debate.rounds} 条辩论记录`)
+          onThinking(trace)
+          return
+        }
         if (type === 'chunk' || type === 'result' || type === 'token' || type === 'replace') {
           const content = data.content || ''
           const replace = type === 'replace'

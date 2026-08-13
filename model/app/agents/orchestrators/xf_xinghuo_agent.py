@@ -131,6 +131,7 @@ class LearningAgent:
             "agent_weights": {},
             "rejection_categories": [],
             "debate_history": [],
+            "arbitration_result": "",
             "active_experts": [],
             "motivational_feedback": "",
             "profile_summary": profile_summary,
@@ -169,6 +170,14 @@ class LearningAgent:
                     ):
                         output = event.get("data", {}).get("output", {})
                         yield self._build_node_done_event(event.get("name", ""), output)
+
+                    # 辩论内容输出到前端流：reason 节点完成时推送完整辩论记录 + 仲裁裁决
+                    if event.get("event") == "on_chain_end" and event.get("name") == "reason":
+                        debate_event = self._build_debate_event(
+                            event.get("data", {}).get("output", {})
+                        )
+                        if debate_event:
+                            yield debate_event
 
         except Exception as e:
             logger.error(f"学习推理管线异常 | {format_error_log(e)}")
@@ -294,6 +303,22 @@ class LearningAgent:
             "node": name,
             "summary": summary,
             **trace,
+        }
+
+    def _build_debate_event(self, output: dict):
+        """把 reason 节点的辩论记录 + 仲裁裁决封装成前端流事件。"""
+        if not isinstance(output, dict):
+            return None
+        debate_history = output.get("debate_history", []) or []
+        arbitration = output.get("arbitration_result", "") or ""
+        if not debate_history and not arbitration:
+            return None
+        return {
+            "type": "debate",
+            "node": "reason",
+            "rounds": len(debate_history),
+            "history": debate_history,
+            "arbitration": arbitration,
         }
 
     def _node_summary(self, node: str, output: dict) -> str:

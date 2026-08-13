@@ -42,6 +42,7 @@ class LearningState(TypedDict):
     agent_weights: Dict
     rejection_categories: List[str]
     debate_history: List[Dict]
+    arbitration_result: str
     active_experts: List[str]
     motivational_feedback: str
     profile_summary: str

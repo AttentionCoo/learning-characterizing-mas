@@ -25,6 +25,7 @@ watch(
 function phaseLabel(phase) {
   if (phase === 'start') return '开始'
   if (phase === 'done') return '完成'
+  if (phase === 'debate') return '辩论'
   return '处理中'
 }
 </script>
@@ -56,6 +57,24 @@ function phaseLabel(phase) {
               <span class="step-title">{{ entry.title }}</span>
             </div>
             <p v-if="entry.content" class="step-content">{{ entry.content }}</p>
+
+            <div v-if="entry.debate && entry.debate.history && entry.debate.history.length" class="debate-block">
+              <div class="debate-heading">
+                多专家辩论（{{ entry.debate.rounds }} 条发言）
+              </div>
+              <div
+                v-for="(item, index) in entry.debate.history"
+                :key="`${entry.key}-debate-${index}`"
+                class="debate-item"
+              >
+                <div class="debate-role">第 {{ item.round }} 轮 · {{ item.role }}</div>
+                <blockquote>{{ item.content }}</blockquote>
+              </div>
+              <div v-if="entry.debate.arbitration" class="debate-item arbitration">
+                <div class="debate-role">仲裁裁决</div>
+                <blockquote>{{ entry.debate.arbitration }}</blockquote>
+              </div>
+            </div>
 
             <div v-if="entry.sources?.length" class="source-list">
               <div v-for="(source, index) in entry.sources" :key="`${entry.key}-${index}`" class="source-item">
@@ -301,6 +320,55 @@ blockquote {
   font-size: 12px;
   line-height: 1.65;
   overflow-wrap: anywhere;
+}
+
+.debate-block {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid #e2d9f0;
+  border-radius: 8px;
+  background: #faf8ff;
+}
+
+.debate-heading {
+  margin-bottom: 8px;
+  color: #5b21b6;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.debate-item {
+  padding: 6px 0;
+}
+
+.debate-item + .debate-item {
+  border-top: 1px dashed #e4ddf2;
+}
+
+.debate-role {
+  color: #7c3aed;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.debate-item blockquote {
+  border-left-color: #a78bfa;
+  background: #ffffff;
+}
+
+.debate-item.arbitration {
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid #c4b5fd;
+}
+
+.debate-item.arbitration .debate-role {
+  color: #b45309;
+}
+
+.debate-item.arbitration blockquote {
+  border-left-color: #f59e0b;
+  background: #fffbeb;
 }
 
 @media (max-width: 640px) {
