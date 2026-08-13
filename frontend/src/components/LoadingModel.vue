@@ -179,7 +179,7 @@ onBeforeUnmount(() => {
   inset: 8px;
   border-radius: 50%;
   border: 3px solid transparent;
-  border-bottom-color: #11967f;
+  border-bottom-color: var(--color-primary);
   border-left-color: rgba(139, 92, 246, 0.4);
   animation: dreamy-spin 2s linear infinite reverse;
 }

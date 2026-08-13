@@ -588,3 +588,23 @@
     opacity: 1;
   }
 }
+
+// ─────────────────── 无障碍：减少动态效果 ───────────────────
+// 尊重系统「减弱动态效果」设置，关闭所有装饰性动画与过渡，
+// 避免常驻流光/浮动光球对前庭敏感用户造成不适，并降低 GPU 占用。
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  // 背景光球与装饰性粒子直接隐藏，彻底消除持续渲染开销
+  .cosmic-bg,
+  .floating-orbs {
+    display: none;
+  }
+}

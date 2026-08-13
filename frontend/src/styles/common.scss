@@ -746,13 +746,13 @@ input.auth-input:-webkit-autofill:focus {
   border-radius: var(--radius-lg);
   background: var(--gradient-aurora);
   background-size: 200% 200%;
-  animation: aurora-flow 4s ease infinite;
+  background-position: 0% 50%;
   color: #fff;
   font: inherit;
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
-  transition: all var(--transition-bounce);
+  transition: all var(--transition-bounce), background-position 0.6s ease;
   position: relative;
   overflow: hidden;
 
@@ -761,13 +761,20 @@ input.auth-input:-webkit-autofill:focus {
     position: absolute;
     inset: 0;
     background: var(--gradient-shimmer);
-    animation: shimmer 2.5s ease-in-out infinite;
+    opacity: 0;
+    transition: opacity 0.3s ease;
     pointer-events: none;
   }
 
   &:hover:not(:disabled) {
     transform: translateY(-2px);
     box-shadow: var(--glow-aurora);
+    background-position: 100% 50%;
+  }
+
+  &:hover:not(:disabled)::after {
+    opacity: 1;
+    animation: shimmer 1.6s ease-in-out infinite;
   }
 
   &:active:not(:disabled) {

@@ -129,7 +129,7 @@ details[open] .trace-header { border-bottom-color: #e4eaed; }
   height: 28px;
   place-items: center;
   border-radius: 6px;
-  background: #0f766e;
+  background: var(--color-primary-dark);
   color: #ffffff;
   font-size: 10px;
   font-weight: 800;

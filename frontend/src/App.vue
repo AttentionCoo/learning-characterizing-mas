@@ -111,35 +111,36 @@ body,
 .orb {
   position: absolute;
   border-radius: 50%;
-  filter: blur(60px);
-  opacity: 0.18;
-  animation: float-wide 16s ease-in-out infinite;
+  filter: blur(40px);
+  opacity: 0.12;
+  animation: float-wide 20s ease-in-out infinite;
+  will-change: transform;
 
   &.orb-1 {
-    width: 350px;
-    height: 350px;
-    background: radial-gradient(circle, rgba(139, 92, 246, 0.5), transparent);
+    width: 320px;
+    height: 320px;
+    background: radial-gradient(circle, rgba(139, 92, 246, 0.45), transparent);
     top: -8%;
     right: 10%;
     animation-delay: 0s;
   }
 
   &.orb-2 {
-    width: 280px;
-    height: 280px;
-    background: radial-gradient(circle, rgba(14, 165, 233, 0.4), transparent);
+    width: 260px;
+    height: 260px;
+    background: radial-gradient(circle, rgba(14, 165, 233, 0.35), transparent);
     bottom: -5%;
     left: 5%;
-    animation-delay: -6s;
+    animation-delay: -7s;
   }
 
   &.orb-3 {
-    width: 220px;
-    height: 220px;
-    background: radial-gradient(circle, rgba(16, 185, 129, 0.35), transparent);
+    width: 200px;
+    height: 200px;
+    background: radial-gradient(circle, rgba(16, 185, 129, 0.3), transparent);
     top: 45%;
     left: 55%;
-    animation-delay: -11s;
+    animation-delay: -13s;
   }
 }
 </style>
