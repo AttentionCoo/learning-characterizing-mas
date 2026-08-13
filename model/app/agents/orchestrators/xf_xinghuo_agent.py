@@ -1,6 +1,5 @@
 import logging
 import asyncio
-import json
 from typing import AsyncGenerator, Dict
 from langchain_core.messages import SystemMessage, HumanMessage
 from app.agents.core.schema import LearningState
@@ -12,6 +11,7 @@ from app.agents.orchestrators.nodes.reason_node import ReasonNode
 from app.agents.orchestrators.nodes.validate_node import ValidateNode
 from app.agents.orchestrators.nodes.report_node import ReportNode
 from app.agents.utils.reasoning_trace import build_node_trace
+from app.agents.utils.json_parser import JsonParser
 from app.utils.error_codes import build_error_event, format_error_log
 
 logger = logging.getLogger(__name__)
@@ -379,7 +379,7 @@ class LearningAgent:
 
         try:
             response = await self.llm_critic.ainvoke([HumanMessage(content=prompt)])
-            result = self._parse_json(getattr(response, "content", ""), {}) or {}
+            result = JsonParser.parse(getattr(response, "content", ""), {}) or {}
             payload = {
                 "riskLevel": result.get("riskLevel", "中风险"),
                 "suggestion": result.get("suggestion", "建议结合学习情况进一步评估。"),
@@ -397,25 +397,3 @@ class LearningAgent:
                 "suggestion": "建议结合学习情况进一步评估。",
                 "analysisDetails": "系统已完成基础风险评估，但详细分析生成失败。",
             }
-
-    def _parse_json(self, text: str, default=None):
-        content = (text or "").strip()
-        try:
-            return json.loads(content)
-        except Exception:
-            pass
-        for marker in ["```json", "```"]:
-            if marker in content:
-                try:
-                    s = content.split(marker)[1].split("```")[0].strip()
-                    return json.loads(s)
-                except Exception:
-                    pass
-        for sc, ec in [("{", "}"), ("[", "]")]:
-            si, ei = content.find(sc), content.rfind(ec)
-            if si != -1 and ei > si:
-                try:
-                    return json.loads(content[si:ei + 1])
-                except Exception:
-                    pass
-        return default

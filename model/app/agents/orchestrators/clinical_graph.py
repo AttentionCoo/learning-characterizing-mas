@@ -157,7 +157,6 @@ class LearningGraphBuilder:
         """analysis 节点之后的条件路由：有医学影像走 vision，否则直接 retrieve"""
         images = state.get("images", [])
         has_images = bool(images)
-        state["has_medical_images"] = has_images
         if has_images:
             logger.info(f"[graph] 检测到 {len(images)} 张医学影像 → 路由到 vision 节点")
             return "vision"
@@ -170,10 +169,9 @@ class LearningGraphBuilder:
         findings = state.get("vision_findings")
 
         if not is_stroke_related:
-            # 获取影像类型用于提示
+            # 获取影像类型用于提示（仅在日志中使用，不做 state 副作用）
             image_type = findings.get("image_type", "unknown") if findings else "unknown"
             logger.info(f"[graph] 影像与脑卒中无关 (类型: {image_type}) → 路由到 reject_image")
-            state["_reject_image_type"] = image_type
             return "reject"
 
         logger.info(f"[graph] 影像与脑卒中相关 → 路由到 retrieve")
@@ -188,8 +186,8 @@ class LearningGraphBuilder:
     async def _reject_image_node(self, state: LearningState) -> dict:
         """当上传的影像与脑卒中无关时的拒绝消息"""
         gate_result = state.get("_gate_result", "")
-        image_type = state.get("_reject_image_type", "")
-        findings = state.get("vision_findings", {})
+        findings = state.get("vision_findings") or {}
+        image_type = findings.get("image_type", "") if isinstance(findings, dict) else ""
 
         if gate_result == "rejected_by_precheck":
             # Tier 0 预校验直接拒绝（格式/大小/数量问题）

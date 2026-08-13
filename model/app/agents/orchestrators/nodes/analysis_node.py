@@ -5,6 +5,7 @@ from langchain_core.messages import HumanMessage
 from app.agents.core.schema import LearningState
 from app.agents.orchestrators.nodes.base import BaseNode
 from app.agents.constants import MAX_SUB_QUESTIONS
+from app.agents.utils.json_parser import JsonParser
 
 logger = logging.getLogger(__name__)
 
@@ -154,7 +155,7 @@ class AnalysisNode(BaseNode):
 - user_questions: 若输入中学生明确提出了若干具体问题，请将每个问题原文提取为字符串数组；若无，则返回空数组。"""
 
         response = await self.llm.ainvoke([HumanMessage(content=prompt)])
-        result = self._parse_json(getattr(response, "content", ""), None)
+        result = JsonParser.parse(getattr(response, "content", ""), None)
 
         if result and isinstance(result, dict):
             result.setdefault("user_questions", [])
@@ -178,25 +179,3 @@ class AnalysisNode(BaseNode):
             "learning_path": "路径规划方向：重点生成学习阶段、时间安排、目标分解类问题。",
         }
         return hints.get(intent_type, "综合分析方向：按学习需求优先级生成最需分析的问题，优先覆盖核心需求。")
-
-    def _parse_json(self, text: str, default=None):
-        content = (text or "").strip()
-        try:
-            return json.loads(content)
-        except Exception:
-            pass
-        for marker in ["```json", "```"]:
-            if marker in content:
-                try:
-                    s = content.split(marker)[1].split("```")[0].strip()
-                    return json.loads(s)
-                except Exception:
-                    pass
-        for sc, ec in [("{", "}"), ("[", "]")]:
-            si, ei = content.find(sc), content.rfind(ec)
-            if si != -1 and ei > si:
-                try:
-                    return json.loads(content[si:ei + 1])
-                except Exception:
-                    pass
-        return default
