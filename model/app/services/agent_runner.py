@@ -108,6 +108,9 @@ async def run_agent_background(
             "type": "done",
             "taskId": task_id,
             "title": generated_name or "生成完成",
+            # Java 后端通过 name 字段读取标题并持久化（tryUpdateTalkTitle），
+            # 这里必须与 title 同步下发，否则命名结果会丢失。
+            "name": generated_name or "",
         }
 
         if update_all_info and result_text and resources.get("context_summary") and executor:
