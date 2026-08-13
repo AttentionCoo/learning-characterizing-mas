@@ -308,6 +308,12 @@ class ReasonNode(BaseNode):
         debate_roles = [r for r in expert_roles if r != self.arbitrator_role]
         debate_results_map = dict(zip(expert_roles, initial_results))
 
+        # 打印辩论内容：各专家初始观点
+        logger.info("[reason] ══════════ 辩论开始 ══════════")
+        for role, opinion in debate_results_map.items():
+            if role != self.arbitrator_role:
+                logger.info(f"[reason][辩论·初始观点] {role}:\n{opinion}")
+
         round_num = 0
         for round_num in range(1, self.debate_max_rounds + 1):
             logger.info(f"[reason] 辩论第 {round_num}/{self.debate_max_rounds} 轮")
@@ -329,6 +335,8 @@ class ReasonNode(BaseNode):
                     "role": role,
                     "content": response,
                 })
+                # 打印辩论内容：每位专家每轮发言
+                logger.info(f"[reason][辩论·第{round_num}轮] {role}:\n{response}")
 
             logger.info(f"[reason] 辩论第 {round_num} 轮完成，{len(debate_round_results)} 位专家发言")
 
@@ -410,7 +418,9 @@ class ReasonNode(BaseNode):
                 HumanMessage(content=prompt)
             ])
             content = getattr(res, "content", "")
-            logger.info(f"[reason] 仲裁裁决完成，长度: {len(content)}")
+            # 打印辩论内容：仲裁裁决全文
+            logger.info("[reason] ══════════ 仲裁裁决 ══════════")
+            logger.info(f"[reason][仲裁·裁决] {self.arbitrator_role}:\n{content}")
             return content
         except Exception as e:
             logger.error(f"[reason] 仲裁裁决失败: {e}")
