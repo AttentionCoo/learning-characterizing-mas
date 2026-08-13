@@ -9,6 +9,13 @@ from app.agents.utils.text_utils import truncate_text
 
 logger = logging.getLogger(__name__)
 
+# 不适合 RAG 检索脑卒中知识库的功能前缀：
+# - profile_build：画像构建，输入是学生背景信息而非医学知识
+# - assessment：学习效果评估，分析学生学习状态
+# - learning_path：路径规划，规划学习阶段/时间安排
+# 这些功能分析的是「学生」而非「脑卒中医学知识」，检索知识库会引入无关 chunk 干扰推理。
+_RAG_SKIP_REPORT_MODE_PREFIXES = ("profile_build", "assessment", "learning_path")
+
 
 class RetrieveNode(BaseNode):
 
@@ -17,6 +24,13 @@ class RetrieveNode(BaseNode):
         self.shared_memory_system = shared_memory_system
 
     async def run(self, state: LearningState) -> Dict:
+        report_mode = state.get("report_mode", "")
+        if report_mode.startswith(_RAG_SKIP_REPORT_MODE_PREFIXES):
+            logger.info(
+                f"[retrieve] 功能 {report_mode} 不适合 RAG 检索脑卒中知识库，跳过检索"
+            )
+            return {"evidence": "", "retrieval_sources": []}
+
         evidence = await self.learning_assistant.afast_parallel_retrieve(
             state["learning_questions"]
         )
