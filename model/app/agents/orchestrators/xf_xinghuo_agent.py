@@ -173,10 +173,16 @@ class LearningAgent:
 
                     # 辩论内容输出到前端流：reason 节点完成时推送完整辩论记录 + 仲裁裁决
                     if event.get("event") == "on_chain_end" and event.get("name") == "reason":
-                        debate_event = self._build_debate_event(
-                            event.get("data", {}).get("output", {})
+                        output = event.get("data", {}).get("output", {})
+                        debate_event = self._build_debate_event(output)
+                        logger.info(
+                            "[event] reason节点结束 -> debate_event=%s, history=%s, arbitration_len=%s",
+                            bool(debate_event),
+                            len((output or {}).get("debate_history", []) or []),
+                            len((output or {}).get("arbitration_result", "") or ""),
                         )
                         if debate_event:
+                            logger.info("[event] ✅ 推送 debate 事件到前端 (rounds=%s)", debate_event.get("rounds"))
                             yield debate_event
 
         except Exception as e:

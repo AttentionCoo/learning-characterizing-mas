@@ -620,6 +620,19 @@ public class AIStreamingServiceImpl implements AIStreamingService {
                 return Flux.just(objectMapper.writeValueAsString(nodeDoneResp));
             }
 
+            // debate 事件：多专家辩论记录 + 仲裁裁决，原样透传前端
+            if ("debate".equalsIgnoreCase(type)) {
+                Map<String, Object> debateResp = baseResponse(talkId, generatedTitle[0], "debate");
+                debateResp.put("node", json.path("node").asText(""));
+                debateResp.put("rounds", json.path("rounds").asInt(0));
+                if (json.path("history").isArray()) {
+                    debateResp.put("history", objectMapper.convertValue(
+                            json.path("history"), new TypeReference<List<Map<String, Object>>>() {}));
+                }
+                debateResp.put("arbitration", json.path("arbitration").asText(""));
+                return Flux.just(objectMapper.writeValueAsString(debateResp));
+            }
+
             // ── 旧事件格式兼容（Python 回滚时仍能正常工作）──────────────────────────
 
             // heartbeat 事件：Python 端心跳保活，Java 侧静默丢弃，不透传前端
