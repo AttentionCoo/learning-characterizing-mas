@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.learnagent.cache.SSEEventCache;
 import com.learnagent.entity.Result;
 import com.learnagent.entity.Talk;
-import com.learnagent.param.QuesParam;
+import com.learnagent.param.QuestionParam;
 import com.learnagent.param.TutorChatParam;
 import com.learnagent.vo.InitialPageVO;
 import com.learnagent.service.AIStreamingService;
@@ -74,12 +74,12 @@ public class TutorController {
             questionBuilder.append("\n代码片段：\n").append(param.getCodeSnippet());
         }
 
-        QuesParam quesParam = new QuesParam();
-        quesParam.setTalkId(param.getTalkId());
-        quesParam.setQuestion(questionBuilder.toString());
-        quesParam.setImages(param.getImages());
+        QuestionParam questionParam = new QuestionParam();
+        questionParam.setTalkId(param.getTalkId());
+        questionParam.setQuestion(questionBuilder.toString());
+        questionParam.setImages(param.getImages());
 
-        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId);
+        return buildSSEStream(userId, questionParam, upstreamToken, lastEventId);
     }
 
     @PostMapping(value = "/ask", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -109,14 +109,14 @@ public class TutorController {
         if (body.get("courseName") != null) questionBuilder.append("\n课程：").append(body.get("courseName"));
         if (body.get("knowledgePoint") != null) questionBuilder.append("\n知识点：").append(body.get("knowledgePoint"));
 
-        QuesParam quesParam = new QuesParam();
-        quesParam.setTalkId((String) body.get("talkId"));
-        quesParam.setQuestion(questionBuilder.toString());
+        QuestionParam questionParam = new QuestionParam();
+        questionParam.setTalkId((String) body.get("talkId"));
+        questionParam.setQuestion(questionBuilder.toString());
         @SuppressWarnings("unchecked")
         List<String> images = (List<String>) body.get("images");
-        quesParam.setImages(images);
+        questionParam.setImages(images);
 
-        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId);
+        return buildSSEStream(userId, questionParam, upstreamToken, lastEventId);
     }
 
     @GetMapping("/conversation/{talkId}")
@@ -139,9 +139,9 @@ public class TutorController {
         return Result.success();
     }
 
-    private Flux<ServerSentEvent<String>> buildSSEStream(Long userId, QuesParam quesParam,
+    private Flux<ServerSentEvent<String>> buildSSEStream(Long userId, QuestionParam questionParam,
                                                           String upstreamToken, String lastEventId) {
-        String talkIdStr = quesParam.getTalkId();
+        String talkIdStr = questionParam.getTalkId();
         Long talkId = null;
         if (talkIdStr != null && !talkIdStr.isBlank()) {
             try {
@@ -180,7 +180,7 @@ public class TutorController {
         eventCache.registerStream(finalTalkIdStr);
 
         Flux<String> chatFlux = streamingService
-                .streamChat(userId, finalTalkId, quesParam.getQuestion(), upstreamToken, quesParam.getImages(), "tutor")
+                .streamChat(userId, finalTalkId, questionParam.getQuestion(), upstreamToken, questionParam.getImages(), "tutor")
                 .map(this::wrapChunkIfNeeded);
 
         Sinks.One<Void> doneSink = Sinks.one();

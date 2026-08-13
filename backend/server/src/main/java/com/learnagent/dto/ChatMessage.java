@@ -13,7 +13,7 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @NoArgsConstructor
 @TableName("cont")
-public class Cont {
+public class ChatMessage {
 
     @TableId(type = IdType.AUTO)
     private Long id;

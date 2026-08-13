@@ -9,7 +9,7 @@ import com.learnagent.mapper.LearningPathMapper;
 import com.learnagent.mapper.LearningPathStepMapper;
 import com.learnagent.mapper.LearningResourceMapper;
 import com.learnagent.mapper.StepResourceRelMapper;
-import com.learnagent.param.QuesParam;
+import com.learnagent.param.QuestionParam;
 import com.learnagent.entity.*;
 import com.learnagent.param.PathAdjustParam;
 import com.learnagent.param.PathGenerateParam;
@@ -79,8 +79,8 @@ public class LearningPathController {
         if (param.getTargetKnowledge() != null && !param.getTargetKnowledge().isEmpty())
             questionBuilder.append("\n目标知识点：").append(String.join("、", param.getTargetKnowledge()));
 
-        QuesParam quesParam = new QuesParam();
-        quesParam.setQuestion(questionBuilder.toString());
+        QuestionParam questionParam = new QuestionParam();
+        questionParam.setQuestion(questionBuilder.toString());
 
         Long talkId = streamingService.createNewTalk(userId);
         final String finalTalkIdStr = String.valueOf(talkId);
@@ -91,7 +91,7 @@ public class LearningPathController {
         eventCache.registerStream(finalTalkIdStr);
 
         Flux<String> chatFlux = streamingService
-                .streamChat(userId, talkId, quesParam.getQuestion(), upstreamToken, null)
+                .streamChat(userId, talkId, questionParam.getQuestion(), upstreamToken, null)
                 .map(this::wrapChunkIfNeeded);
 
         StringBuilder fullAnswer = new StringBuilder();

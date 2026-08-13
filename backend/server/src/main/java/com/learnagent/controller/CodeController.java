@@ -7,7 +7,7 @@ import com.learnagent.entity.Result;
 import com.learnagent.entity.Talk;
 import com.learnagent.param.CodeAssistParam;
 import com.learnagent.param.CodeExecuteParam;
-import com.learnagent.param.QuesParam;
+import com.learnagent.param.QuestionParam;
 import com.learnagent.service.AIStreamingService;
 import com.learnagent.utils.CodeAssistType;
 import com.learnagent.utils.ConversationType;
@@ -127,16 +127,16 @@ public class CodeController {
             questionBuilder.append("\n运行报错：\n```\n").append(param.getErrorMessage()).append("\n```");
         }
 
-        QuesParam quesParam = new QuesParam();
-        quesParam.setTalkId(param.getTalkId());
-        quesParam.setQuestion(questionBuilder.toString());
+        QuestionParam questionParam = new QuestionParam();
+        questionParam.setTalkId(param.getTalkId());
+        questionParam.setQuestion(questionBuilder.toString());
 
-        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId);
+        return buildSSEStream(userId, questionParam, upstreamToken, lastEventId);
     }
 
-    private Flux<ServerSentEvent<String>> buildSSEStream(Long userId, QuesParam quesParam,
+    private Flux<ServerSentEvent<String>> buildSSEStream(Long userId, QuestionParam questionParam,
                                                           String upstreamToken, String lastEventId) {
-        String talkIdStr = quesParam.getTalkId();
+        String talkIdStr = questionParam.getTalkId();
         Long talkId = null;
         if (talkIdStr != null && !talkIdStr.isBlank()) {
             try {
@@ -176,10 +176,10 @@ public class CodeController {
         eventCache.registerStream(finalTalkIdStr);
 
         log.info("[code_assist] SSE 流建立: talkId={}, userId={}, questionLen={}",
-                finalTalkId, userId, quesParam.getQuestion().length());
+                finalTalkId, userId, questionParam.getQuestion().length());
 
         Flux<String> chatFlux = streamingService
-                .streamChat(userId, finalTalkId, quesParam.getQuestion(), upstreamToken, quesParam.getImages(), "code_assist")
+                .streamChat(userId, finalTalkId, questionParam.getQuestion(), upstreamToken, questionParam.getImages(), "code_assist")
                 .map(this::wrapChunkIfNeeded);
 
         Sinks.One<Void> doneSink = Sinks.one();

@@ -6,11 +6,11 @@ import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.learnagent.dto.Cont;
-import com.learnagent.dto.ContDTO;
+import com.learnagent.dto.ChatMessage;
+import com.learnagent.dto.ChatMessageDTO;
 import com.learnagent.entity.Talk;
 import com.learnagent.service.AIStreamingService;
-import com.learnagent.service.IContService;
+import com.learnagent.service.IChatMessageService;
 import com.learnagent.service.ITalkService;
 import com.learnagent.utils.ConversationType;
 import jakarta.annotation.PostConstruct;
@@ -55,7 +55,7 @@ public class AIStreamingServiceImpl implements AIStreamingService {
     private final StringRedisTemplate stringRedisTemplate;
     private final RedissonClient redissonClient;
     private final ITalkService talkService;
-    private final IContService contService;
+    private final IChatMessageService chatMessageService;
     private final ConversationPersistenceService conversationPersistenceService;
     private final ObjectMapper objectMapper;
 
@@ -159,32 +159,32 @@ public class AIStreamingServiceImpl implements AIStreamingService {
 
     @Transactional(readOnly = true)
     @Override
-    public List<ContDTO> getPreContent(Long userId, Long talkId) {
+    public List<ChatMessageDTO> getPreContent(Long userId, Long talkId) {
         // 直接查数据库，不走 Redis 缓存
         // 原因：Redis 缓存中 images 字段已被剔除（避免大字段膨胀），
         //       前端加载历史记录时需要完整的图片数据，必须从 DB 取
-        List<Cont> history = contService.list(
-                new LambdaQueryWrapper<Cont>()
-                        .eq(Cont::getUserId, userId)
-                        .eq(Cont::getTalkId, talkId)
-                        .orderByAsc(Cont::getId)
+        List<ChatMessage> history = chatMessageService.list(
+                new LambdaQueryWrapper<ChatMessage>()
+                        .eq(ChatMessage::getUserId, userId)
+                        .eq(ChatMessage::getTalkId, talkId)
+                        .orderByAsc(ChatMessage::getId)
         );
         if (history == null) return Collections.emptyList();
 
         return history.stream()
-                .map(cont -> {
+                .map(message -> {
                     // 将 images JSON 字符串反序列化回 List<String>，失败时降级为空列表
                     List<String> imageList = Collections.emptyList();
-                    if (cont.getImages() != null && !cont.getImages().isEmpty()) {
+                    if (message.getImages() != null && !message.getImages().isEmpty()) {
                         try {
-                            imageList = objectMapper.readValue(cont.getImages(), new TypeReference<>() {});
+                            imageList = objectMapper.readValue(message.getImages(), new TypeReference<>() {});
                         } catch (Exception e) {
-                            log.warn("图片列表反序列化失败，降级为空列表: contId={}", cont.getId());
+                            log.warn("图片列表反序列化失败，降级为空列表: contId={}", message.getId());
                         }
                     }
-                    return ContDTO.builder()
-                            .role(cont.getRole() != null ? cont.getRole() : "user")
-                            .content(cont.getContent() != null ? cont.getContent() : "")
+                    return ChatMessageDTO.builder()
+                            .role(message.getRole() != null ? message.getRole() : "user")
+                            .content(message.getContent() != null ? message.getContent() : "")
                             .images(imageList)
                             .build();
                 })
@@ -790,7 +790,7 @@ public class AIStreamingServiceImpl implements AIStreamingService {
     }
 
     private String buildHistoryContext(Long userId, Long talkId) {
-        List<Cont> history = getCachedHistory(userId, talkId);
+        List<ChatMessage> history = getCachedHistory(userId, talkId);
         if (history == null || history.isEmpty()) return "";
 
         if (history.size() % 2 != 0) {
@@ -824,13 +824,13 @@ public class AIStreamingServiceImpl implements AIStreamingService {
         return !"open".equals(state);
     }
 
-    private List<Cont> getCachedHistory(Long userId, Long talkId) {
+    private List<ChatMessage> getCachedHistory(Long userId, Long talkId) {
         String key = buildHistoryKey(userId, talkId);
         String json = stringRedisTemplate.opsForValue().get(key);
 
         if (json != null && !json.isEmpty()) {
             try {
-                List<Cont> cached = objectMapper.readValue(json, new TypeReference<>() {});
+                List<ChatMessage> cached = objectMapper.readValue(json, new TypeReference<>() {});
                 log.debug("历史缓存命中: key={}, size={}", key, cached == null ? 0 : cached.size());
                 return cached;
             } catch (Exception e) {
@@ -843,12 +843,12 @@ public class AIStreamingServiceImpl implements AIStreamingService {
         return reloadHistoryToCache(userId, talkId);
     }
 
-    private List<Cont> reloadHistoryToCache(Long userId, Long talkId) {
-        List<Cont> history = contService.list(
-                new LambdaQueryWrapper<Cont>()
-                        .eq(Cont::getUserId, userId)
-                        .eq(Cont::getTalkId, talkId)
-                        .orderByAsc(Cont::getId)
+    private List<ChatMessage> reloadHistoryToCache(Long userId, Long talkId) {
+        List<ChatMessage> history = chatMessageService.list(
+                new LambdaQueryWrapper<ChatMessage>()
+                        .eq(ChatMessage::getUserId, userId)
+                        .eq(ChatMessage::getTalkId, talkId)
+                        .orderByAsc(ChatMessage::getId)
         );
 
         log.debug("从 DB 加载历史记录: userId={}, talkId={}, size={}", userId, talkId, history == null ? 0 : history.size());
@@ -861,8 +861,8 @@ public class AIStreamingServiceImpl implements AIStreamingService {
             String key = buildHistoryKey(userId, talkId);
             // 存入缓存前将 images 字段置空，避免 Base64 大字段撑爆 Redis
             // images 仅在前端请求历史记录时从数据库实时读取（getPreContent 走 DB 查询）
-            List<Cont> cacheList = history.stream()
-                    .map(c -> Cont.builder()
+            List<ChatMessage> cacheList = history.stream()
+                    .map(c -> ChatMessage.builder()
                             .id(c.getId())
                             .userId(c.getUserId())
                             .talkId(c.getTalkId())

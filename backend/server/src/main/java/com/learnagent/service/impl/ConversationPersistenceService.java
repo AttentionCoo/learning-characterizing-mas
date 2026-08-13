@@ -2,9 +2,9 @@ package com.learnagent.service.impl;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.learnagent.dto.Cont;
+import com.learnagent.dto.ChatMessage;
 import com.learnagent.entity.Talk;
-import com.learnagent.service.IContService;
+import com.learnagent.service.IChatMessageService;
 import com.learnagent.service.ITalkService;
 import com.learnagent.utils.ConversationType;
 import lombok.RequiredArgsConstructor;
@@ -22,7 +22,7 @@ import java.util.List;
 @Transactional
 public class ConversationPersistenceService {
 
-    private final IContService contService;
+    private final IChatMessageService chatMessageService;
     private final ITalkService talkService;
     private final ObjectMapper objectMapper;
     private final StringRedisTemplate stringRedisTemplate;
@@ -43,24 +43,24 @@ public class ConversationPersistenceService {
         }
 
         // 保存用户问题（附带图片）
-        Cont userCont = new Cont();
-        userCont.setUserId(userId);
-        userCont.setTalkId(talkId);
-        userCont.setContent(question);
-        userCont.setRole("user");
-        userCont.setImages(imagesJson);
-        userCont.setCreateTime(now);
-        contService.save(userCont);
+        ChatMessage userMessage = new ChatMessage();
+        userMessage.setUserId(userId);
+        userMessage.setTalkId(talkId);
+        userMessage.setContent(question);
+        userMessage.setRole("user");
+        userMessage.setImages(imagesJson);
+        userMessage.setCreateTime(now);
+        chatMessageService.save(userMessage);
 
         // 保存AI回答（无图片）
-        Cont aiCont = new Cont();
-        aiCont.setUserId(userId);
-        aiCont.setTalkId(talkId);
-        aiCont.setContent(answer);
-        aiCont.setRole("assistant");
-        aiCont.setImages(null);
-        aiCont.setCreateTime(now);
-        contService.save(aiCont);
+        ChatMessage aiMessage = new ChatMessage();
+        aiMessage.setUserId(userId);
+        aiMessage.setTalkId(talkId);
+        aiMessage.setContent(answer);
+        aiMessage.setRole("assistant");
+        aiMessage.setImages(null);
+        aiMessage.setCreateTime(now);
+        chatMessageService.save(aiMessage);
 
         // 可选：如果有summary，可以保存到另一个字段或单独的Cont，但根据代码兼容，暂不处理
 

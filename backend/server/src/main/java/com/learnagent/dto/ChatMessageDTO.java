@@ -17,7 +17,7 @@ import java.util.List;
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-public class ContDTO {
+public class ChatMessageDTO {
 
     private String role;
     private String content;

@@ -2,7 +2,7 @@ package com.learnagent.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.learnagent.cache.SSEEventCache;
-import com.learnagent.param.QuesParam;
+import com.learnagent.param.QuestionParam;
 import com.learnagent.entity.Result;
 import com.learnagent.entity.Talk;
 import com.learnagent.service.AIStreamingService;
@@ -49,7 +49,7 @@ public class QuesController {
 
     @PostMapping(value = "/streamingQues", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<String>> streamingQues(
-            @RequestBody QuesParam quesParam,
+            @RequestBody QuestionParam questionParam,
             @RequestHeader(value = "token", required = false) String token,
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @RequestHeader(value = "Last-Event-ID", required = false) String lastEventId,
@@ -65,7 +65,7 @@ public class QuesController {
         String upstreamToken = resolveToken(token, authorization);
 
         Long userId = ThreadLocalUtil.getCurrentUser().getId();
-        String talkIdStr = quesParam.getTalkId();
+        String talkIdStr = questionParam.getTalkId();
         Long talkId = null;
 
         if (talkIdStr != null && !talkIdStr.isBlank()) {
@@ -139,7 +139,7 @@ public class QuesController {
         eventCache.registerStream(finalTalkIdStr);
 
         Flux<String> chatFlux = streamingService
-                .streamChat(userId, finalTalkId, quesParam.getQuestion(), upstreamToken, quesParam.getImages())
+                .streamChat(userId, finalTalkId, questionParam.getQuestion(), upstreamToken, questionParam.getImages())
                 .map(this::wrapChunkIfNeeded);
 
         // 心跳终止信号：业务流（正常或异常）结束时 emit，通知心跳流停止

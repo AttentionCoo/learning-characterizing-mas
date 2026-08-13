@@ -5,9 +5,9 @@ import com.learnagent.cache.SSEEventCache;
 import com.learnagent.entity.Result;
 import com.learnagent.entity.StudentProfile;
 import com.learnagent.entity.Talk;
-import com.learnagent.dto.ContDTO;
+import com.learnagent.dto.ChatMessageDTO;
 import com.learnagent.param.ProfileConversationParam;
-import com.learnagent.param.QuesParam;
+import com.learnagent.param.QuestionParam;
 import com.learnagent.vo.InitialPageVO;
 import com.learnagent.service.AIStreamingService;
 import com.learnagent.service.IInitialPageService;
@@ -64,12 +64,12 @@ public class ProfileController {
         String upstreamToken = resolveToken(token, authorization);
         Long userId = ThreadLocalUtil.getCurrentUser().getId();
 
-        QuesParam quesParam = new QuesParam();
-        quesParam.setTalkId(param.getTalkId());
-        quesParam.setQuestion(param.getMessage());
-        quesParam.setImages(param.getImages());
+        QuestionParam questionParam = new QuestionParam();
+        questionParam.setTalkId(param.getTalkId());
+        questionParam.setQuestion(param.getMessage());
+        questionParam.setImages(param.getImages());
 
-        return buildSSEStream(userId, quesParam, upstreamToken, lastEventId, "profile_build");
+        return buildSSEStream(userId, questionParam, upstreamToken, lastEventId, "profile_build");
     }
 
     @GetMapping
@@ -137,7 +137,7 @@ public class ProfileController {
         if (!initialPageService.isConversationType(userId, talkId, ConversationType.PROFILE)) {
             return Result.error("该对话不属于学习画像模块");
         }
-        List<ContDTO> history = streamingService.getPreContent(userId, talkId);
+        List<ChatMessageDTO> history = streamingService.getPreContent(userId, talkId);
         return Result.success(history);
     }
 
@@ -158,10 +158,10 @@ public class ProfileController {
         return Result.success();
     }
 
-    private Flux<ServerSentEvent<String>> buildSSEStream(Long userId, QuesParam quesParam,
+    private Flux<ServerSentEvent<String>> buildSSEStream(Long userId, QuestionParam questionParam,
                                                           String upstreamToken, String lastEventId,
                                                           String reportMode) {
-        String talkIdStr = quesParam.getTalkId();
+        String talkIdStr = questionParam.getTalkId();
         Long talkId = null;
         if (talkIdStr != null && !talkIdStr.isBlank()) {
             try {
@@ -208,7 +208,7 @@ public class ProfileController {
         eventCache.registerStream(finalTalkIdStr);
 
         Flux<String> chatFlux = streamingService
-                .streamChat(userId, finalTalkId, quesParam.getQuestion(), upstreamToken, quesParam.getImages(), reportMode)
+                .streamChat(userId, finalTalkId, questionParam.getQuestion(), upstreamToken, questionParam.getImages(), reportMode)
                 .map(this::wrapChunkIfNeeded);
 
         Sinks.One<Void> doneSink = Sinks.one();
@@ -330,13 +330,13 @@ public class ProfileController {
     private void triggerProfileUpdate(Long userId, Long talkId) {
         Mono.fromRunnable(() -> {
             try {
-                List<ContDTO> history = streamingService.getPreContent(userId, talkId);
+                List<ChatMessageDTO> history = streamingService.getPreContent(userId, talkId);
                 if (history == null || history.isEmpty()) {
                     log.info("[profile_update] 对话历史为空，跳过画像更新: userId={}, talkId={}", userId, talkId);
                     return;
                 }
                 StringBuilder conversationText = new StringBuilder();
-                for (ContDTO msg : history) {
+                for (ChatMessageDTO msg : history) {
                     conversationText.append(msg.getRole()).append(": ").append(msg.getContent()).append("\n");
                 }
 

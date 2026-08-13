@@ -1,6 +1,6 @@
 package com.learnagent.service;
 
-import com.learnagent.dto.ContDTO;
+import com.learnagent.dto.ChatMessageDTO;
 import com.learnagent.vo.AnswerVO;
 import com.learnagent.entity.Talk;
 import org.springframework.http.codec.ServerSentEvent;
@@ -24,7 +24,7 @@ public interface AIStreamingService {
     Flux<String> streamChat(Long userId, Long talkId, String question, String token, List<String> images, String reportMode);
 
     // 获取历史对话内容，返回含 role/content/images 的 DTO 列表
-    List<ContDTO> getPreContent(Long userId, Long talkId);
+    List<ChatMessageDTO> getPreContent(Long userId, Long talkId);
 
     Talk getTalkById(Long talkId);
 

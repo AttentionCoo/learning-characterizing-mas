@@ -3,10 +3,10 @@ package com.learnagent.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.learnagent.mapper.InitialPageMapper;
-import com.learnagent.dto.Cont;
+import com.learnagent.dto.ChatMessage;
 import com.learnagent.vo.InitialPageVO;
 import com.learnagent.entity.Talk; // 确保引入正确的实体类（对应数据库表）
-import com.learnagent.service.IContService;
+import com.learnagent.service.IChatMessageService;
 import com.learnagent.service.IInitialPageService;
 import com.learnagent.utils.ConversationType;
 import lombok.RequiredArgsConstructor;
@@ -30,7 +30,7 @@ public class InitialPageServiceImpl extends ServiceImpl<InitialPageMapper, Talk>
      * 2.Controller 中调用的方法是 getPage，所以这里方法名必须是 getPage。
      */
     private final StringRedisTemplate stringRedisTemplate;
-    private final IContService contService;
+    private final IChatMessageService chatMessageService;
 
     @Override
     public List<InitialPageVO> getPage(Long userId) {
@@ -92,14 +92,14 @@ public class InitialPageServiceImpl extends ServiceImpl<InitialPageMapper, Talk>
             log.warn("删除缓存失败: talkId={}, err={}", talkId, e.getMessage());
         }
 
-        // 3. 删除对话内容（Cont 表）
-        LambdaQueryWrapper<Cont> contWrapper = new LambdaQueryWrapper<>();
-        contWrapper.eq(Cont::getUserId, userId)
-                .eq(Cont::getTalkId, talkId);
+        // 3. 删除对话内容（ChatMessage 表）
+        LambdaQueryWrapper<ChatMessage> messageWrapper = new LambdaQueryWrapper<>();
+        messageWrapper.eq(ChatMessage::getUserId, userId)
+                .eq(ChatMessage::getTalkId, talkId);
 
-        // 注入 ContService 或直接使用 baseMapper
-        int contDeleted = contService.remove(contWrapper) ? 1 : 0;
-        log.info("删除对话内容: talkId={}, 删除条数={}", talkId, contDeleted);
+        // 通过 ChatMessageService 删除消息记录
+        int deletedCount = chatMessageService.remove(messageWrapper) ? 1 : 0;
+        log.info("删除对话内容: talkId={}, 删除条数={}", talkId, deletedCount);
 
         // 4. 删除对话记录（Talk 表）
         LambdaQueryWrapper<Talk> talkWrapper = new LambdaQueryWrapper<>();

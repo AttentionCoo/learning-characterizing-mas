@@ -2,7 +2,7 @@ package com.learnagent.service.impl;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.learnagent.service.IContService;
+import com.learnagent.service.IChatMessageService;
 import com.learnagent.service.ITalkService;
 import org.junit.jupiter.api.Test;
 import org.redisson.api.RedissonClient;
@@ -25,7 +25,7 @@ class AIStreamingServiceImplTest {
                 mock(StringRedisTemplate.class),
                 mock(RedissonClient.class),
                 mock(ITalkService.class),
-                mock(IContService.class),
+                mock(IChatMessageService.class),
                 mock(ConversationPersistenceService.class),
                 objectMapper
         );
