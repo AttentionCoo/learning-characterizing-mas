@@ -1,7 +1,7 @@
 import pytest
 
 from app.agents.orchestrators.nodes.report_node import ReportNode
-from app.agents.orchestrators.xf_xinghuo_agent import _REPORT_MODE_TO_INTENT
+from app.agents.orchestrators.learning_agent import _REPORT_MODE_TO_INTENT
 from app.routers.code import CodeAssistRequest, _build_code_assist_question
 
 

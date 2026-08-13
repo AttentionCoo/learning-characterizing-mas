@@ -4,7 +4,7 @@ import pytest
 from langchain_core.runnables import RunnableLambda
 
 from app.agents.orchestrators.nodes.intent_node import IntentNode, _MODE_INPUT_RULES
-from app.agents.orchestrators.xf_xinghuo_agent import (
+from app.agents.orchestrators.learning_agent import (
     LearningAgent,
     _REPORT_MODE_TO_INTENT,
 )

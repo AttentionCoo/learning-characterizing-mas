@@ -10,7 +10,7 @@ from fastapi import FastAPI
 
 from app.agents.assistant import LearningAssistant
 from app.agents.core.shared_memory import SharedMemorySystem
-from app.agents.orchestrators.xf_xinghuo_agent import LearningAgent
+from app.agents.orchestrators.learning_agent import LearningAgent
 from app.config.config_loader import (
     get_expert_manager,
     get_limits_manager,

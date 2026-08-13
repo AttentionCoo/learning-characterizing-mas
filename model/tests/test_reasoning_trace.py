@@ -1,7 +1,7 @@
 import asyncio
 
 from app.agents.orchestrators.nodes.retrieve_node import RetrieveNode
-from app.agents.orchestrators.xf_xinghuo_agent import LearningAgent
+from app.agents.orchestrators.learning_agent import LearningAgent
 from app.agents.utils.reasoning_trace import build_node_trace, parse_retrieval_evidence
 
 

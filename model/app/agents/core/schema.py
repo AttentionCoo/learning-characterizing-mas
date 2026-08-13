@@ -6,15 +6,15 @@ from typing_extensions import TypedDict
 
 class LearningContext(BaseModel):
     """学习上下文"""
-    基本信息: Dict = Field(default_factory=dict)
-    学习需求: str = ""
-    主要问题: List[str] = Field(default_factory=list)
-    知识水平评估: Dict = Field(default_factory=dict)
-    认知风格: str = ""
-    学习目标: List[str] = Field(default_factory=list)
-    易错点: List[str] = Field(default_factory=list)
-    学习节奏: Dict = Field(default_factory=dict)
-    资源偏好: List[str] = Field(default_factory=list)
+    basic_info: Dict = Field(default_factory=dict)
+    learning_needs: str = ""
+    main_problems: List[str] = Field(default_factory=list)
+    knowledge_level: Dict = Field(default_factory=dict)
+    cognitive_style: str = ""
+    learning_goals: List[str] = Field(default_factory=list)
+    weak_points: List[str] = Field(default_factory=list)
+    learning_pace: Dict = Field(default_factory=dict)
+    resource_preferences: List[str] = Field(default_factory=list)
 
 
 class LearningState(TypedDict):
