@@ -2,6 +2,7 @@ package com.learnagent.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.learnagent.cache.SSEEventCache;
@@ -493,13 +494,14 @@ public class AssessmentController {
         }
     }
 
-    @SuppressWarnings("unchecked")
     private void applyOptimizationChanges(Long pathId, Map<String, Object> result) {
         Boolean applied = (Boolean) result.get("optimizationApplied");
         if (applied == null || !applied) return;
 
-        List<Map<String, Object>> changes = (List<Map<String, Object>>) result.get("changes");
-        if (changes == null || changes.isEmpty()) return;
+        Object rawChanges = result.get("changes");
+        if (!(rawChanges instanceof List<?> rawList) || rawList.isEmpty()) return;
+        List<Map<String, Object>> changes = objectMapper.convertValue(
+                rawList, new TypeReference<List<Map<String, Object>>>() {});
 
         for (Map<String, Object> change : changes) {
             String type = (String) change.get("type");
@@ -843,13 +845,12 @@ public class AssessmentController {
         return 75;
     }
 
-    @SuppressWarnings("unchecked")
     private Map<String, Object> buildScoreMap(EvalReport report) {
         Map<String, Object> scores = new LinkedHashMap<>();
         scores.put("综合", report.getOverallScore() == null ? 0 : report.getOverallScore());
         try {
             Map<String, Object> dimensions = report.getDimensions() != null
-                    ? objectMapper.readValue(report.getDimensions(), Map.class)
+                    ? objectMapper.readValue(report.getDimensions(), new TypeReference<Map<String, Object>>() {})
                     : Map.of();
             dimensions.forEach((key, value) -> {
                 if (value instanceof Number number) scores.put(key, number.intValue());
