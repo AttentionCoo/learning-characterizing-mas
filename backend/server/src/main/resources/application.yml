@@ -1,6 +1,6 @@
 spring:
   application:
-    name: MyServer
+    name: LearnAgent
   main:
     allow-circular-references: true  # 允许循环依赖，解决启动报错问题
   profiles:
@@ -44,19 +44,6 @@ spring:
     default-property-inclusion: non_null
     time-zone: Asia/Shanghai
     date-format: yyyy-MM-dd HH:mm:ss
-
-
-      # 规则持久化（如果使用 Nacos，可放开注释）
-      # datasource:
-      #   flow:
-      #     nacos:
-      #       server-addr: 127.0.0.1:8848
-      #       data-id: MyServer-flow
-      #       group-id: DEFAULT_GROUP
-      #       data-type: json
-    #       rule-type: flow
-
-# Sentinel 日志目录（必须有权限写入）
 
 mybatis-plus:
   global-config:
@@ -106,7 +93,7 @@ logging:
     name: ${logging.file.path}/application.log
   level:
     root: INFO
-    com.yourpackage: DEBUG  # 替换成你的包名
+    com.learnagent: DEBUG
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
     file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
