@@ -40,7 +40,9 @@ public class Jwt {
         return Jwts.builder()
                 .claims(claims)
                 .expiration(new Date(System.currentTimeMillis() + 1000 * 60 * 60 * 24 * 3))
-                .signWith(signingKey())
+                // 必须显式指定 HS256：jjwt 0.12+ 的 signWith(Key) 会按密钥长度自动选择最强算法
+                // （512 位密钥会签成 HS512），导致模型层 PyJWT(algorithms=["HS256"]) 校验失败
+                .signWith(signingKey(), Jwts.SIG.HS256)
                 .compact();
     }
 
