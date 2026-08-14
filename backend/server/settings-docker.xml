@@ -5,10 +5,10 @@
           xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.2.0 https://maven.apache.org/xsd/settings-1.2.0.xsd">
   <mirrors>
     <mirror>
-      <id>aliyun-central</id>
+      <id>huaweicloud-central</id>
       <mirrorOf>central</mirrorOf>
-      <name>Aliyun Central Mirror</name>
-      <url>https://maven.aliyun.com/repository/public</url>
+      <name>Huawei Cloud Central Mirror</name>
+      <url>https://repo.huaweicloud.com/repository/maven</url>
     </mirror>
   </mirrors>
 </settings>
