@@ -1,0 +1,5 @@
+# 模型层测试依赖（与生产依赖分离，测试环境 2026-08 验证）
+# 安装：py -3.11 -m pip install -r requirements-dev.txt
+# 说明：tests/ 大量使用 @pytest.mark.asyncio，缺少 pytest-asyncio 时异步用例会直接失败。
+pytest==9.1.1
+pytest-asyncio==1.4.0

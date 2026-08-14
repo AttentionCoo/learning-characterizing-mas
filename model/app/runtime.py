@@ -15,7 +15,8 @@ from fastapi import HTTPException
 
 from app.utils.task_manager import AsyncTaskManager
 
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-here")
+# 与 Java 后端 application-prod.yml 的无环境变量回退值保持一致（HS256 要求至少 32 字节）。
+SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-here-please-change-this")
 ALGORITHM = "HS256"
 
 resources = {
