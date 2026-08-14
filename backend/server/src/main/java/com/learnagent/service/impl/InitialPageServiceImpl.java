@@ -1,7 +1,7 @@
 package com.learnagent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.baomidou.mybatisplus.spring.service.impl.ServiceImpl;
 import com.learnagent.mapper.InitialPageMapper;
 import com.learnagent.dto.ChatMessage;
 import com.learnagent.vo.InitialPageVO;

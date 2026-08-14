@@ -14,7 +14,8 @@ aiserver:
 
   ai-api:
     url: ${AI_API_URL:http://localhost:8000}
-    shared-jwt-secret: ${AI_JWT_SECRET:dev-local-secret}
+    # 本地开发回退密钥：HS256 要求至少 32 字节
+    shared-jwt-secret: ${AI_JWT_SECRET:dev-local-secret-0123456789abcdef}
 
   alioss:
     endpoint: ${OSS_ENDPOINT:https://oss-cn-beijing.aliyuncs.com}

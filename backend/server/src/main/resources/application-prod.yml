@@ -15,7 +15,8 @@ aiserver:
   ai-api:
     url: ${AI_API_URL:http://127.0.0.1:8000}
     # 宝塔直接运行 JAR 时可复用模型服务的 SECRET_KEY；专用变量仍具有最高优先级。
-    shared-jwt-secret: ${AI_API_SHARED_JWT_SECRET:${SECRET_KEY:your-secret-key-here}}
+    # 注意：HS256 要求密钥至少 32 字节，请勿使用过短的占位值。
+    shared-jwt-secret: ${AI_API_SHARED_JWT_SECRET:${SECRET_KEY:your-secret-key-here-please-change-this}}
 
   alioss:
     endpoint: ${OSS_ENDPOINT:https://oss-cn-beijing.aliyuncs.com}

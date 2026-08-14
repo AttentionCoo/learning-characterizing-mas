@@ -2,7 +2,8 @@ package com.learnagent.utils;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
+import io.jsonwebtoken.security.Keys;
+import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.Map;
@@ -19,26 +20,36 @@ public class Jwt {
         secretKey = key;
     }
 
-    private static byte[] keyBytes() {
+    /**
+     * HS256 签名密钥：jjwt 0.13 要求至少 256 位（32 字节），弱密钥直接快速失败。
+     */
+    private static SecretKey signingKey() {
         if (secretKey == null || secretKey.isBlank()) {
             throw new IllegalStateException("JWT 密钥未初始化，请检查 ai.security.shared-jwt-secret 配置项");
         }
-        return secretKey.getBytes(StandardCharsets.UTF_8);
+        byte[] bytes = secretKey.getBytes(StandardCharsets.UTF_8);
+        if (bytes.length < 32) {
+            throw new IllegalStateException(
+                    "JWT 密钥过短（" + bytes.length + " 字节），HS256 至少需要 32 字节。" +
+                    "请将 ai.security.shared-jwt-secret 设置为至少 32 字节的随机密钥");
+        }
+        return Keys.hmacShaKeyFor(bytes);
     }
 
     public static String generateToken(Map<String,Object> claims) {
         return Jwts.builder()
-                .signWith(SignatureAlgorithm.HS256, keyBytes())
-                .setExpiration(new Date(System.currentTimeMillis() + 1000 * 60 * 60 * 24 * 3))
-                .addClaims(claims)
+                .claims(claims)
+                .expiration(new Date(System.currentTimeMillis() + 1000 * 60 * 60 * 24 * 3))
+                .signWith(signingKey())
                 .compact();
     }
 
     public static Claims parseToken(String token) {
         return Jwts.parser()
-                .setSigningKey(keyBytes())
-                .parseClaimsJws(token)
-                .getBody();
+                .verifyWith(signingKey())
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
     }
 
     public static Long getUserIdFromToken(String token) {

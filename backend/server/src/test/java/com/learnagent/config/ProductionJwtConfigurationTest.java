@@ -34,7 +34,7 @@ class ProductionJwtConfigurationTest {
     void shouldUseCompatibilityDefaultWhenBaotaDoesNotInjectEnvironmentVariables() throws IOException {
         MockEnvironment environment = loadProductionEnvironment();
 
-        assertThat(environment.getProperty(PROPERTY)).isEqualTo("your-secret-key-here");
+        assertThat(environment.getProperty(PROPERTY)).isEqualTo("your-secret-key-here-please-change-this");
     }
 
     @Test

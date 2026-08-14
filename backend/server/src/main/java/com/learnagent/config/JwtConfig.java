@@ -7,6 +7,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.nio.charset.StandardCharsets;
+
 /**
  * 将配置文件中的 JWT 密钥注入到静态工具类 JWT 中。
  * <p>
@@ -22,7 +24,8 @@ import org.springframework.stereotype.Component;
 public class JwtConfig {
 
     private static final Logger log = LoggerFactory.getLogger(JwtConfig.class);
-    private static final String COMPATIBILITY_DEFAULT_SECRET = "your-secret-key-here";
+    private static final String COMPATIBILITY_DEFAULT_SECRET = "your-secret-key-here-please-change-this";
+    private static final int MIN_SECRET_BYTES = 32;
 
     @Value("${ai.security.shared-jwt-secret}")
     private String sharedJwtSecret;
@@ -36,10 +39,18 @@ public class JwtConfig {
                     "并确保与 Python 模型服务的 AI_JWT_SECRET 值完全相同。"
             );
         }
+        int secretBytes = sharedJwtSecret.getBytes(StandardCharsets.UTF_8).length;
+        if (secretBytes < MIN_SECRET_BYTES) {
+            throw new IllegalStateException(
+                    "ai.security.shared-jwt-secret 过短（" + secretBytes + " 字节）。" +
+                    "HS256 至少需要 " + MIN_SECRET_BYTES + " 字节，请设置更长的随机密钥，" +
+                    "并确保与 Python 模型服务的 AI_JWT_SECRET 值完全相同。"
+            );
+        }
         Jwt.setSecretKey(sharedJwtSecret);
         if (COMPATIBILITY_DEFAULT_SECRET.equals(sharedJwtSecret)) {
             log.warn("JWT 正在使用兼容默认密钥。生产环境请同时为 Java 后端和 Python 模型服务配置相同的安全密钥");
         }
-        log.info("JWT 密钥已从配置加载（长度={}）", sharedJwtSecret.length());
+        log.info("JWT 密钥已从配置加载（长度={}）", secretBytes);
     }
 }
