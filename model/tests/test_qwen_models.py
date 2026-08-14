@@ -141,7 +141,10 @@ def test_search_engine_starts_with_bm25_when_vectorstore_init_fails(
     )
 
     assert engine.vectorstore is None
-    assert engine.search("TOAST 分型") == expected
+    result = engine.search("TOAST 分型")
+    assert len(result) == 1
+    assert result[0].page_content == "TOAST 分型指南"
+    assert result[0].metadata.get("source") == "指南.pdf"
 
 
 def test_shared_memory_uses_isolated_qwen_collection(monkeypatch, tmp_path):
