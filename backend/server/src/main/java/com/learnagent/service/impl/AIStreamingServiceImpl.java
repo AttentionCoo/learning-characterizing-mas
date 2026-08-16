@@ -265,6 +265,13 @@ public class AIStreamingServiceImpl implements AIStreamingService {
 
         final Long finalTalkId = talkId;
 
+        // 每条流只允许触发一次持久化：
+        // 画像模式下模型层的 done（带 profile_dimensions）会被 parseModelLine 透传，
+        // 流末尾 concatWith 还会再拼接一个 done，doOnNext 会收到两次 done 事件；
+        // 若不拦截会并发执行两次持久化（一次撞事务失败进 30 秒重试队列后再次写入），
+        // 导致同一轮问答在 cont 表存两对记录，刷新历史后出现两个相同气泡。
+        final java.util.concurrent.atomic.AtomicBoolean persistenceStarted = new java.util.concurrent.atomic.AtomicBoolean(false);
+
         String historyText = buildHistoryContext(userId, finalTalkId);
         final String requestToken = token.trim();
         final String finalReportMode = (reportMode != null && !reportMode.isBlank()) ? reportMode : DEFAULT_REPORT_MODE;
@@ -362,6 +369,12 @@ public class AIStreamingServiceImpl implements AIStreamingService {
                     try {
                         JsonNode node = objectMapper.readTree(eventJson);
                         if (!"done".equalsIgnoreCase(node.path("type").asText())) return;
+
+                        // 同一轮问答只持久化一次（见 streamChat 中 persistenceStarted 的说明）
+                        if (!persistenceStarted.compareAndSet(false, true)) {
+                            log.debug("已持久化过，跳过重复 done 触发的持久化: talkId={}", finalTalkId);
+                            return;
+                        }
 
                         // done 事件发出时 fullAnswer / generatedTitle 已稳定，可安全快照
                         final String snapshotAnswer = fullAnswer.toString();
