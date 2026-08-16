@@ -180,14 +180,27 @@ class TutorSupervisor:
 
     @staticmethod
     def _build_trace(messages: List) -> List[Dict]:
+        from langchain_core.messages import ToolMessage
         trace = []
+        pending = None
         for message in messages:
+            if isinstance(message, ToolMessage):
+                result_content = getattr(message, "content", "") or ""
+                if isinstance(result_content, str) and result_content.strip():
+                    if pending is not None:
+                        existing = pending.get("results", "")
+                        merged = f"{existing}\n\n{result_content}" if existing else result_content
+                        pending["results"] = truncate_text(merged, 600)
+                continue
             if isinstance(message, AIMessage):
                 tool_calls = getattr(message, "tool_calls", None) or []
                 tools = [tc.get("name", "unknown") for tc in tool_calls]
                 content = getattr(message, "content", "") or ""
                 if tools:
-                    trace.append({"role": "assistant", "tools": tools})
+                    entry = {"role": "assistant", "tools": tools, "results": ""}
+                    trace.append(entry)
+                    pending = entry
                 elif isinstance(content, str) and content.strip():
                     trace.append({"role": "assistant", "content": truncate_text(content, 200)})
+                    pending = None
         return trace

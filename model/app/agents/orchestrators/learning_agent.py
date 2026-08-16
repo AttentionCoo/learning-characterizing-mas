@@ -215,6 +215,42 @@ class LearningAgent:
                             logger.info("[event] ✅ 推送 debate 事件到前端 (rounds=%s)", debate_event.get("rounds"))
                             yield debate_event
 
+                        # 参与专家名单 + 各专家完整发言，供前端可审计展示
+                        experts_event = self._build_experts_event(output)
+                        if experts_event:
+                            logger.info(
+                                "[event] ✅ 推送 experts 事件到前端 (active=%s, advices=%s)",
+                                len(experts_event.get("active_experts", [])),
+                                len(experts_event.get("advices", [])),
+                            )
+                            yield experts_event
+
+                    # 监督者路径：把工具调度轨迹（工具名 + 结果预览）以 experts 事件形状输出，
+                    # 让 consult_experts 的专家内容同样在前端可审计展示
+                    if event.get("event") == "on_chain_end" and event.get("name") == "supervisor":
+                        output = event.get("data", {}).get("output", {})
+                        supervisor_trace = output.get("supervisor_trace", []) or []
+                        tools_used = []
+                        advices = []
+                        for item in supervisor_trace:
+                            if not isinstance(item, dict):
+                                continue
+                            tools = item.get("tools") or []
+                            for tool_name in tools:
+                                tools_used.append(tool_name)
+                                if item.get("results"):
+                                    advices.append({"role": tool_name, "content": item["results"]})
+                        if tools_used:
+                            logger.info("[event] ✅ 推送 supervisor 工具轨迹到前端 (tools=%s)", tools_used)
+                            yield {
+                                "type": "experts",
+                                "node": "supervisor",
+                                "active_experts": tools_used,
+                                "advices": advices,
+                                "debate_rounds": 0,
+                                "arbitration": "",
+                            }
+
         except Exception as e:
             logger.error(f"学习推理管线异常 | {format_error_log(e)}")
             yield build_error_event(e, talk_id=None)
@@ -361,6 +397,31 @@ class LearningAgent:
             "rounds": len(debate_history),
             "history": debate_history,
             "arbitration": arbitration,
+        }
+
+    @staticmethod
+    def _build_experts_event(output: dict):
+        """把 reason 节点的参与专家名单与各专家发言封装成前端可审计事件。
+
+        专家发言存放在 `{role}_advice` 键中（ReasonNode 的返回结构）。
+        """
+        if not isinstance(output, dict):
+            return None
+        active = output.get("active_experts", []) or []
+        advices = []
+        for role in active:
+            advice = output.get(f"{role}_advice", "") or ""
+            if advice and not advice.startswith("未能获取"):
+                advices.append({"role": role, "content": advice})
+        if not active and not advices:
+            return None
+        return {
+            "type": "experts",
+            "node": "reason",
+            "active_experts": active,
+            "advices": advices,
+            "debate_rounds": len(output.get("debate_history", []) or []),
+            "arbitration": output.get("arbitration_result", "") or "",
         }
 
     def _node_summary(self, node: str, output: dict) -> str:
