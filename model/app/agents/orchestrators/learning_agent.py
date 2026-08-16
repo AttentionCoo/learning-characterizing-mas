@@ -10,6 +10,9 @@ from app.agents.orchestrators.nodes.retrieve_node import RetrieveNode
 from app.agents.orchestrators.nodes.reason_node import ReasonNode
 from app.agents.orchestrators.nodes.validate_node import ValidateNode
 from app.agents.orchestrators.nodes.report_node import ReportNode
+from app.agents.orchestrators.nodes.planner_node import PlannerNode
+from app.agents.orchestrators.nodes.executor_node import ExecutorNode
+from app.agents.orchestrators.supervisor import TutorSupervisor, SUPERVISOR_TUTOR_ENABLED
 from app.agents.utils.reasoning_trace import build_node_trace
 from app.agents.utils.json_parser import JsonParser
 from app.utils.error_codes import build_error_event, format_error_log
@@ -23,6 +26,9 @@ _NODE_LABELS: Dict[str, str] = {
     "vision": "正在分析医学影像...",
     "retrieve": "正在检索教育参考资料...",
     "reason": "正在进行多智能体推理...",
+    "planner": "正在规划任务步骤...",
+    "execute_plan": "正在按计划执行...",
+    "supervisor": "监督者正在调度工具...",
     "validate": "正在进行质量校验...",
     "generate_report": "正在生成学习分析报告...",
     "knowledge_answer": "正在回答学习问题...",
@@ -33,6 +39,8 @@ _NODE_PROGRESS_LABELS: Dict[str, str] = {
     "vision": "正在分析医学影像",
     "retrieve": "正在检索教育参考资料",
     "reason": "正在进行多智能体推理",
+    "planner": "正在规划任务步骤",
+    "supervisor": "监督者调度中",
     "validate": "正在进行质量校验",
     "generate_report": "正在生成报告",
 }
@@ -42,7 +50,7 @@ _REPORT_MODE_TO_INTENT: Dict[str, str] = REPORT_MODE_TO_INTENT
 
 class LearningAgent:
 
-    _STREAMING_NODES = {"knowledge_answer", "generate_report"}
+    _STREAMING_NODES = {"knowledge_answer", "generate_report", "supervisor"}
 
     def __init__(
         self,
@@ -71,6 +79,21 @@ class LearningAgent:
         self.validate_node = ValidateNode(self.llm_critic, shared_memory_system=shared_memory_system)
         self.report_node = ReportNode(self.llm_proposer, report_manager)
 
+        # Planner/Supervisor 架构
+        self.planner_node = PlannerNode(self.llm_turbo)
+        self.executor_node = ExecutorNode(self.retrieve_node, self.analysis_node, self.reason_node)
+        self.supervisor_node = None
+        if SUPERVISOR_TUTOR_ENABLED:
+            try:
+                self.supervisor_node = TutorSupervisor(
+                    llm=self.llm_turbo,
+                    retrieve_node=self.retrieve_node,
+                    reason_node=self.reason_node,
+                )
+                logger.info("[agent] Tutor 监督者已启用 (SUPERVISOR_TUTOR_ENABLED=true)")
+            except Exception as e:
+                logger.warning(f"[agent] 监督者初始化失败，tutor 回退 planner 链路: {e}")
+
         self._event_log_counts = {}
 
         self.graph = LearningGraphBuilder(
@@ -81,6 +104,9 @@ class LearningAgent:
             validate_node=self.validate_node,
             report_node=self.report_node,
             vision_node=self.vision_node,
+            planner_node=self.planner_node,
+            executor_node=self.executor_node,
+            supervisor_node=self.supervisor_node,
             llm_critic=self.llm_critic,
             report_manager=self.reports,
             shared_memory_system=shared_memory_system,
@@ -142,6 +168,10 @@ class LearningAgent:
             "vision_findings": None,
             "vision_evidence": "",
             "has_medical_images": bool(images) if images else False,
+            "plan": {},
+            "plan_rationale": "",
+            "plan_results": [],
+            "supervisor_trace": [],
         }
         streamed_nodes: set = set()
         llm_call_counts: Dict[str, int] = {}
@@ -293,6 +323,12 @@ class LearningAgent:
                 },
             }
 
+        # 执行器逐步骤进度（ExecutorNode 通过 stream_writer 发出的自定义事件）
+        if evt == "on_custom_event":
+            data = event.get("data", {})
+            if isinstance(data, dict) and data.get("type") == "thinking" and show_thinking:
+                return data
+
         return None
 
     def _build_node_done_event(self, name: str, output: dict) -> Dict:
@@ -354,6 +390,22 @@ class LearningAgent:
             return "，".join(parts)
         if node == "validate":
             return "质量校验完成"
+        if node == "planner":
+            plan = output.get("plan", {}) or {}
+            steps = plan.get("steps", []) if isinstance(plan, dict) else []
+            rationale = output.get("plan_rationale", "") or ""
+            summary = f"规划完成（{len(steps)} 步）"
+            if rationale:
+                summary += f"：{rationale[:50]}"
+            return summary
+        if node == "execute_plan":
+            results = output.get("plan_results", []) or []
+            done = [r for r in results if not r.get("failed")]
+            return f"按计划执行完成（{len(done)}/{len(results)} 步成功）"
+        if node == "supervisor":
+            trace = output.get("supervisor_trace", []) or []
+            tool_calls = sum(1 for m in trace if m.get("tools"))
+            return f"监督者调度完成（{tool_calls} 次工具调用）"
         if node == "generate_report":
             report = output.get("report", "")
             return f"生成报告，长度: {len(report)} 字符"

@@ -26,6 +26,9 @@ class LearningGraphBuilder:
         report_node: ReportNode,
         validate_node: ValidateNode = None,
         vision_node: VisionAnalysisNode = None,
+        planner_node=None,
+        executor_node=None,
+        supervisor_node=None,
         llm_critic=None,
         report_manager=None,
         shared_memory_system=None,
@@ -37,6 +40,9 @@ class LearningGraphBuilder:
         self.report_node = report_node
         self.validate_node = validate_node
         self.vision_node = vision_node
+        self.planner_node = planner_node
+        self.executor_node = executor_node
+        self.supervisor_node = supervisor_node
         self.llm_critic = llm_critic
         self.report_manager = report_manager
         self.shared_memory_system = shared_memory_system
@@ -62,6 +68,16 @@ class LearningGraphBuilder:
         graph.add_node("retrieve", self.retrieve_node.run)
         graph.add_node("reason", self.reason_node.run)
 
+        if self.planner_node:
+            graph.add_node("planner", self.planner_node.run)
+            logger.info("[graph] 已添加 planner 规划节点")
+        if self.executor_node:
+            graph.add_node("execute_plan", self.executor_node.run)
+            logger.info("[graph] 已添加 execute_plan 执行节点")
+        if self.supervisor_node:
+            graph.add_node("supervisor", self.supervisor_node.run)
+            logger.info("[graph] 已添加 supervisor 监督者节点（tutor 试点）")
+
         if self.validate_node:
             graph.add_node("validate", self.validate_node.run)
 
@@ -76,31 +92,31 @@ class LearningGraphBuilder:
                 "non_stroke": "reject",
                 "irrelevant": "reject",
                 "knowledge": "knowledge_answer",
-                "profile": "analysis",
-                "resource": "analysis",
-                "tutor": "analysis",
-                "assessment": "analysis",
-                "learning_path": "analysis",
-                "consultation": "analysis",
-                "code_assist": "generate_report",
+                "planner": "planner",
+                "supervisor": "supervisor",
+                "generate_report": "generate_report",
+                "analysis": "analysis",
             }
         )
 
         graph.add_edge("reject", END)
         graph.add_edge("knowledge_answer", END)
+        if self.supervisor_node:
+            graph.add_edge("supervisor", END)
+            logger.info("[graph] supervisor 输出报告后直接结束")
 
         # 影像不相关时的拒绝节点
         if self.vision_node:
             graph.add_node("reject_image", self._reject_image_node)
 
-        # 条件路由：有影像 → vision → retrieve（或 reject），无影像 → 直接 retrieve
+        # 条件路由：有影像 → intent → analysis → vision → (planner | reject_image)；无影像 → intent 直接 planner
         if self.vision_node:
             graph.add_conditional_edges(
                 "analysis",
                 self._route_after_analysis,
                 {
                     "vision": "vision",
-                    "retrieve": "retrieve",
+                    "planner": "planner",
                 }
             )
             # 影像分析后：检查是否与脑卒中相关
@@ -108,32 +124,30 @@ class LearningGraphBuilder:
                 "vision",
                 self._route_after_vision,
                 {
-                    "retrieve": "retrieve",
+                    "planner": "planner",
                     "reject": "reject_image",
                 }
             )
             graph.add_edge("reject_image", END)
-            logger.info("[graph] 已添加 analysis → vision → (retrieve | reject_image) 条件路由")
-        else:
-            graph.add_edge("analysis", "retrieve")
+            logger.info("[graph] 已添加影像分支路由: intent → (analysis → vision → planner | reject_image)")
 
-        graph.add_edge("retrieve", "reason")
+        if self.planner_node and self.executor_node:
+            graph.add_edge("planner", "execute_plan")
 
-        if self.validate_node:
-            graph.add_edge("reason", "validate")
+        if self.validate_node and self.planner_node and self.executor_node:
+            graph.add_edge("execute_plan", "validate")
             graph.add_conditional_edges(
                 "validate",
                 self._route_validation,
                 {
                     "pass": "generate_report",
-                    "retry": "reason",
+                    "retry": "planner",
                     "fail": "generate_report"
                 }
             )
-            logger.info("[graph] 已添加校验节点和反思循环路由")
-        else:
-            graph.add_edge("reason", "generate_report")
-            logger.info("[graph] 无校验节点，推理直接连接到报告生成")
+            logger.info("[graph] 已添加校验节点：失败反馈回到 planner 重新规划（RePlan 循环）")
+        elif self.executor_node:
+            graph.add_edge("execute_plan", "generate_report")
 
         graph.add_edge("generate_report", END)
 
@@ -147,21 +161,29 @@ class LearningGraphBuilder:
             return "non_stroke"
         # code_assist 跳过临床分析链，直接进入报告生成
         if t == "code_assist":
-            return "code_assist"
-        valid_types = {"profile", "resource", "tutor", "assessment", "learning_path", "consultation", "knowledge"}
+            return "generate_report"
+        if t == "knowledge":
+            return "knowledge"
+        # tutor 试点：监督者优先，未启用时走 planner 主链路
+        if t == "tutor" and self.supervisor_node:
+            return "supervisor"
+        valid_types = {"profile", "resource", "tutor", "assessment", "learning_path", "consultation"}
         if t in valid_types:
-            return t
+            # 有医学影像时先走 analysis → vision 影像门控，再进入规划
+            if self.vision_node and state.get("images"):
+                return "analysis"
+            return "planner"
         return "irrelevant"
 
     def _route_after_analysis(self, state: LearningState) -> str:
-        """analysis 节点之后的条件路由：有医学影像走 vision，否则直接 retrieve"""
+        """analysis 节点之后的条件路由：有医学影像走 vision，否则进入规划器"""
         images = state.get("images", [])
         has_images = bool(images)
         if has_images:
             logger.info(f"[graph] 检测到 {len(images)} 张医学影像 → 路由到 vision 节点")
             return "vision"
-        logger.info("[graph] 无医学影像 → 路由到 retrieve 节点")
-        return "retrieve"
+        logger.info("[graph] 无医学影像 → 路由到 planner 规划节点")
+        return "planner"
 
     def _route_after_vision(self, state: LearningState) -> str:
         """vision 节点之后的条件路由：检查影像是否与脑卒中相关"""
@@ -174,8 +196,8 @@ class LearningGraphBuilder:
             logger.info(f"[graph] 影像与脑卒中无关 (类型: {image_type}) → 路由到 reject_image")
             return "reject"
 
-        logger.info(f"[graph] 影像与脑卒中相关 → 路由到 retrieve")
-        return "retrieve"
+        logger.info(f"[graph] 影像与脑卒中相关 → 路由到 planner")
+        return "planner"
 
     async def _reject_node(self, state: LearningState) -> dict:
         message = state.get("input_rejection_message")
@@ -299,7 +321,7 @@ class LearningGraphBuilder:
             logger.info(f"[route_validation] 决策: pass → 生成报告")
         elif state['reflection_count'] < self.max_reflection_count:
             route_decision = "retry"
-            logger.info(f"[route_validation] 决策: retry → 重新推理（退火权重已更新）")
+            logger.info(f"[route_validation] 决策: retry → 反馈回到 planner 重新规划（退火权重已更新）")
         else:
             route_decision = "fail"
             logger.info(f"[route_validation] 决策: fail → 强制输出")

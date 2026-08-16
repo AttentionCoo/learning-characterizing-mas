@@ -12,7 +12,7 @@ from fastapi import HTTPException
 
 import app.runtime as runtime
 
-TEST_SECRET = "test-secret-0123456789abcdef0123456789abcdef0123456789abcdef"
+TEST_SECRET = "test-secret-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 
 @pytest.fixture(autouse=True)

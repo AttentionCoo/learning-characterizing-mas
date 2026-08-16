@@ -54,3 +54,8 @@ class LearningState(TypedDict):
     vision_findings: Optional[Dict]
     vision_evidence: str
     has_medical_images: bool
+    # Planner/Supervisor 架构字段
+    plan: Dict
+    plan_rationale: str
+    plan_results: List[Dict]
+    supervisor_trace: List[Dict]
