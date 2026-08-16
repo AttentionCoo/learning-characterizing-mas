@@ -1,15 +1,15 @@
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
-# onnxruntime / chromadb 需要基础编译工具链之外的运行库
+# chromadb（hnswlib）需要 libgomp1 运行库；curl 供健康检查使用
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install -r requirements.txt
+    pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
 
