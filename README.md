@@ -54,7 +54,7 @@ flowchart LR
 |:---|:---|
 | 前端 | Vue 3.5、Vite 7、Pinia 3、marked 17、DOMPurify、Nginx 1.27、Node 22 |
 | 后端 | Java 21、Spring Boot 3.5.16、Spring MVC/WebFlux、MyBatis-Plus 3.5、jjwt 0.13、MySQL 8、Redis 7、阿里云 OSS |
-| 模型 | Python 3.11、FastAPI 0.136、LangGraph 1.2、LangChain 1.3、ChromaDB 1.5 |
+| 模型 | Python 3.12、FastAPI 0.141、LangGraph 1.2、LangChain 1.3、ChromaDB 1.5 |
 | 模型服务 | qwen-max、qwen-plus、qwen-turbo、qwen3.7-text-embedding、qwen3-rerank、qwen-vl-max |
 
 具体版本以 [frontend/package.json](frontend/package.json)、[backend/server/pom.xml](backend/server/pom.xml) 和 [model/requirements.txt](model/requirements.txt) 为准。
@@ -121,7 +121,7 @@ docker compose ps
 
 ## 验证与测试
 
-2026-08-14 升级后验证结果：模型层 123 项通过，前端 16 项通过，后端 11 项通过、1 项跳过；合计 150 项通过、1 项跳过。
+2026-08-14 升级后验证结果：模型层 141 项通过，前端 16 项通过，后端 11 项通过、1 项跳过；合计 168 项通过、1 项跳过。
 
 Windows PowerShell 若默认代码页不是 UTF-8，运行模型测试前先执行
 `$env:PYTHONUTF8 = "1"`，否则 `pytest.ini` 中的中文注释可能触发解码错误。
