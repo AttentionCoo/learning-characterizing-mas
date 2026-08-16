@@ -201,12 +201,15 @@ class LearningAgent:
                         output = event.get("data", {}).get("output", {})
                         yield self._build_node_done_event(event.get("name", ""), output)
 
-                    # 辩论内容输出到前端流：reason 节点完成时推送完整辩论记录 + 仲裁裁决
-                    if event.get("event") == "on_chain_end" and event.get("name") == "reason":
+                    # 辩论与专家发言输出到前端流：reason 节点完成时推送完整辩论记录 + 仲裁裁决 + 各专家发言。
+                    # 注：Planner 架构下 expert_reason 在 execute_plan 节点内部运行，其输出（含辩论与专家发言）
+                    # 被 ExecutorNode 全量合并进 execute_plan 的节点输出，因此两个节点名都要监听。
+                    if event.get("event") == "on_chain_end" and event.get("name") in ("reason", "execute_plan"):
                         output = event.get("data", {}).get("output", {})
                         debate_event = self._build_debate_event(output)
                         logger.info(
-                            "[event] reason节点结束 -> debate_event=%s, history=%s, arbitration_len=%s",
+                            "[event] %s节点结束 -> debate_event=%s, history=%s, arbitration_len=%s",
+                            event.get("name"),
                             bool(debate_event),
                             len((output or {}).get("debate_history", []) or []),
                             len((output or {}).get("arbitration_result", "") or ""),
