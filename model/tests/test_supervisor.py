@@ -117,10 +117,10 @@ def test_run_extracts_answer_from_messages(monkeypatch):
 def test_build_agent_registers_three_tools(monkeypatch):
     captured = {}
 
-    def _fake_create_react_agent(model, tools, state_modifier):
+    def _fake_create_react_agent(model, tools, prompt=None, **kwargs):
         captured["tools"] = tools
         captured["model"] = model
-        captured["state_modifier"] = state_modifier
+        captured["prompt"] = prompt
         return object()
 
     monkeypatch.setattr(
@@ -132,5 +132,5 @@ def test_build_agent_registers_three_tools(monkeypatch):
     assert len(captured["tools"]) == 3
     names = sorted(t.name for t in captured["tools"])
     assert names == ["consult_experts", "evidence_search", "get_student_profile"]
-    assert "监督者" in captured["state_modifier"]
-    assert "教学辅导" in captured["state_modifier"]
+    assert "监督者" in captured["prompt"]
+    assert "教学辅导" in captured["prompt"]

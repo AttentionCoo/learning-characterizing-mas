@@ -393,15 +393,17 @@ class LearningAgent:
         if node == "planner":
             plan = output.get("plan", {}) or {}
             steps = plan.get("steps", []) if isinstance(plan, dict) else []
+            titles = "、".join(s.get("title", s.get("step_type", "")) for s in steps if isinstance(s, dict))
             rationale = output.get("plan_rationale", "") or ""
-            summary = f"规划完成（{len(steps)} 步）"
-            if rationale:
-                summary += f"：{rationale[:50]}"
+            summary = f"规划完成（{len(steps)} 步：{titles}）"
+            if rationale and "回退" in rationale:
+                summary += f"（{rationale[:40]}）"
             return summary
         if node == "execute_plan":
             results = output.get("plan_results", []) or []
             done = [r for r in results if not r.get("failed")]
-            return f"按计划执行完成（{len(done)}/{len(results)} 步成功）"
+            titles = "、".join(r.get("title", "") for r in results if r.get("title"))
+            return f"按计划执行完成（{len(done)}/{len(results)} 步：{titles}）"
         if node == "supervisor":
             trace = output.get("supervisor_trace", []) or []
             tool_calls = sum(1 for m in trace if m.get("tools"))

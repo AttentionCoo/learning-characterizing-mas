@@ -36,6 +36,9 @@ class ExecutorNode(BaseNode):
 
         try:
             writer = get_stream_writer()
+            # 注：langgraph 1.x 的 astream_events 不透传 custom 事件（仅 astream(stream_mode="custom") 支持）。
+            # 当前保留 writer 调用：一旦外层迁移到 custom 流模式，逐步骤事件即可实时到达前端；
+            # 现阶段步骤进度通过 execute_plan 的 node_done 摘要展示。
         except Exception:
             writer = None
 

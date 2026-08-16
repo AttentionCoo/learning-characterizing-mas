@@ -113,10 +113,11 @@ class TutorSupervisor:
             return profile_text or "暂无学习画像信息"
 
         system_prompt = _SUPERVISOR_SYSTEM_PROMPT.format(max_rounds=self.max_tool_rounds)
+        # langgraph-prebuilt 1.x 用 prompt 参数注入系统提示（0.x 时代叫 state_modifier）
         return create_react_agent(
             model=self.llm,
             tools=[evidence_search, consult_experts, get_student_profile],
-            state_modifier=system_prompt,
+            prompt=system_prompt,
         )
 
     @staticmethod
