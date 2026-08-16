@@ -17,6 +17,19 @@ export default defineConfig(async ({ mode }) => {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // 稳定的 vendor 分包：框架/渲染/HTTP 各自独立 chunk，
+        // 业务代码更新时框架部分保持缓存命中
+        manualChunks: {
+          'vue-vendor': ['vue', 'vue-router', 'pinia', 'pinia-plugin-persistedstate'],
+          'markdown-vendor': ['marked', 'dompurify'],
+          'http-vendor': ['axios', 'nprogress'],
+        },
+      },
+    },
+  },
   server: {
     port: 5173,
     proxy: {

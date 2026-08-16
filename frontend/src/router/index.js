@@ -1,12 +1,14 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import login from '@/views/login.vue'
 import home from '@/views/home.vue'
-import profile from '@/views/profile.vue'
-import resources from '@/views/resources.vue'
-import learningPath from '@/views/learning-path.vue'
-import tutor from '@/views/tutor.vue'
-import assessment from '@/views/assessment.vue'
-import codeAssist from '@/views/code-assist.vue'
+
+// 路由级代码分割：业务视图按需加载，显著减小首屏 JS 体积
+const profile = () => import('@/views/profile.vue')
+const resources = () => import('@/views/resources.vue')
+const learningPath = () => import('@/views/learning-path.vue')
+const tutor = () => import('@/views/tutor.vue')
+const assessment = () => import('@/views/assessment.vue')
+const codeAssist = () => import('@/views/code-assist.vue')
 
 import { useUserStore } from '@/stores/user'
 
