@@ -133,7 +133,7 @@ docker compose ps
 
 ## 验证与测试
 
-2026-08-16 升级后验证结果：模型层 161 项通过，前端 20 项通过，后端 11 项通过、1 项跳过；合计 192 项通过、1 项跳过。
+2026-08-16 升级后验证结果：模型层 164 项通过，前端 20 项通过，后端 11 项通过、1 项跳过；合计 195 项通过、1 项跳过。
 
 Windows PowerShell 若默认代码页不是 UTF-8，运行模型测试前先执行
 `$env:PYTHONUTF8 = "1"`，否则 `pytest.ini` 中的中文注释可能触发解码错误。
@@ -186,7 +186,7 @@ docker compose ps
 }
 ```
 
-SSE 可能包含 `init`、`meta`、`node_start`、`thinking`、`node_done`、`debate`、`token`、`replace`、`done` 和 `error`。`replace` 表示完整报告，应替换此前累计的 `token` 内容；画像模式下模型层发出的 `done` 事件携带 `profile_dimensions`，由后端透传给前端保存画像。
+SSE 可能包含 `init`、`meta`、`node_start`、`thinking`、`node_done`、`debate`、`experts`、`token`、`replace`、`done` 和 `error`。`replace` 表示完整报告，应替换此前累计的 `token` 内容；画像模式下模型层发出的 `done` 事件携带 `profile_dimensions`，由后端透传给前端保存画像。`debate` 携带多专家辩论记录与仲裁裁决；`experts` 携带本轮参与专家名单与各专家完整发言（`active_experts` / `advices`），供前端推理轨迹可审计展示。
 
 完整端点、请求字段和 SSE 约定见 [接口文档](docs/api/LearnAgent系统接口文档.md)。
 
