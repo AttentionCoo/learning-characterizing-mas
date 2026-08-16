@@ -36,17 +36,18 @@ flowchart LR
 ```mermaid
 flowchart LR
     Input["结构化业务请求"] --> Intent["IntentNode\n功能与领域校验"]
-    Intent --> Analysis["AnalysisNode"]
-    Analysis --> Vision["VisionNode\n有图片时"]
-    Analysis --> Retrieve["RetrieveNode\nHybrid RAG"]
-    Vision --> Retrieve
-    Retrieve --> Reason["ReasonNode\n动态专家编排"]
-    Reason --> Validate["ValidateNode\n规则与反思"]
+    Intent -->|"多步任务\n画像/资源/路径/评估"| Planner["PlannerNode\n结构化计划(pydantic白名单)"]
+    Planner --> Executor["ExecutorNode\n按计划执行 analyze/retrieve/expert_reason"]
+    Executor --> Validate["ValidateNode\n规则与反思(RePlanner)"]
     Validate -->|"通过"| Report["ReportNode\n模式化报告"]
-    Validate -->|"需修正"| Reason
+    Validate -->|"需重新规划"| Planner
+    Intent -->|"有图片"| Vision["VisionNode\n影像门控"] --> Planner
+    Intent -.->|"tutor 试点"| Supervisor["Supervisor\n三工具白名单调度"] --> Report
 ```
 
-模型层从 `model/app/config/expert_config.yaml` 加载 9 位专家：画像对话、特征抽取、需求分析、文档撰写、题目生成、质量审核、学习激励、仲裁和医学影像分析智能体。
+- **Planner 主链路**：多步任务（画像/资源/路径/评估）先由 `PlannerNode` 用轻量模型生成结构化执行计划（步骤类型白名单：analyze/retrieve/expert_reason/finalize，最多 6 步），`ExecutorNode` 按计划复用既有能力逐步执行并逐步骤推送 SSE 事件；校验失败时反馈回到规划器**重新规划**（RePlan 循环），规划失败自动回退默认计划。
+- **Supervisor 试点**：tutor 意图由监督者 LLM（qwen-turbo）在工具白名单内自主调度——`evidence_search`（循证检索）、`consult_experts`（多专家辩论仲裁）、`get_student_profile`（画像查询），迭代轮数受上限约束；意图门控与医学红线保留在监督者外层。可用 `SUPERVISOR_TUTOR_ENABLED=false` 切回 Planner 链路。
+- 模型层从 `model/app/config/expert_config.yaml` 加载 9 位专家：画像对话、特征抽取、需求分析、文档撰写、题目生成、质量审核、学习激励、仲裁和医学影像分析智能体。
 
 ## 技术栈
 
@@ -121,7 +122,7 @@ docker compose ps
 
 ## 验证与测试
 
-2026-08-14 升级后验证结果：模型层 141 项通过，前端 20 项通过，后端 11 项通过、1 项跳过；合计 172 项通过、1 项跳过。
+2026-08-16 升级后验证结果：模型层 161 项通过，前端 20 项通过，后端 11 项通过、1 项跳过；合计 192 项通过、1 项跳过。
 
 Windows PowerShell 若默认代码页不是 UTF-8，运行模型测试前先执行
 `$env:PYTHONUTF8 = "1"`，否则 `pytest.ini` 中的中文注释可能触发解码错误。
