@@ -1,13 +1,9 @@
 <script setup>
 import { ref, computed, nextTick, onMounted, onActivated, onDeactivated, onBeforeUnmount } from 'vue'
-import { marked } from 'marked'
-import DOMPurify from 'dompurify'
+import { renderMarkdown } from '@/utils/markdown'
 import { executeCodeAPI, codeAssistStreamAPI } from '@/api/code'
 import ReasoningTrace from '@/components/ReasoningTrace.vue'
 import { useReasoningTrace } from '@/composables/useReasoningTrace'
-import { normalizeAiMarkdown } from '@/utils/aiMarkdown'
-
-marked.setOptions({ gfm: true, breaks: true })
 
 const assistTypes = [
   { value: 'complete', label: '代码补全', icon: '✍️', detail: '补齐缺失实现，保持现有结构', placeholder: '描述需要补全的函数、流程或预期结果' },
@@ -125,17 +121,6 @@ function scrollToBottom() {
   el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
 }
 
-function renderMarkdown(text) {
-  if (!text) return ''
-  try {
-    return DOMPurify.sanitize(marked.parse(normalizeAiMarkdown(text)))
-  } catch (e) {
-    console.error('[code-assist] Markdown 渲染失败:', e)
-    return '<pre style="white-space:pre-wrap;word-break:break-word">' +
-      text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') +
-      '</pre>'
-  }
-}
 
 async function runCode() {
   if (!code.value.trim() || isRunning.value) return

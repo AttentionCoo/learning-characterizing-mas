@@ -1,14 +1,10 @@
-﻿<script setup>
+<script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { marked } from 'marked'
-import DOMPurify from 'dompurify'
+import { renderMarkdown } from '@/utils/markdown'
 import { getLearningPathAPI, updateTaskProgressAPI, learningPathStreamAPI } from '@/api/learningPath'
 import { submitBehaviorAPI } from '@/api/assessment'
 import ReasoningTrace from '@/components/ReasoningTrace.vue'
 import { useReasoningTrace } from '@/composables/useReasoningTrace'
-import { normalizeAiMarkdown } from '@/utils/aiMarkdown'
-
-marked.setOptions({ gfm: true, breaks: true })
 
 const learningPath = ref(null)
 const pathLoading = ref(false)
@@ -75,10 +71,6 @@ function startBehaviorFlush() {
   behaviorFlushTimer = setInterval(flushBehaviors, 60000)
 }
 
-function renderMarkdown(text) {
-  if (!text) return ''
-  return DOMPurify.sanitize(marked.parse(normalizeAiMarkdown(text)))
-}
 
 onMounted(() => {
   fetchLearningPath()

@@ -1,18 +1,14 @@
-﻿<script setup>
+<script setup>
 import { ref, onMounted, onUpdated, nextTick, computed, reactive } from 'vue'
-import { marked } from 'marked'
-import DOMPurify from 'dompurify'
+import { renderMarkdown } from '@/utils/markdown'
 import { getProfileAPI, getProfileConversationsAPI, getProfileConversationHistoryAPI, profileStreamAPI, updateProfileDimensionsAPI, deleteProfileConversationAPI } from '@/api/profile'
 import AppAvatar from '@/components/AppAvatar.vue'
 import ImageUploader from '@/components/ImageUploader.vue'
 import ReasoningTrace from '@/components/ReasoningTrace.vue'
 import { useUserStore } from '@/stores/user'
 import { useReasoningTrace } from '@/composables/useReasoningTrace'
-import { normalizeAiMarkdown } from '@/utils/aiMarkdown'
 
 const userStore = useUserStore()
-
-marked.setOptions({ gfm: true, breaks: true })
 
 const MAX_CONVERSATIONS = 50
 
@@ -234,10 +230,6 @@ async function fetchProfile() {
   }
 }
 
-function renderMarkdown(text) {
-  if (!text) return ''
-  return DOMPurify.sanitize(marked.parse(normalizeAiMarkdown(text)))
-}
 
 function startEdit(dim) {
   const raw = profile.value?.dimensions?.[dim.key] || {}

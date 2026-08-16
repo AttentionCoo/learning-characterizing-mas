@@ -1,14 +1,10 @@
-﻿<script setup>
+<script setup>
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
-import { marked } from 'marked'
-import DOMPurify from 'dompurify'
+import { renderMarkdown } from '@/utils/markdown'
 import { getResourcesAPI, getResourceDetailAPI, resourceStreamAPI } from '@/api/resources'
 import ImageUploader from '@/components/ImageUploader.vue'
 import ReasoningTrace from '@/components/ReasoningTrace.vue'
 import { useReasoningTrace } from '@/composables/useReasoningTrace'
-import { normalizeAiMarkdown } from '@/utils/aiMarkdown'
-
-marked.setOptions({ gfm: true, breaks: true })
 
 const resourceTypes = [
   { value: 'document', label: '课程讲解文档', icon: '📄', color: '#3b82f6' },
@@ -74,10 +70,6 @@ function toggleType(type) {
   else selectedTypes.value.push(type)
 }
 
-function renderMarkdown(text) {
-  if (!text) return ''
-  return DOMPurify.sanitize(marked.parse(normalizeAiMarkdown(text)))
-}
 
 const typeEndpointMap = {
   document: '/api/resources/generate/document',

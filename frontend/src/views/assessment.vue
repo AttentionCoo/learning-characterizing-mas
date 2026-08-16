@@ -1,16 +1,12 @@
-﻿<script setup>
+<script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
-import { marked } from 'marked'
-import DOMPurify from 'dompurify'
+import { renderMarkdown } from '@/utils/markdown'
 import { getAssessmentReportsAPI, getAssessmentReportDetailAPI, assessmentStreamAPI, getAssessmentReportAPI, optimizeLearningPathAPI } from '@/api/assessment'
 import { getLearningPathsAPI } from '@/api/learningPath'
 import ReasoningTrace from '@/components/ReasoningTrace.vue'
 import AssessmentRadarChart from '@/components/AssessmentRadarChart.vue'
 import { useReasoningTrace } from '@/composables/useReasoningTrace'
-import { normalizeAiMarkdown } from '@/utils/aiMarkdown'
 import { buildAssessmentRadar } from '@/utils/assessmentRadar'
-
-marked.setOptions({ gfm: true, breaks: true })
 
 const reports = ref([])
 const reportsLoading = ref(false)
@@ -82,10 +78,6 @@ const assessmentTypes = [
   { value: 'progress', label: '学习进度', icon: '📈', desc: '评估脑卒中学习进度与效率' },
 ]
 
-function renderMarkdown(text) {
-  if (!text) return ''
-  return DOMPurify.sanitize(marked.parse(normalizeAiMarkdown(text)))
-}
 
 onMounted(() => {
   fetchReports()
