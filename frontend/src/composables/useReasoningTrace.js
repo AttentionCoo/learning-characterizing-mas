@@ -21,6 +21,7 @@ export function useReasoningTrace() {
       content: event.content || '',
       sources: event.sources || [],
       debate: event.debate || null,
+      experts: event.experts || null,
     })
   }
 

@@ -113,6 +113,24 @@ export function sseStreamRequest(url, params, { onChunk, onThinking, timeout = 3
           onThinking(trace)
           return
         }
+        if (type === 'experts' && onThinking) {
+          const trace = {
+            phase: 'experts',
+            step: data.node || 'reason',
+            title: `多专家协同（${(data.active_experts || []).length} 位）`,
+            content: '',
+            sources: [],
+            experts: {
+              active: Array.isArray(data.active_experts) ? data.active_experts : [],
+              advices: Array.isArray(data.advices) ? data.advices : [],
+              debateRounds: data.debate_rounds || 0,
+              arbitration: data.arbitration || '',
+            },
+          }
+          console.info('[AI 专家发言]', `${trace.experts.active.length} 位专家，${trace.experts.advices.length} 条发言`)
+          onThinking(trace)
+          return
+        }
         if (type === 'chunk' || type === 'result' || type === 'token' || type === 'replace') {
           const content = data.content || ''
           const replace = type === 'replace'

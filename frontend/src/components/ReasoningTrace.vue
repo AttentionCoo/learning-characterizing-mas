@@ -26,6 +26,7 @@ function phaseLabel(phase) {
   if (phase === 'start') return '开始'
   if (phase === 'done') return '完成'
   if (phase === 'debate') return '辩论'
+  if (phase === 'experts') return '专家'
   return '处理中'
 }
 </script>
@@ -73,6 +74,24 @@ function phaseLabel(phase) {
               <div v-if="entry.debate.arbitration" class="debate-item arbitration">
                 <div class="debate-role">仲裁裁决</div>
                 <blockquote>{{ entry.debate.arbitration }}</blockquote>
+              </div>
+            </div>
+
+            <div v-if="entry.experts && (entry.experts.active?.length || entry.experts.advices?.length)" class="experts-block">
+              <div class="experts-heading">
+                参与专家（{{ entry.experts.active?.length || 0 }} 位）
+                <span v-if="entry.experts.debateRounds" class="experts-debate-note">· 辩论 {{ entry.experts.debateRounds }} 轮</span>
+              </div>
+              <div v-if="entry.experts.active?.length" class="expert-chips">
+                <span v-for="(name, index) in entry.experts.active" :key="`${entry.key}-ex-${index}`" class="expert-chip">{{ name }}</span>
+              </div>
+              <div v-for="(advice, index) in entry.experts.advices" :key="`${entry.key}-ad-${index}`" class="expert-advice">
+                <div class="expert-role">{{ advice.role }}</div>
+                <blockquote>{{ advice.content }}</blockquote>
+              </div>
+              <div v-if="entry.experts.arbitration" class="expert-advice arbitration">
+                <div class="expert-role">仲裁裁决</div>
+                <blockquote>{{ entry.experts.arbitration }}</blockquote>
               </div>
             </div>
 
@@ -367,6 +386,76 @@ blockquote {
 }
 
 .debate-item.arbitration blockquote {
+  border-left-color: #f59e0b;
+  background: #fffbeb;
+}
+
+.experts-block {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid #cfe8e1;
+  border-radius: 8px;
+  background: #f5fbf9;
+}
+
+.experts-heading {
+  margin-bottom: 8px;
+  color: #08745e;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.experts-debate-note {
+  color: #718096;
+  font-weight: 600;
+}
+
+.expert-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.expert-chip {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #e3f2ee;
+  color: #0b7a63;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.expert-advice {
+  padding: 6px 0;
+}
+
+.expert-advice + .expert-advice {
+  border-top: 1px dashed #d5e6e1;
+}
+
+.expert-role {
+  color: #0f9d7a;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.expert-advice blockquote {
+  border-left-color: #67b9a7;
+  background: #ffffff;
+}
+
+.expert-advice.arbitration {
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid #f0d9a8;
+}
+
+.expert-advice.arbitration .expert-role {
+  color: #b45309;
+}
+
+.expert-advice.arbitration blockquote {
   border-left-color: #f59e0b;
   background: #fffbeb;
 }
