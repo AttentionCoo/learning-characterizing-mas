@@ -646,6 +646,23 @@ public class AIStreamingServiceImpl implements AIStreamingService {
                 return Flux.just(objectMapper.writeValueAsString(debateResp));
             }
 
+            // experts 事件：参与专家名单 + 各专家完整发言，透传前端可审计展示
+            if ("experts".equalsIgnoreCase(type)) {
+                Map<String, Object> expertsResp = baseResponse(talkId, generatedTitle[0], "experts");
+                expertsResp.put("node", json.path("node").asText(""));
+                if (json.path("active_experts").isArray()) {
+                    expertsResp.put("active_experts", objectMapper.convertValue(
+                            json.path("active_experts"), new TypeReference<List<String>>() {}));
+                }
+                if (json.path("advices").isArray()) {
+                    expertsResp.put("advices", objectMapper.convertValue(
+                            json.path("advices"), new TypeReference<List<Map<String, Object>>>() {}));
+                }
+                expertsResp.put("debate_rounds", json.path("debate_rounds").asInt(0));
+                expertsResp.put("arbitration", json.path("arbitration").asText(""));
+                return Flux.just(objectMapper.writeValueAsString(expertsResp));
+            }
+
             // ── 旧事件格式兼容（Python 回滚时仍能正常工作）──────────────────────────
 
             // heartbeat 事件：Python 端心跳保活，Java 侧静默丢弃，不透传前端
