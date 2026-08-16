@@ -2,7 +2,7 @@ import os
 import re
 import logging
 import numpy as np
-from langchain_community.document_loaders import PyPDFLoader
+from pypdf import PdfReader
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
@@ -47,17 +47,18 @@ def load_pdfs_from_dir(dir_path: str, clean_fn=clean_text):
         pdf_path = os.path.join(dir_path, filename)
         logger.info(f"📄 加载 PDF: {filename}")
         try:
-            loader = PyPDFLoader(pdf_path)
-            pages = loader.load()
-            for page in pages:
-                cleaned = clean_fn(page.page_content)
+            # 直接使用 pypdf 提取文本（替代已停止维护的 langchain-community PyPDFLoader）
+            reader = PdfReader(pdf_path)
+            for page_idx, page in enumerate(reader.pages):
+                raw_text = page.extract_text() or ""
+                cleaned = clean_fn(raw_text)
                 if len(cleaned) < 50:
                     continue
                 documents.append(Document(
                     page_content=cleaned,
                     metadata={
                         "source": filename,
-                        "page": page.metadata.get("page", -1)
+                        "page": page_idx
                     }
                 ))
         except Exception as e:

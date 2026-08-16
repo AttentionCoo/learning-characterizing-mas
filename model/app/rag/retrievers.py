@@ -9,8 +9,8 @@ from typing import List
 import chromadb.utils.embedding_functions as ef_module
 import dashscope
 from dotenv import load_dotenv
-from langchain_community.retrievers import BM25Retriever
 from langchain_core.documents import Document
+from app.rag.bm25 import BM25Retriever
 from langchain_core.embeddings import Embeddings
 
 # 阻止 ChromaDB 自动初始化内置 ONNX 向量模型，所有向量统一由 Qwen 生成。

@@ -11,12 +11,13 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from sse_starlette.sse import EventSourceResponse
 
 from app.runtime import resources, verify_token
 from app.services.agent_runner import run_agent_background, stream_task_events
 from app.services.code_sandbox import SUPPORTED_LANGUAGES, run_python
+from app.utils.concurrency import InferenceSlot
 from app.utils.error_codes import build_error_event
+from app.utils.sse import EventSourceResponse
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -116,6 +117,13 @@ async def code_assist(request: CodeAssistRequest):
     logger.info("[code_assist] task_id=%s assistType=%s prompt_len=%d code_len=%d",
                 task_id, request.assistType, len(prompt), len(existing_code))
 
+    # 并发治理：与 /model/get_result 共享推理槽位
+    slot = InferenceSlot()
+    try:
+        await slot.__aenter__()
+    except TimeoutError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
     task_mgr.create_task(task_id, "code_assist", {})
 
     asyncio.create_task(run_agent_background(
@@ -133,4 +141,12 @@ async def code_assist(request: CodeAssistRequest):
     ))
 
     init_event = {"type": "init", "taskId": task_id}
-    return EventSourceResponse(stream_task_events(task_id, task_mgr, init_event), ping=15)
+
+    async def guarded_stream():
+        try:
+            async for item in stream_task_events(task_id, task_mgr, init_event):
+                yield item
+        finally:
+            await slot.__aexit__(None, None, None)
+
+    return EventSourceResponse(guarded_stream(), ping=15)

@@ -9,12 +9,12 @@ import logging
 import uuid
 
 from fastapi import APIRouter, HTTPException
-from sse_starlette.sse import EventSourceResponse
 
 from app.runtime import resources
 from app.services.agent_runner import run_agent_background as _run_agent_background
 from app.services.agent_runner import stream_task_events as _stream_task_events
 from app.services.medical_vision_service import MedicalVisionService
+from app.utils.sse import EventSourceResponse
 from app.schemas.medical_image import (
     MedicalImageAnalysisRequest,
     MedicalImageAnalysisResponse,

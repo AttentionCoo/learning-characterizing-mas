@@ -7,10 +7,11 @@ from typing import List
 
 from fastapi import APIRouter, HTTPException, Path, Query
 from pydantic import BaseModel, Field
-from sse_starlette.sse import EventSourceResponse
 
 from app.runtime import resources, verify_token
 from app.services.agent_runner import run_agent_background, stream_task_events
+from app.utils.concurrency import InferenceSlot
+from app.utils.sse import EventSourceResponse
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -35,6 +36,13 @@ async def get_model_result(request: QueryRequest):
     if not agent:
         raise HTTPException(status_code=503, detail="Model service not ready")
 
+    # 并发治理：占位失败（服务繁忙）直接 503，避免无界任务打爆外部模型配额
+    slot = InferenceSlot()
+    try:
+        await slot.__aenter__()
+    except TimeoutError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
     task_mgr = resources["task_manager"]
     task_id = uuid.uuid4().hex
 
@@ -56,7 +64,15 @@ async def get_model_result(request: QueryRequest):
     ))
 
     init_event = {"type": "init", "taskId": task_id}
-    return EventSourceResponse(stream_task_events(task_id, task_mgr, init_event), ping=15)
+
+    async def guarded_stream():
+        try:
+            async for item in stream_task_events(task_id, task_mgr, init_event):
+                yield item
+        finally:
+            await slot.__aexit__(None, None, None)
+
+    return EventSourceResponse(guarded_stream(), ping=15)
 
 
 @router.get("/model/tasks/{task_id}")
