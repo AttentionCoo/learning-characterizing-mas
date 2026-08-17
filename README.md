@@ -2,7 +2,7 @@
 
 LearnAgent 是面向脑卒中医学教育的多智能体个性化学习系统。系统以学生画像为起点，提供学习资源生成、路径规划、循证辅导、学习评估、医学影像分析和代码辅助，并通过 SSE 展示可审计的推理节点与最终结果。
 
-> 文档状态：已于 2026-08-16 按当前代码、Docker 编排和自动化测试核对。系统用于教学辅助，不替代教师指导或临床诊疗意见。
+> 文档状态：已于 2026-08-17 按当前代码、Docker 编排和自动化测试核对。系统用于教学辅助，不替代教师指导或临床诊疗意见。
 
 ## 当前功能
 
@@ -31,6 +31,16 @@ flowchart LR
     Model --> DashScope["DashScope\nQwen Chat / Rerank / VL"]
 ```
 
+### 模型层分层
+
+| 层 | 职责 | 关键组件 |
+|:---|:---|:---|
+| 接入层 | HTTP/SSE 路由与鉴权 | FastAPI 路由（stream/medical/code/profile/evaluation/admin）、`verify_token`（HS256+HS512 共享 JWT） |
+| 治理层 | 并发与流式协议 | `InferenceSlot` 推理信号量（默认 10）、自实现 `EventSourceResponse`（心跳 + 帧编码） |
+| 编排层 | 规划-执行-监督 | `PlannerNode` / `ExecutorNode` / `TutorSupervisor` / LangGraph 状态图（RePlan 循环） |
+| 能力层 | 领域能力 | 9 位专家（YAML 配置 + 规则/LM 选人）、Hybrid RAG（Chroma + 自实现 BM25 + 医学评分重排）、共享记忆、医学多模态（Qwen VL/OCR/DICOM） |
+| 运行时 | 资源与外部依赖 | `runtime.resources`、ThreadPoolExecutor、AsyncTaskManager、DashScope Qwen、ChromaDB |
+
 ### 模型工作流
 
 ```mermaid
@@ -50,6 +60,18 @@ flowchart LR
 - **Supervisor 试点**：tutor 意图由监督者 LLM（qwen-turbo）在工具白名单内自主调度——`evidence_search`（循证检索）、`consult_experts`（多专家辩论仲裁）、`get_student_profile`（画像查询），迭代轮数受上限约束；意图门控与医学红线保留在监督者外层。可用 `SUPERVISOR_TUTOR_ENABLED=false` 切回 Planner 链路。
 - **监督者自主点将**：`consult_experts(question, roles)` 允许监督者从专家白名单（`expert_config.yaml` 动态生成菜单）自主选择 2~5 位专家并说明选人理由，工具内白名单过滤，留空回退意图+难度规则编排；点将名单与各专家完整发言经 `experts` 事件流式送达前端推理轨迹。
 - 模型层从 `model/app/config/expert_config.yaml` 加载 9 位专家：画像对话、特征抽取、需求分析、文档撰写、题目生成、质量审核、学习激励、仲裁和医学影像分析智能体。
+
+**推理链流式事件**（一次请求按到达顺序输出，前端"AI 推理与检索依据"面板实时展示）：
+
+| 事件 | 含义 |
+|:---|:---|
+| `node_start` / `thinking` | 节点开始标签；执行步骤进度、专家发言、提案批判、校验反馈等中途内容 |
+| `experts` | 本轮参与专家名单（先到达）与各专家完整发言（监督者/规划器点将，可审计） |
+| `debate` | 多专家辩论记录 + 仲裁裁决全文 |
+| `node_done` | 节点完成摘要（含 RAG 指南依据与来源页码） |
+| `token` / `replace` | 最终报告逐字流 / 完整报告替换 |
+| `done` | 流结束（画像模式携带 `profile_dimensions`） |
+| `error` | 结构化错误（含错误码） |
 
 ## 技术栈
 
