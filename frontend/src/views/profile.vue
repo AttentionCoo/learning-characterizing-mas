@@ -1645,6 +1645,13 @@ function isDICOMDataUrl(dataUrl) {
       }
     }
   }
+
+  .chat-messages { padding: 14px 12px; }
+  .chat-message { max-width: 94%; }
+  .chat-input-area {
+    padding: 10px 10px calc(12px + env(safe-area-inset-bottom));
+  }
+  .profile-dimensions { padding: 12px; }
 }
 
 .dimension-card {

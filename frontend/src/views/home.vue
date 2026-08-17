@@ -478,7 +478,7 @@ function toggleSidebar() {
 
   .mobile-toggle {
     position: fixed;
-    top: 12px;
+    top: calc(12px + env(safe-area-inset-top));
     left: 12px;
     z-index: 18;
     width: 36px;
@@ -492,6 +492,10 @@ function toggleSidebar() {
     align-items: center;
     justify-content: center;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  }
+
+  .sidebar {
+    padding-bottom: env(safe-area-inset-bottom);
   }
 }
 

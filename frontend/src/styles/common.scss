@@ -1,4 +1,4 @@
-﻿// ─────────────────── 通用按钮 ───────────────────
+// ─────────────────── 通用按钮 ───────────────────
 .primary-action {
   display: inline-block;
   padding: 9px 14px;
@@ -870,5 +870,39 @@ input.auth-input:-webkit-autofill:focus {
   &.active {
     background: var(--color-active-bg);
     box-shadow: inset 3px 0 0 var(--color-primary), var(--glow-dreamy);
+  }
+}
+
+// ── 移动端全局适配 ─────────────────────────────────────────────
+button {
+  touch-action: manipulation;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (max-width: 768px) {
+  .markdown-body {
+    font-size: 14px;
+    line-height: 1.7;
+
+    img {
+      max-width: 100%;
+      height: auto;
+    }
+
+    table {
+      display: block;
+      width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    pre,
+    code {
+      max-width: 100%;
+      overflow-wrap: break-word;
+    }
   }
 }

@@ -407,7 +407,7 @@ onBeforeUnmount(() => { if (animId) cancelAnimationFrame(animId) })
 
   .login-right {
     flex: 1;
-    padding: 2rem 1rem;
+    padding: 1.5rem 1rem calc(1.5rem + env(safe-area-inset-bottom));
   }
 
   .login-orb { display: none; }

@@ -908,7 +908,20 @@ function isDICOMDataUrl(dataUrl) {
 
 @media (max-width: 768px) {
   .tutor-body { flex-direction: column; }
-  .conversation-sidebar { width: 100%; min-width: 100%; max-height: 30vh; border-left: none; border-top: 1px solid var(--color-border-light); }
+  .conversation-sidebar { width: 100%; min-width: 100%; max-height: 28vh; border-left: none; border-top: 1px solid var(--color-border-light); }
+
+  .chat-messages { padding: 14px 12px; }
+  .chat-message { max-width: 94%; gap: 8px; }
+  .message-avatar { width: 30px; height: 30px; }
+  .avatar-ai { width: 34px; height: 34px; }
+
+  .quick-list { display: grid; grid-template-columns: 1fr 1fr; }
+  .quick-btn { padding: 10px 12px; font-size: 12px; white-space: normal; text-align: left; }
+
+  .chat-input-area {
+    padding: 10px 10px calc(12px + env(safe-area-inset-bottom));
+  }
+  .input-wrapper { padding: 6px 6px 6px 12px; }
 }
 
 .message { animation: fade-in-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) both; }
