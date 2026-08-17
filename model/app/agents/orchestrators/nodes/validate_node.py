@@ -31,27 +31,66 @@ class ValidateNode(BaseNode):
     async def run(self, state: LearningState) -> Dict:
         logger.info(f"[validate] 开始后层结果校验，当前已反思次数: {state['reflection_count']}")
 
+        try:
+            from langgraph.config import get_stream_writer
+            writer = get_stream_writer()
+        except Exception:
+            writer = None
+
+        def _emit(payload: dict):
+            if writer is None:
+                return
+            try:
+                writer(payload)
+            except Exception as e:
+                logger.debug(f"[validate] 推送校验事件失败: {e}")
+
+        result = None
         if self.enable_rule_engine:
             logger.info(f"[validate] 开始规则引擎检查")
             rule_feedback = await self._rule_engine_check(state)
             if rule_feedback:
                 logger.warning(f"[validate] 规则引擎检查失败: {rule_feedback}")
                 self._update_reputation(state, passed=False)
-                return self._fail_state(state, rule_feedback)
-            logger.info(f"[validate] 规则引擎检查通过")
+                result = self._fail_state(state, rule_feedback)
+            else:
+                logger.info(f"[validate] 规则引擎检查通过")
 
-        if self.enable_llm_reflection:
+        if result is None and self.enable_llm_reflection:
             logger.info(f"[validate] 开始LLM反思检查")
             result = await self._llm_reflection_check(state)
             if result.get("validation_passed"):
                 self._update_reputation(state, passed=True)
             else:
                 self._update_reputation(state, passed=False)
-            return result
-        else:
+
+        if result is None:
             logger.info("[validate] LLM反思已禁用，默认通过")
             self._update_reputation(state, passed=True)
-            return {"validation_passed": True, "validation_feedback": ""}
+            result = {"validation_passed": True, "validation_feedback": ""}
+
+        # 校验结论与反馈全文流式推送（推理链可审计）
+        passed = result.get("validation_passed", True)
+        feedback = result.get("validation_feedback", "") or ""
+        if passed:
+            _emit({
+                "type": "thinking",
+                "thinking": {
+                    "step": "validate",
+                    "title": "质量校验通过",
+                    "content": feedback or "事实一致性、完整性与安全性检查通过。",
+                },
+            })
+        else:
+            _emit({
+                "type": "thinking",
+                "thinking": {
+                    "step": "validate",
+                    "title": f"质量校验未通过（第 {result.get('reflection_count', 1)} 次驳回）",
+                    "content": feedback,
+                },
+            })
+        return result
 
     def _update_reputation(self, state: LearningState, passed: bool):
         if not self.shared_memory_system:

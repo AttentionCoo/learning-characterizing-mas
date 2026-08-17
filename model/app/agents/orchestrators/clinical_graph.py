@@ -52,36 +52,56 @@ class LearningGraphBuilder:
 
         self.checkpointer = MemorySaver()
 
+    @staticmethod
+    def _with_node_events(name: str, fn):
+        """给图节点包一层：进入节点时经 stream_writer 发 node_start 自定义事件。
+
+        外层运行器以 stream_mode=["custom", ...] 消费，保证 astream_events 迁移后
+        前端仍然能收到节点开始标签（由 LearningAgent 的 _NODE_LABELS 翻译）。
+        """
+
+        async def wrapper(state, **kwargs):
+            try:
+                from langgraph.config import get_stream_writer
+                writer = get_stream_writer()
+                writer({"type": "node_start", "node": name})
+            except Exception:
+                pass
+            return await fn(state, **kwargs)
+
+        wrapper.__name__ = f"{name}_with_events"
+        return wrapper
+
     def build(self):
         graph = StateGraph(LearningState)
 
-        graph.add_node("intent", self.intent_node.run)
-        graph.add_node("reject", self._reject_node)
-        graph.add_node("knowledge_answer", self._knowledge_node)
-        graph.add_node("analysis", self.analysis_node.run)
+        graph.add_node("intent", self._with_node_events("intent", self.intent_node.run))
+        graph.add_node("reject", self._with_node_events("reject", self._reject_node))
+        graph.add_node("knowledge_answer", self._with_node_events("knowledge_answer", self._knowledge_node))
+        graph.add_node("analysis", self._with_node_events("analysis", self.analysis_node.run))
 
         # 医学多模态：当存在影像时添加 vision 节点
         if self.vision_node:
-            graph.add_node("vision", self.vision_node.run)
+            graph.add_node("vision", self._with_node_events("vision", self.vision_node.run))
             logger.info("[graph] 已添加 vision 影像分析节点")
 
-        graph.add_node("retrieve", self.retrieve_node.run)
-        graph.add_node("reason", self.reason_node.run)
+        graph.add_node("retrieve", self._with_node_events("retrieve", self.retrieve_node.run))
+        graph.add_node("reason", self._with_node_events("reason", self.reason_node.run))
 
         if self.planner_node:
-            graph.add_node("planner", self.planner_node.run)
+            graph.add_node("planner", self._with_node_events("planner", self.planner_node.run))
             logger.info("[graph] 已添加 planner 规划节点")
         if self.executor_node:
-            graph.add_node("execute_plan", self.executor_node.run)
+            graph.add_node("execute_plan", self._with_node_events("execute_plan", self.executor_node.run))
             logger.info("[graph] 已添加 execute_plan 执行节点")
         if self.supervisor_node:
-            graph.add_node("supervisor", self.supervisor_node.run)
+            graph.add_node("supervisor", self._with_node_events("supervisor", self.supervisor_node.run))
             logger.info("[graph] 已添加 supervisor 监督者节点（tutor 试点）")
 
         if self.validate_node:
-            graph.add_node("validate", self.validate_node.run)
+            graph.add_node("validate", self._with_node_events("validate", self.validate_node.run))
 
-        graph.add_node("generate_report", self.report_node.run)
+        graph.add_node("generate_report", self._with_node_events("generate_report", self.report_node.run))
 
         graph.set_entry_point("intent")
 

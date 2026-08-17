@@ -56,8 +56,34 @@ class ReasonNode(BaseNode):
 
         logger.info(f"[reason] 开启多专家并行推理 (Reflection Count: {state['reflection_count']})")
 
+        try:
+            from langgraph.config import get_stream_writer
+            writer = get_stream_writer()
+        except Exception:
+            writer = None
+
+        def _emit(payload: dict):
+            if writer is None:
+                return
+            try:
+                writer(payload)
+            except Exception as e:
+                logger.debug(f"[reason] 推送推理链事件失败: {e}")
+
+        # 点将/编排完成后立即告知前端本轮专家名单
+        _emit({
+            "type": "experts_selected",
+            "node": "reason",
+            "active_experts": list(active_experts),
+            "reason": (
+                "监督者显式点将" if state.get("active_experts_override")
+                else f"意图+难度规则编排（难度 {state.get('difficulty_score', 0.5):.2f}）"
+            ),
+        })
+
         tasks = []
         expert_roles = []
+        task_roles = []
 
         for expert in self.experts:
             role = expert.get("role")
@@ -67,10 +93,37 @@ class ReasonNode(BaseNode):
             expert_roles.append(role)
             weight = agent_weights.get(role, 1.0)
             tasks.append(self._ask_expert(role, instruction, case_info, weight))
+            task_roles.append(role)
 
         logger.info(f"[reason] 已创建 {len(tasks)} 个专家推理任务")
 
-        results = await asyncio.gather(*tasks)
+        # 逐专家完成即流式推送其发言（as_completed 替代 gather，实现推理链实时打印）
+        results_map: Dict[str, str] = {}
+        pending = {asyncio.ensure_future(coro): role for coro, role in zip(tasks, task_roles)}
+        completed = 0
+        for future in asyncio.as_completed(pending):
+            role = pending[future]
+            try:
+                advice = await future
+            except Exception as e:
+                logger.error(f"[reason] {role} 推理异常: {type(e).__name__}: {e}")
+                advice = "未能获取有效建议"
+            results_map[role] = advice
+            completed += 1
+            if advice and not advice.startswith("未能获取"):
+                _emit({
+                    "type": "expert_done",
+                    "node": "reason",
+                    "role": role,
+                    "content": advice,
+                    "index": completed,
+                    "total": len(tasks),
+                })
+                logger.info(f"[reason] ✅ 专家完成并推送发言 {completed}/{len(tasks)}: {role}（{len(advice)} 字）")
+            else:
+                logger.warning(f"[reason] {role} 推理失败或返回空结果")
+
+        results = [results_map[role] for role in expert_roles]
 
         logger.info(f"[reason] 专家推理完成，收到 {len(results)} 个结果")
 
@@ -80,9 +133,6 @@ class ReasonNode(BaseNode):
             expert_advices[f"{role}_advice"] = advice
             if advice and not advice.startswith("未能获取"):
                 successful_experts += 1
-                logger.info(f"[reason] {role} 推理成功，建议长度: {len(advice)}")
-            else:
-                logger.warning(f"[reason] {role} 推理失败或返回空结果")
 
         logger.info(f"[reason] 成功推理专家数: {successful_experts}/{len(expert_roles)}")
 
@@ -98,6 +148,14 @@ class ReasonNode(BaseNode):
             debate_history = debate_results["debate_history"]
             arbitration_result = debate_results["arbitration_result"]
             logger.info(f"[reason] 辩论-仲裁完成，辩论轮数: {len(debate_history)}")
+            # 辩论记录与仲裁裁决实时推送（推理链可审计）
+            _emit({
+                "type": "debate",
+                "node": "reason",
+                "rounds": len(debate_history),
+                "history": debate_history,
+                "arbitration": arbitration_result or "",
+            })
         else:
             arbitration_result = None
 
@@ -137,6 +195,14 @@ class ReasonNode(BaseNode):
         critique_text = parts[1].strip() if len(parts) > 1 else "无明显风险批判。"
 
         logger.info(f"[reason] 提案长度: {len(proposal_text)}, 批判长度: {len(critique_text)}")
+
+        # 综合提案与批判全文实时推送（推理链可审计）
+        _emit({
+            "type": "proposal",
+            "node": "reason",
+            "proposal": proposal_text,
+            "critique": critique_text,
+        })
 
         consensus_result = {}
         memory_entropy_scores = {}

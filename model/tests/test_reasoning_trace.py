@@ -97,13 +97,8 @@ def test_retrieve_node_keeps_full_sources_while_truncating_reasoning_context():
 
 def test_streaming_report_emits_token_and_completion_audit_event():
     class FakeGraph:
-        async def astream_events(self, _state, config, version):
-            yield {
-                "event": "on_chain_end",
-                "name": "generate_report",
-                "metadata": {"langgraph_node": "generate_report"},
-                "data": {"output": {"report": "最终回答"}},
-            }
+        async def astream(self, _state, config, stream_mode):
+            yield ("updates", {"generate_report": {"report": "最终回答"}})
 
     agent = LearningAgent.__new__(LearningAgent)
     agent.graph = FakeGraph()
@@ -123,19 +118,9 @@ def test_streaming_report_replaces_tokens_with_complete_report_at_chain_end():
         content = "一、总体评估\n"
 
     class FakeGraph:
-        async def astream_events(self, _state, config, version):
-            yield {
-                "event": "on_chat_model_stream",
-                "name": "ChatModel",
-                "metadata": {"langgraph_node": "generate_report"},
-                "data": {"chunk": Chunk()},
-            }
-            yield {
-                "event": "on_chain_end",
-                "name": "generate_report",
-                "metadata": {"langgraph_node": "generate_report"},
-                "data": {"output": {"report": "一、总体评估\n二、改进建议"}},
-            }
+        async def astream(self, _state, config, stream_mode):
+            yield ("messages", (Chunk(), {"langgraph_node": "generate_report"}))
+            yield ("updates", {"generate_report": {"report": "一、总体评估\n二、改进建议"}})
 
     agent = LearningAgent.__new__(LearningAgent)
     agent.graph = FakeGraph()

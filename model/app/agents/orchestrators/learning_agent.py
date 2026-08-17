@@ -174,7 +174,6 @@ class LearningAgent:
             "supervisor_trace": [],
         }
         streamed_nodes: set = set()
-        llm_call_counts: Dict[str, int] = {}
 
         try:
             import uuid
@@ -184,79 +183,143 @@ class LearningAgent:
                 }
             }
 
-            async for event in self.graph.astream_events(initial_state, config=config, version="v2"):
-                translated = self._translate_event(event, show_thinking, streamed_nodes, llm_call_counts)
-                if translated:
-                    if translated.get("type") == "token":
-                        node = event.get("metadata", {}).get("langgraph_node", "")
-                        if node in self._STREAMING_NODES:
-                            streamed_nodes.add(node)
-                    yield translated
-                    if (
-                        show_thinking
-                        and event.get("event") == "on_chain_end"
-                        and event.get("name") in self._STREAMING_NODES
-                        and translated.get("type") in {"token", "replace"}
-                    ):
-                        output = event.get("data", {}).get("output", {})
-                        yield self._build_node_done_event(event.get("name", ""), output)
+            # 三通道流式：custom=节点中途事件 / updates=节点完成输出 / messages=LLM token 流
+            async for mode, chunk in self.graph.astream(
+                initial_state,
+                config=config,
+                stream_mode=["custom", "updates", "messages"],
+            ):
+                # ── custom：推理链中途事件（逐步骤/逐专家/辩论/提案/校验反馈实时打印）──
+                if mode == "custom":
+                    data = chunk
+                    if not isinstance(data, dict) or not data.get("type"):
+                        continue
+                    evt_type = data["type"]
 
-                    # 辩论与专家发言输出到前端流：reason 节点完成时推送完整辩论记录 + 仲裁裁决 + 各专家发言。
-                    # 注：Planner 架构下 expert_reason 在 execute_plan 节点内部运行，其输出（含辩论与专家发言）
-                    # 被 ExecutorNode 全量合并进 execute_plan 的节点输出，因此两个节点名都要监听。
-                    if event.get("event") == "on_chain_end" and event.get("name") in ("reason", "execute_plan"):
-                        output = event.get("data", {}).get("output", {})
-                        debate_event = self._build_debate_event(output)
-                        logger.info(
-                            "[event] %s节点结束 -> debate_event=%s, history=%s, arbitration_len=%s",
-                            event.get("name"),
-                            bool(debate_event),
-                            len((output or {}).get("debate_history", []) or []),
-                            len((output or {}).get("arbitration_result", "") or ""),
-                        )
-                        if debate_event:
-                            logger.info("[event] ✅ 推送 debate 事件到前端 (rounds=%s)", debate_event.get("rounds"))
-                            yield debate_event
+                    if evt_type == "node_start":
+                        node = data.get("node", "")
+                        label = _NODE_LABELS.get(node, "")
+                        if label and show_thinking:
+                            yield {"type": "node_start", "node": node, "label": label}
+                        continue
 
-                        # 参与专家名单 + 各专家完整发言，供前端可审计展示
-                        experts_event = self._build_experts_event(output)
-                        if experts_event:
-                            logger.info(
-                                "[event] ✅ 推送 experts 事件到前端 (active=%s, advices=%s)",
-                                len(experts_event.get("active_experts", [])),
-                                len(experts_event.get("advices", [])),
-                            )
-                            yield experts_event
+                    if evt_type == "thinking":
+                        if show_thinking:
+                            yield data
+                        continue
 
-                    # 监督者路径：把监督者点将名单与专家发言以 experts 事件形状输出，前端可审计展示
-                    if event.get("event") == "on_chain_end" and event.get("name") == "supervisor":
-                        output = event.get("data", {}).get("output", {})
-                        roles = output.get("supervisor_roles") or []
-                        advices = output.get("expert_advices") or []
-                        if not roles and not advices:
-                            # 旧形状兜底：从工具轨迹提取工具名与结果预览
-                            supervisor_trace = output.get("supervisor_trace", []) or []
-                            for item in supervisor_trace:
-                                if not isinstance(item, dict):
-                                    continue
-                                tools = item.get("tools") or []
-                                for tool_name in tools:
-                                    roles.append(tool_name)
-                                    if item.get("results"):
-                                        advices.append({"role": tool_name, "content": item["results"]})
-                        if roles:
-                            logger.info(
-                                "[event] ✅ 推送 supervisor 点将结果到前端 (roles=%s, advices=%s)",
-                                roles, len(advices),
-                            )
-                            yield {
-                                "type": "experts",
-                                "node": "supervisor",
-                                "active_experts": roles,
-                                "advices": advices,
-                                "debate_rounds": 0,
-                                "arbitration": "",
-                            }
+                    if evt_type == "experts_selected":
+                        # 专家名单先行到达（发言随后逐条到达）
+                        yield {
+                            "type": "experts",
+                            "node": data.get("node", "reason"),
+                            "active_experts": data.get("active_experts", []),
+                            "advices": [],
+                            "debate_rounds": 0,
+                            "arbitration": "",
+                        }
+                        continue
+
+                    if evt_type == "expert_done":
+                        # 每位专家完成即流式推送其完整发言
+                        yield {
+                            "type": "thinking",
+                            "thinking": {
+                                "step": data.get("node", "reason"),
+                                "title": "专家发言 {}/{}：{}".format(
+                                    data.get("index"), data.get("total"), data.get("role")
+                                ),
+                                "content": data.get("content", ""),
+                            },
+                        }
+                        continue
+
+                    if evt_type == "debate":
+                        yield {
+                            "type": "debate",
+                            "node": data.get("node", "reason"),
+                            "rounds": data.get("rounds", 0),
+                            "history": data.get("history", []),
+                            "arbitration": data.get("arbitration", ""),
+                        }
+                        continue
+
+                    if evt_type == "proposal":
+                        # 综合提案与风险批判全文
+                        yield {
+                            "type": "thinking",
+                            "thinking": {
+                                "step": data.get("node", "reason"),
+                                "title": "综合提案与风险批判",
+                                "content": "【提案】\n{}\n\n【批判】\n{}".format(
+                                    data.get("proposal", ""), data.get("critique", "")
+                                ),
+                            },
+                        }
+                        continue
+
+                    logger.debug("[stream] 未识别的 custom 事件类型: %s", evt_type)
+                    continue
+
+                # ── updates：节点完成输出 ──
+                if mode == "updates":
+                    for node_name, output in chunk.items():
+                        if not isinstance(output, dict):
+                            continue
+                        if node_name == "reject":
+                            report_text = output.get("report", "")
+                            if report_text:
+                                yield {"type": "token", "content": report_text}
+                            continue
+                        if node_name in self._STREAMING_NODES:
+                            report_text = output.get("report", "")
+                            if report_text:
+                                if node_name not in streamed_nodes:
+                                    streamed_nodes.add(node_name)
+                                    yield {"type": "token", "content": report_text}
+                                else:
+                                    yield {"type": "replace", "content": report_text}
+                            if show_thinking:
+                                yield self._build_node_done_event(node_name, output)
+                            continue
+                        if node_name == "supervisor":
+                            # 监督者点将名单 + 专家发言（experts 事件）
+                            roles = output.get("supervisor_roles") or []
+                            advices = output.get("expert_advices") or []
+                            if roles:
+                                logger.info(
+                                    "[event] ✅ 推送 supervisor 点将结果到前端 (roles=%s, advices=%s)",
+                                    roles, len(advices),
+                                )
+                                yield {
+                                    "type": "experts",
+                                    "node": "supervisor",
+                                    "active_experts": roles,
+                                    "advices": advices,
+                                    "debate_rounds": 0,
+                                    "arbitration": "",
+                                }
+                            continue
+                        if show_thinking:
+                            yield self._build_node_done_event(node_name, output)
+                    continue
+
+                # ── messages：流式 token（仅最终报告类节点；supervisor 内部推理文本不外泄，其答案由 updates 端到端替换）──
+                if mode == "messages":
+                    message_chunk, metadata = chunk
+                    langgraph_node = (metadata or {}).get("langgraph_node", "")
+                    if langgraph_node not in {"generate_report", "knowledge_answer"}:
+                        continue
+                    content = getattr(message_chunk, "content", None)
+                    if content is None:
+                        continue
+                    if not isinstance(content, str):
+                        content = str(content)
+                    if not content:
+                        continue
+                    streamed_nodes.add(langgraph_node)
+                    yield {"type": "token", "content": content}
+                    continue
 
         except Exception as e:
             logger.error(f"学习推理管线异常 | {format_error_log(e)}")
@@ -269,6 +332,11 @@ class LearningAgent:
         streamed_nodes: set,
         llm_call_counts: Dict[str, int],
     ) -> Dict:
+        """[已弃用] astream_events 时代的翻译器。
+
+        run_learning_reasoning 已迁移到 astream(stream_mode=["custom","updates","messages"])，
+        推理链中途事件由节点内 get_stream_writer 直发。本方法仅作历史参考保留，不再被调用。
+        """
         evt = event.get("event", "")
         name = event.get("name", "")
         meta = event.get("metadata", {})
