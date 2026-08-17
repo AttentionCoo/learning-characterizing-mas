@@ -97,17 +97,26 @@ class ReasonNode(BaseNode):
 
         logger.info(f"[reason] 已创建 {len(tasks)} 个专家推理任务")
 
-        # 逐专家完成即流式推送其发言（as_completed 替代 gather，实现推理链实时打印）
-        results_map: Dict[str, str] = {}
-        pending = {asyncio.ensure_future(coro): role for coro, role in zip(tasks, task_roles)}
-        completed = 0
-        for future in asyncio.as_completed(pending):
-            role = pending[future]
+        # 逐专家完成即流式推送其发言（as_completed 替代 gather，实现推理链实时打印）。
+        # 注：角色随协程返回 (role, advice)，规避不同 Python 版本下 as_completed 的
+        # yield 语义差异（部分环境 yield 内部包装协程导致按 future 反查角色失败）。
+        async def _run_one(role: str, coro):
             try:
-                advice = await future
+                advice = await coro
             except Exception as e:
                 logger.error(f"[reason] {role} 推理异常: {type(e).__name__}: {e}")
                 advice = "未能获取有效建议"
+            return role, advice
+
+        wrapped_tasks = [
+            _run_one(role, coro)
+            for role, coro in zip(task_roles, tasks)
+        ]
+
+        results_map: Dict[str, str] = {}
+        completed = 0
+        for waiter in asyncio.as_completed(wrapped_tasks):
+            role, advice = await waiter
             results_map[role] = advice
             completed += 1
             if advice and not advice.startswith("未能获取"):
