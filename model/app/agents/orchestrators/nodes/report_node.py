@@ -31,8 +31,10 @@ class ReportNode(BaseNode):
         logger.info(f"[report] 使用模板: {report_mode}")
 
         if state['user_questions']:
-            logger.info(f"[report] 存在用户问题，直接返回提案")
-            return {"report": state['proposal']}
+            if state['proposal']:
+                logger.info(f"[report] 存在用户问题且提案非空，直接返回提案")
+                return {"report": state['proposal']}
+            logger.warning(f"[report] 存在用户问题但提案为空（expert_reason 未产出），走默认生成路径")
 
         # ── code_assist 模式：直接用 LLM 生成代码辅助内容 ──
         if report_mode == "code_assist":

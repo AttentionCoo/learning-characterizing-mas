@@ -65,6 +65,16 @@ def normalize_plan(plan: Optional[ExecutionPlan], intent_type: str = "") -> Exec
             goal="基于以上步骤的结果生成最终回答",
         ))
 
+    # 不变量：报告节点消费 expert_reason 产出的 proposal，
+    # 计划缺少内容生产步骤会导致空报告，这里自动补齐
+    if all(s.step_type != "expert_reason" for s in steps):
+        finalize_idx = next(i for i, s in enumerate(steps) if s.step_type == "finalize")
+        steps.insert(finalize_idx, PlanStep(
+            step_type="expert_reason",
+            title="多专家推理与辩论",
+            goal="多专家并行提案、辩论仲裁并产出综合提案",
+        ))
+
     return ExecutionPlan(steps=steps[:MAX_PLAN_STEPS], rationale=plan.rationale)
 
 

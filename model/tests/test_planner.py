@@ -103,6 +103,20 @@ def test_normalize_plan_truncates_after_finalize():
     assert [s.step_type for s in normalized.steps] == ["expert_reason", "finalize"]
 
 
+def test_normalize_plan_injects_expert_reason_when_missing():
+    # 报告节点消费 expert_reason 的 proposal，缺少该步骤必须自动补齐
+    plan = ExecutionPlan(
+        steps=[
+            PlanStep(step_type="analyze", title="需求分析"),
+            PlanStep(step_type="finalize", title="汇总"),
+        ],
+        rationale="简单问题",
+    )
+    normalized = normalize_plan(plan, "profile")
+    types = [s.step_type for s in normalized.steps]
+    assert types == ["analyze", "expert_reason", "finalize"]
+
+
 def test_normalize_plan_returns_default_when_none():
     plan = normalize_plan(None, "tutor")
     assert plan.steps[-1].step_type == "finalize"
