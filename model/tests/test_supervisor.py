@@ -91,7 +91,7 @@ def test_run_returns_fallback_when_agent_raises(monkeypatch):
         async def ainvoke(self, *args, **kwargs):
             raise RuntimeError("react agent boom")
 
-    monkeypatch.setattr(supervisor, "_build_agent", lambda state: _BoomAgent())
+    monkeypatch.setattr(supervisor, "_build_agent", lambda state: (_BoomAgent(), {"last_roles": [], "expert_advices": []}))
     result = asyncio.run(supervisor.run(_make_state()))
     assert "暂时不可用" in result["report"]
     assert result["supervisor_trace"] == []
@@ -108,7 +108,7 @@ def test_run_extracts_answer_from_messages(monkeypatch):
                 AIMessage(content="这是一个完整的辅导回答。"),
             ]}
 
-    monkeypatch.setattr(supervisor, "_build_agent", lambda state: _FakeAgent())
+    monkeypatch.setattr(supervisor, "_build_agent", lambda state: (_FakeAgent(), {"last_roles": [], "expert_advices": []}))
     result = asyncio.run(supervisor.run(_make_state()))
     assert result["report"] == "这是一个完整的辅导回答。"
     assert result["proposal"] == result["report"]
@@ -128,9 +128,80 @@ def test_build_agent_registers_three_tools(monkeypatch):
         _fake_create_react_agent,
     )
     supervisor = _supervisor(llm="fake-model")
-    supervisor._build_agent(_make_state())
+    agent, workspace = supervisor._build_agent(_make_state())
+    assert agent is not None
+    assert "last_roles" in workspace
     assert len(captured["tools"]) == 3
     names = sorted(t.name for t in captured["tools"])
     assert names == ["consult_experts", "evidence_search", "get_student_profile"]
     assert "监督者" in captured["prompt"]
     assert "教学辅导" in captured["prompt"]
+    assert "专家白名单" in captured["prompt"]
+    assert "画像对话智能体" in captured["prompt"]
+
+
+class _FakeReasonNode:
+    """记录点将名单并返回模拟专家发言与提案。"""
+
+    def __init__(self):
+        self.last_state = None
+
+    async def run(self, state):
+        self.last_state = dict(state)
+        roles = self.last_state.get("active_experts_override", [])
+        updates = {
+            "active_experts": roles,
+            "proposal": "综合提案内容。",
+        }
+        for role in roles:
+            updates[f"{role}_advice"] = f"{role} 的发言。"
+        return updates
+
+
+def _capture_tools(monkeypatch):
+    captured = {}
+
+    def _fake_create_react_agent(model, tools, prompt=None, **kwargs):
+        captured["tools"] = tools
+        return object()
+
+    monkeypatch.setattr(
+        "app.agents.orchestrators.supervisor.create_react_agent",
+        _fake_create_react_agent,
+    )
+    return captured
+
+
+def test_consult_experts_filters_roles_to_whitelist_and_returns_speeches(monkeypatch):
+    captured = _capture_tools(monkeypatch)
+    fake_reason = _FakeReasonNode()
+    supervisor = _supervisor(llm="fake-model")
+    supervisor.reason_node = fake_reason
+    supervisor._build_agent(_make_state())
+
+    tool_map = {t.name: t for t in captured["tools"]}
+    consult = tool_map["consult_experts"]
+
+    result = asyncio.run(consult.ainvoke({
+        "question": "怎么学好脑血管解剖？",
+        "roles": ["需求分析智能体", "不存在的专家"],
+    }))
+
+    assert fake_reason.last_state["active_experts_override"] == ["需求分析智能体"]
+    assert "【需求分析智能体】" in result
+    assert "综合提案" in result
+    assert "不存在的专家" not in result
+
+
+def test_consult_experts_empty_roles_falls_back_to_rule_selection(monkeypatch):
+    captured = _capture_tools(monkeypatch)
+    fake_reason = _FakeReasonNode()
+    supervisor = _supervisor(llm="fake-model")
+    supervisor.reason_node = fake_reason
+    supervisor._build_agent(_make_state())
+
+    consult = {t.name: t for t in captured["tools"]}["consult_experts"]
+    result = asyncio.run(consult.ainvoke({"question": "问题", "roles": []}))
+
+    assert "active_experts_override" not in fake_reason.last_state
+    assert "综合提案" in result

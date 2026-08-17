@@ -194,7 +194,26 @@ class ReasonNode(BaseNode):
         return result
 
     def _resolve_active_experts(self, state: LearningState) -> List[str]:
-        """根据意图类型和难度评分动态决定参与专家"""
+        """决定本轮参与专家。
+
+        优先级：
+        1. 监督者显式点将（active_experts_override，白名单过滤）
+        2. 意图+难度规则编排（YAML dynamic_orchestration）
+        3. 动态编排关闭时全员参与
+        """
+        # 监督者显式指定名单（必须落在专家白名单内）
+        override = state.get("active_experts_override")
+        if override:
+            valid_roles = {e.get("role") for e in self.experts}
+            roles = [r for r in override if r in valid_roles]
+            if roles:
+                logger.info(
+                    "[reason] 使用监督者显式点将: intent=%s, experts=%s",
+                    state.get('intent_type', ''), roles,
+                )
+                return roles
+            logger.warning("[reason] 显式点将名单均不在白名单内，回退规则编排")
+
         if not self.dynamic_orchestration_enabled:
             return [e.get("role") for e in self.experts]
 

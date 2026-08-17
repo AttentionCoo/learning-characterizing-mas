@@ -228,27 +228,31 @@ class LearningAgent:
                             )
                             yield experts_event
 
-                    # 监督者路径：把工具调度轨迹（工具名 + 结果预览）以 experts 事件形状输出，
-                    # 让 consult_experts 的专家内容同样在前端可审计展示
+                    # 监督者路径：把监督者点将名单与专家发言以 experts 事件形状输出，前端可审计展示
                     if event.get("event") == "on_chain_end" and event.get("name") == "supervisor":
                         output = event.get("data", {}).get("output", {})
-                        supervisor_trace = output.get("supervisor_trace", []) or []
-                        tools_used = []
-                        advices = []
-                        for item in supervisor_trace:
-                            if not isinstance(item, dict):
-                                continue
-                            tools = item.get("tools") or []
-                            for tool_name in tools:
-                                tools_used.append(tool_name)
-                                if item.get("results"):
-                                    advices.append({"role": tool_name, "content": item["results"]})
-                        if tools_used:
-                            logger.info("[event] ✅ 推送 supervisor 工具轨迹到前端 (tools=%s)", tools_used)
+                        roles = output.get("supervisor_roles") or []
+                        advices = output.get("expert_advices") or []
+                        if not roles and not advices:
+                            # 旧形状兜底：从工具轨迹提取工具名与结果预览
+                            supervisor_trace = output.get("supervisor_trace", []) or []
+                            for item in supervisor_trace:
+                                if not isinstance(item, dict):
+                                    continue
+                                tools = item.get("tools") or []
+                                for tool_name in tools:
+                                    roles.append(tool_name)
+                                    if item.get("results"):
+                                        advices.append({"role": tool_name, "content": item["results"]})
+                        if roles:
+                            logger.info(
+                                "[event] ✅ 推送 supervisor 点将结果到前端 (roles=%s, advices=%s)",
+                                roles, len(advices),
+                            )
                             yield {
                                 "type": "experts",
                                 "node": "supervisor",
-                                "active_experts": tools_used,
+                                "active_experts": roles,
                                 "advices": advices,
                                 "debate_rounds": 0,
                                 "arbitration": "",

@@ -33,11 +33,16 @@ _SUPERVISOR_SYSTEM_PROMPT = """你是脑卒中医学教育辅导的监督者（s
 
 你可以调用以下工具（只能调用这些工具，不能虚构其他能力）：
 1. evidence_search(query)：检索权威脑卒中指南证据，回答需要循证依据的问题前应调用
-2. consult_experts(question)：召集多学科教育专家并行讨论并仲裁，给出综合建议，适合需要多角度分析的问题
+2. consult_experts(question, roles)：召集指定专家并行讨论并仲裁，返回各专家发言与综合提案
 3. get_student_profile()：获取当前学生的学习画像，个性化建议前应调用
+
+专家白名单（consult_experts 的 roles 只能从中选择）：
+{expert_menu}
 
 工作原则：
 - 教学辅导定位：只做医学教育辅导，不替代临床诊疗决策；不确定时明确说明
+- 召集专家时根据问题性质选择 2~5 位最相关的专家，并在工具调用前用一句话说明选人理由；
+  例如需要循证依据时先 evidence_search，需要多角度教学建议时 consult_experts
 - 引用指南证据时标注来源；证据不足时先检索再回答
 - 回答用中文、结构清晰；工具调用不超过 {max_rounds} 轮，信息足够后直接给出最终答案
 - 最终输出是给学生的完整回答，不要再输出工具调用指令"""
@@ -58,12 +63,33 @@ class TutorSupervisor:
         self.reason_node = reason_node
         self.max_tool_rounds = max_tool_rounds
         self._agent = None
+        # 专家白名单：从 expert_config.yaml 加载，供监督者点将与提示词菜单使用
+        try:
+            from app.config.config_loader import get_expert_manager
+            self.expert_menu = [
+                {
+                    "role": e.get("role"),
+                    "brief": (e.get("instruction") or "").replace("\n", " ")[:60],
+                }
+                for e in get_expert_manager().get_experts()
+            ]
+        except Exception as e:
+            logger.warning(f"[supervisor] 加载专家白名单失败: {e}")
+            self.expert_menu = []
+
+    def _expert_menu_text(self) -> str:
+        if not self.expert_menu:
+            return "（专家白名单不可用，roles 留空时由系统按规则自动编排）"
+        lines = [f"- {e['role']}：{e['brief']}" for e in self.expert_menu]
+        return "\n".join(lines)
 
     # ── 工具定义（闭包捕获当前 state 与共享工作区） ──────────────────────────
     def _build_agent(self, state: LearningState):
         workspace: Dict[str, str] = {
             "evidence": state.get("evidence", "") or "",
             "proposal": "",
+            "last_roles": [],
+            "expert_advices": [],
         }
         profile_text = self._format_profile(state)
 
@@ -87,21 +113,50 @@ class TutorSupervisor:
                 return f"检索失败：{e}"
 
         @tool
-        async def consult_experts(question: str) -> str:
-            """召集多学科教育专家讨论。参数 question 为要讨论的问题。返回专家综合提案。"""
+        async def consult_experts(question: str, roles: List[str] = None) -> str:
+            """召集指定专家并行讨论并仲裁。
+
+            参数 question 为要讨论的问题；roles 为本轮召集的专家角色列表，
+            只能从系统提示中的专家白名单选择 1~5 位（留空则按系统规则自动编排）。
+            返回各专家发言与综合提案。"""
             try:
                 if not self.reason_node:
                     return "专家咨询不可用"
+                valid_roles = {e["role"] for e in self.expert_menu}
+                chosen = [r for r in (roles or []) if r in valid_roles]
+                workspace["last_roles"] = list(chosen)
+                if roles and len(chosen) != len(roles):
+                    logger.info(
+                        "[supervisor] 点将名单过滤: 请求=%s, 白名单内=%s", roles, chosen
+                    )
+
                 mini_state = dict(state)
                 mini_state["case_text"] = question
                 mini_state["evidence"] = workspace["evidence"]
                 mini_state["validation_feedback"] = ""
                 mini_state["reflection_count"] = 0
+                if chosen:
+                    mini_state["active_experts_override"] = chosen
+
                 updates = await self.reason_node.run(mini_state) or {}
+
+                # 收集各专家完整发言（回流前端可审计展示）
+                resolved_roles = updates.get("active_experts", []) or chosen
+                speeches = []
+                for role in resolved_roles:
+                    advice = updates.get(f"{role}_advice", "") or ""
+                    if advice and not advice.startswith("未能获取"):
+                        speeches.append({"role": role, "content": advice})
+                workspace["expert_advices"] = speeches
+
                 proposal = updates.get("proposal", "") or ""
                 if proposal:
                     workspace["proposal"] = proposal
-                    return truncate_text(proposal, 4000)
+                    body = "\n\n".join(
+                        f"【{s['role']}】\n{s['content']}" for s in speeches
+                    )
+                    result = f"{body}\n\n【综合提案】\n{proposal}" if body else proposal
+                    return truncate_text(result, 5000)
                 return "专家未产出有效提案"
             except Exception as e:
                 logger.warning(f"[supervisor] consult_experts 失败: {e}")
@@ -112,13 +167,16 @@ class TutorSupervisor:
             """获取当前学生的学习画像（专业、年级、知识水平、目标等）。"""
             return profile_text or "暂无学习画像信息"
 
-        system_prompt = _SUPERVISOR_SYSTEM_PROMPT.format(max_rounds=self.max_tool_rounds)
+        system_prompt = _SUPERVISOR_SYSTEM_PROMPT.format(
+            max_rounds=self.max_tool_rounds,
+            expert_menu=self._expert_menu_text(),
+        )
         # langgraph-prebuilt 1.x 用 prompt 参数注入系统提示（0.x 时代叫 state_modifier）
         return create_react_agent(
             model=self.llm,
             tools=[evidence_search, consult_experts, get_student_profile],
             prompt=system_prompt,
-        )
+        ), workspace
 
     @staticmethod
     def _format_profile(state: LearningState) -> str:
@@ -140,7 +198,7 @@ class TutorSupervisor:
         if all_info:
             user_input = f"{all_info}\n\n【本轮问题】{user_input}"
 
-        agent = self._build_agent(state)
+        agent, workspace = self._build_agent(state)
 
         try:
             # react 图每轮工具调用约占 2 层递归，预留富余
@@ -155,6 +213,8 @@ class TutorSupervisor:
                 "report": "抱歉，辅导服务暂时不可用，请稍后重试。",
                 "proposal": "",
                 "supervisor_trace": [],
+                "supervisor_roles": [],
+                "expert_advices": [],
             }
 
         messages = result.get("messages", []) or []
@@ -162,10 +222,19 @@ class TutorSupervisor:
         trace = self._build_trace(messages)
 
         logger.info(
-            "[supervisor] 完成: 消息数=%d, 工具调用=%d, 答案长度=%d",
-            len(messages), sum(1 for m in trace if m.get("tools")), len(answer),
+            "[supervisor] 完成: 消息数=%d, 工具调用=%d, 点将=%s, 答案长度=%d",
+            len(messages),
+            sum(1 for m in trace if m.get("tools")),
+            workspace.get("last_roles"),
+            len(answer),
         )
-        return {"report": answer, "proposal": answer, "supervisor_trace": trace}
+        return {
+            "report": answer,
+            "proposal": answer,
+            "supervisor_trace": trace,
+            "supervisor_roles": workspace.get("last_roles", []),
+            "expert_advices": workspace.get("expert_advices", []),
+        }
 
     @staticmethod
     def _extract_answer(messages: List) -> str:
