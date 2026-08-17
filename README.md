@@ -45,7 +45,8 @@ flowchart LR
     Intent -.->|"tutor 试点"| Supervisor["Supervisor\n三工具白名单调度"] --> Report
 ```
 
-- **Planner 主链路**：多步任务（画像/资源/路径/评估）先由 `PlannerNode` 用轻量模型生成结构化执行计划（步骤类型白名单：analyze/retrieve/expert_reason/finalize，最多 6 步），`ExecutorNode` 按计划复用既有能力逐步执行（步骤进度在节点摘要中展示）；校验失败时反馈回到规划器**重新规划**（RePlan 循环），规划失败自动回退默认计划（等价于升级前固定管线）。
+- **Planner 主链路**：多步任务（画像/资源/路径/评估）先由 `PlannerNode` 用轻量模型生成结构化执行计划（步骤类型白名单：analyze/retrieve/expert_reason/finalize，最多 6 步），`ExecutorNode` 按计划复用既有能力逐步执行；校验失败时反馈回到规划器**重新规划**（RePlan 循环），规划失败自动回退默认计划（等价于升级前固定管线）。
+- **推理链全量流式打印**：外层运行器基于 `astream(stream_mode=["custom","updates","messages"])` 三通道——节点进入（node_start）、执行步骤进度、专家名单与逐位专家完整发言（完成即推）、辩论记录与仲裁裁决、综合提案与风险批判、质量校验反馈（含驳回原因）全部实时流式到达前端推理轨迹；最终报告逐字流式输出。
 - **Supervisor 试点**：tutor 意图由监督者 LLM（qwen-turbo）在工具白名单内自主调度——`evidence_search`（循证检索）、`consult_experts`（多专家辩论仲裁）、`get_student_profile`（画像查询），迭代轮数受上限约束；意图门控与医学红线保留在监督者外层。可用 `SUPERVISOR_TUTOR_ENABLED=false` 切回 Planner 链路。
 - **监督者自主点将**：`consult_experts(question, roles)` 允许监督者从专家白名单（`expert_config.yaml` 动态生成菜单）自主选择 2~5 位专家并说明选人理由，工具内白名单过滤，留空回退意图+难度规则编排；点将名单与各专家完整发言经 `experts` 事件流式送达前端推理轨迹。
 - 模型层从 `model/app/config/expert_config.yaml` 加载 9 位专家：画像对话、特征抽取、需求分析、文档撰写、题目生成、质量审核、学习激励、仲裁和医学影像分析智能体。
@@ -134,7 +135,7 @@ docker compose ps
 
 ## 验证与测试
 
-2026-08-16 升级后验证结果：模型层 164 项通过，前端 20 项通过，后端 11 项通过、1 项跳过；合计 195 项通过、1 项跳过。
+2026-08-17 升级后验证结果：模型层 167 项通过，前端 20 项通过，后端 11 项通过、1 项跳过；合计 198 项通过、1 项跳过。
 
 Windows PowerShell 若默认代码页不是 UTF-8，运行模型测试前先执行
 `$env:PYTHONUTF8 = "1"`，否则 `pytest.ini` 中的中文注释可能触发解码错误。
@@ -224,7 +225,7 @@ learning-multi-agent-system/
 - 代码执行沙箱当前仅支持 Python；代码辅助的 `language` 字段尚未驱动多语言沙箱。
 - `DocumentController.java` 为空，当前没有 `/api/documents/**` REST 接口；文献由模型层从本地 PDF 知识库加载。
 - 模型层只有统一推理入口 `/model/get_result` 校验内部 JWT；其他专用路由依赖网络隔离，不应映射公网端口。
-- 执行计划的逐步骤实时事件当前聚合在 `execute_plan` 节点摘要中展示；langgraph 1.x 的 `astream_events` 不透传自定义流事件，需迁移到 `stream_mode="custom"` 后才可逐步骤实时推送。
+- 推理链中途事件（执行步骤/专家发言/辩论/提案/校验反馈）经 `stream_mode="custom"` 实时推送；监督者（Supervisor）内部推理文本不外泄，其最终答案在节点完成时整体替换输出。
 - 监督者（Supervisor）当前仅试点 tutor 意图，其他意图走 Planner 主链路；可通过 `SUPERVISOR_TUTOR_ENABLED=false` 关闭。
 - 模型层任务状态与 SSE 事件缓存均在进程内存中，多实例部署前需改为共享存储（Redis/DB）。
 - `backend/server/learningo_agents.sql` 同时包含结构和演示数据，生产部署前应审查并按需拆分。
