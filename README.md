@@ -145,6 +145,7 @@ docker compose ps
 | `SUPERVISOR_MAX_TOOL_ROUNDS` | `6` | 监督者单轮问答的最大工具调用轮数 |
 | `MAX_CONCURRENT_TASKS` | `10` | 模型推理并发上限，超出后新请求等待并返回 503 |
 | `INFERENCE_SLOT_TIMEOUT` | `5` | 推理槽位获取超时（秒） |
+| `QWEN_FORCE_TURBO` | `true` | 所有对话模型档位统一使用 qwen-turbo（省成本/提速）；`false` 恢复 max/plus/turbo 分档 |
 
 ### 手动启动
 

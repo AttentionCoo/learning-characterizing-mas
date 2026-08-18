@@ -27,14 +27,26 @@ def test_qwen_model_defaults(monkeypatch):
         "QWEN_VISION_MODEL",
     ):
         monkeypatch.delenv(name, raising=False)
+    # QWEN_FORCE_TURBO 默认开启：所有对话模型档位统一为 qwen-turbo
+    monkeypatch.delenv("QWEN_FORCE_TURBO", raising=False)
 
-    assert get_qwen_chat_model_name("max") == "qwen-max"
-    assert get_qwen_chat_model_name("plus") == "qwen-plus"
+    assert get_qwen_chat_model_name("max") == "qwen-turbo"
+    assert get_qwen_chat_model_name("plus") == "qwen-turbo"
     assert get_qwen_chat_model_name("turbo") == "qwen-turbo"
     assert get_qwen_embedding_model() == "qwen3.7-text-embedding"
     assert get_qwen_embedding_dimension() == 1024
     assert get_qwen_rerank_model() == "qwen3-rerank"
     assert get_qwen_vision_model() == "qwen-vl-max"
+
+
+def test_qwen_model_tier_defaults_when_force_turbo_disabled(monkeypatch):
+    monkeypatch.setenv("QWEN_FORCE_TURBO", "false")
+    for name in ("QWEN_MODEL_MAX", "QWEN_MODEL_PLUS", "QWEN_MODEL_TURBO"):
+        monkeypatch.delenv(name, raising=False)
+
+    assert get_qwen_chat_model_name("max") == "qwen-max"
+    assert get_qwen_chat_model_name("plus") == "qwen-plus"
+    assert get_qwen_chat_model_name("turbo") == "qwen-turbo"
 
 
 def test_qwen_embeddings_use_same_model_and_dimension(monkeypatch):

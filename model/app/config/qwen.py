@@ -23,9 +23,19 @@ def get_qwen_base_url() -> str:
     return os.getenv("QWEN_BASE_URL") or DEFAULT_QWEN_BASE_URL
 
 
+def _force_turbo() -> bool:
+    """全量切换开关：所有对话模型档位统一使用 qwen-turbo（省成本/提速演示）。
+
+    需要恢复 max/plus/turbo 分档时，设 QWEN_FORCE_TURBO=false（或按档位覆盖 QWEN_MODEL_*）。
+    """
+    return os.getenv("QWEN_FORCE_TURBO", "true").lower() not in ("false", "0", "no")
+
+
 def get_qwen_chat_model_name(tier: str) -> str:
     if tier not in _CHAT_MODEL_DEFAULTS:
         raise ValueError(f"不支持的 Qwen 模型档位: {tier}")
+    if _force_turbo():
+        return os.getenv("QWEN_MODEL_TURBO") or _CHAT_MODEL_DEFAULTS["turbo"]
     return os.getenv(f"QWEN_MODEL_{tier.upper()}") or _CHAT_MODEL_DEFAULTS[tier]
 
 

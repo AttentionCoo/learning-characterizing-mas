@@ -28,6 +28,8 @@ services:
     environment:
       DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:?请在 .env 中设置 DASHSCOPE_API_KEY}
       QWEN_BASE_URL: ${QWEN_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      # true 时所有对话模型档位统一使用 qwen-turbo；false 恢复 max/plus/turbo 分档
+      QWEN_FORCE_TURBO: ${QWEN_FORCE_TURBO:-true}
       QWEN_MODEL_MAX: ${QWEN_MODEL_MAX:-qwen-max}
       QWEN_MODEL_PLUS: ${QWEN_MODEL_PLUS:-qwen-plus}
       QWEN_MODEL_TURBO: ${QWEN_MODEL_TURBO:-qwen-turbo}
