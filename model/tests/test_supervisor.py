@@ -84,6 +84,18 @@ def test_build_trace_lists_tool_calls():
     assert trace[1]["role"] == "assistant"
 
 
+def test_build_trace_captures_selection_reason():
+    from langchain_core.messages import AIMessage
+    trace = TutorSupervisor._build_trace([
+        AIMessage(
+            content="该问题需要内容生成与题目设计，故选文档撰写与题目生成两位专家。",
+            tool_calls=[{"name": "consult_experts", "args": {}, "id": "1"}],
+        ),
+    ])
+    assert trace[0]["tools"] == ["consult_experts"]
+    assert "题目生成" in trace[0]["reason"]
+
+
 def test_run_returns_fallback_when_agent_raises(monkeypatch):
     supervisor = _supervisor()
 

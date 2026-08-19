@@ -209,7 +209,7 @@ class LearningAgent:
                         continue
 
                     if evt_type == "experts_selected":
-                        # 专家名单先行到达（发言随后逐条到达）
+                        # 专家名单先行到达（发言随后逐条到达）；selection_reason 为点将/编排依据
                         yield {
                             "type": "experts",
                             "node": data.get("node", "reason"),
@@ -217,6 +217,7 @@ class LearningAgent:
                             "advices": [],
                             "debate_rounds": 0,
                             "arbitration": "",
+                            "selection_reason": data.get("reason", ""),
                         }
                         continue
 
@@ -283,13 +284,18 @@ class LearningAgent:
                                 yield self._build_node_done_event(node_name, output)
                             continue
                         if node_name == "supervisor":
-                            # 监督者点将名单 + 专家发言（experts 事件）
+                            # 监督者点将名单 + 专家发言 + 选人理由（experts 事件）
                             roles = output.get("supervisor_roles") or []
                             advices = output.get("expert_advices") or []
+                            trace_items = output.get("supervisor_trace") or []
+                            reasons = [
+                                t.get("reason", "") for t in trace_items
+                                if isinstance(t, dict) and t.get("reason")
+                            ]
                             if roles:
                                 logger.info(
-                                    "[event] ✅ 推送 supervisor 点将结果到前端 (roles=%s, advices=%s)",
-                                    roles, len(advices),
+                                    "[event] ✅ 推送 supervisor 点将结果到前端 (roles=%s, advices=%s, reasons=%s)",
+                                    roles, len(advices), len(reasons),
                                 )
                                 yield {
                                     "type": "experts",
@@ -298,6 +304,7 @@ class LearningAgent:
                                     "advices": advices,
                                     "debate_rounds": 0,
                                     "arbitration": "",
+                                    "selection_reason": "；".join(reasons),
                                 }
                             continue
                         if show_thinking:

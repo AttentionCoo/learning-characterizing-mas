@@ -125,6 +125,7 @@ export function sseStreamRequest(url, params, { onChunk, onThinking, timeout = 3
               advices: Array.isArray(data.advices) ? data.advices : [],
               debateRounds: data.debate_rounds || 0,
               arbitration: data.arbitration || '',
+              selectionReason: data.selection_reason || '',
             },
           }
           console.info('[AI 专家发言]', `${trace.experts.active.length} 位专家，${trace.experts.advices.length} 条发言`)

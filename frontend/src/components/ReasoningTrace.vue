@@ -82,6 +82,7 @@ function phaseLabel(phase) {
                 参与专家（{{ entry.experts.active?.length || 0 }} 位）
                 <span v-if="entry.experts.debateRounds" class="experts-debate-note">· 辩论 {{ entry.experts.debateRounds }} 轮</span>
               </div>
+              <div v-if="entry.experts.selectionReason" class="experts-reason">选人理由：{{ entry.experts.selectionReason }}</div>
               <div v-if="entry.experts.active?.length" class="expert-chips">
                 <span v-for="(name, index) in entry.experts.active" :key="`${entry.key}-ex-${index}`" class="expert-chip">{{ name }}</span>
               </div>
@@ -408,6 +409,13 @@ blockquote {
 .experts-debate-note {
   color: #718096;
   font-weight: 600;
+}
+
+.experts-reason {
+  margin-bottom: 8px;
+  color: #52616b;
+  font-size: 11px;
+  line-height: 1.6;
 }
 
 .expert-chips {

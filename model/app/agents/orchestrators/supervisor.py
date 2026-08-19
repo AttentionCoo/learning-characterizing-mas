@@ -267,6 +267,9 @@ class TutorSupervisor:
                 content = getattr(message, "content", "") or ""
                 if tools:
                     entry = {"role": "assistant", "tools": tools, "results": ""}
+                    # 选人/调度理由：工具调用前的文字说明（监督者自主点将的依据）
+                    if isinstance(content, str) and content.strip():
+                        entry["reason"] = truncate_text(content, 300)
                     trace.append(entry)
                     pending = entry
                 elif isinstance(content, str) and content.strip():
