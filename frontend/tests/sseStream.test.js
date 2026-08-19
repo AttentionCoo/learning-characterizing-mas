@@ -45,3 +45,65 @@ test('SSE 收到完整报告事件后返回替换结果并通知页面清空旧�
     globalThis.localStorage = originalLocalStorage
   }
 })
+
+test('SSE agent_msg 事件映射为对话级推理轨迹', async () => {
+  const originalFetch = globalThis.fetch
+  const originalLocalStorage = globalThis.localStorage
+  const traces = []
+
+  globalThis.localStorage = { getItem: () => null }
+  globalThis.fetch = async () => new Response([
+    'data: {"type":"agent_msg","node":"reason","from":"需求分析智能体","to":"题目生成智能体","round":1,"kind":"question","content":"难度怎么定？"}',
+    '',
+    'data: {"type":"done"}',
+    '',
+  ].join('\n'))
+
+  try {
+    await sseStreamRequest('/test', {}, {
+      onThinking: (trace) => traces.push(trace),
+      timeout: 1000,
+    })
+
+    assert.equal(traces.length, 1)
+    assert.equal(traces[0].phase, 'agent_msg')
+    assert.equal(traces[0].messages[0].from, '需求分析智能体')
+    assert.equal(traces[0].messages[0].to, '题目生成智能体')
+    assert.equal(traces[0].messages[0].kind, 'question')
+    assert.equal(traces[0].messages[0].content, '难度怎么定？')
+  } finally {
+    globalThis.fetch = originalFetch
+    globalThis.localStorage = originalLocalStorage
+  }
+})
+
+test('SSE blackboard 事件映射为会诊黑板轨迹', async () => {
+  const originalFetch = globalThis.fetch
+  const originalLocalStorage = globalThis.localStorage
+  const traces = []
+
+  globalThis.localStorage = { getItem: () => null }
+  globalThis.fetch = async () => new Response([
+    'data: {"type":"blackboard","node":"reason","entries":[{"role":"需求分析智能体","round":1,"kind":"finding","content":"先拆解"}],"convergence":"共识已达成","arbitration":"以证据为准"}',
+    '',
+    'data: {"type":"done"}',
+    '',
+  ].join('\n'))
+
+  try {
+    await sseStreamRequest('/test', {}, {
+      onThinking: (trace) => traces.push(trace),
+      timeout: 1000,
+    })
+
+    assert.equal(traces.length, 1)
+    assert.equal(traces[0].phase, 'blackboard')
+    assert.equal(traces[0].blackboard.entries.length, 1)
+    assert.equal(traces[0].blackboard.entries[0].role, '需求分析智能体')
+    assert.equal(traces[0].blackboard.convergence, '共识已达成')
+    assert.equal(traces[0].blackboard.arbitration, '以证据为准')
+  } finally {
+    globalThis.fetch = originalFetch
+    globalThis.localStorage = originalLocalStorage
+  }
+})

@@ -132,6 +132,42 @@ export function sseStreamRequest(url, params, { onChunk, onThinking, timeout = 3
           onThinking(trace)
           return
         }
+        if (type === 'agent_msg' && onThinking) {
+          const trace = {
+            phase: 'agent_msg',
+            step: data.node || 'reason',
+            title: `专家对话：${data.from || ''} → ${data.to === '__all__' ? '全体' : (data.to || '')}`,
+            content: '',
+            sources: [],
+            messages: [{
+              from: data.from || '',
+              to: data.to || '',
+              round: data.round || 0,
+              kind: data.kind || '',
+              content: data.content || '',
+            }],
+          }
+          console.info('[AI 专家对话]', `${data.from} → ${data.to} [${data.kind}]`)
+          onThinking(trace)
+          return
+        }
+        if (type === 'blackboard' && onThinking) {
+          const trace = {
+            phase: 'blackboard',
+            step: data.node || 'reason',
+            title: '专家会诊黑板',
+            content: '',
+            sources: [],
+            blackboard: {
+              entries: Array.isArray(data.entries) ? data.entries : [],
+              convergence: data.convergence || '',
+              arbitration: data.arbitration || '',
+            },
+          }
+          console.info('[AI 会诊黑板]', `${trace.blackboard.entries.length} 条发现`)
+          onThinking(trace)
+          return
+        }
         if (type === 'chunk' || type === 'result' || type === 'token' || type === 'replace') {
           const content = data.content || ''
           const replace = type === 'replace'

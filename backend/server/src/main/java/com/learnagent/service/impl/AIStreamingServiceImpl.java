@@ -665,6 +665,31 @@ public class AIStreamingServiceImpl implements AIStreamingService {
                 return Flux.just(objectMapper.writeValueAsString(expertsResp));
             }
 
+            // agent_msg 事件：专家间结构化对话消息（M2），透传前端可审计展示
+            if ("agent_msg".equalsIgnoreCase(type)) {
+                Map<String, Object> msgResp = baseResponse(talkId, generatedTitle[0], "agent_msg");
+                msgResp.put("node", json.path("node").asText(""));
+                msgResp.put("from", json.path("from").asText(""));
+                msgResp.put("to", json.path("to").asText(""));
+                msgResp.put("round", json.path("round").asInt(0));
+                msgResp.put("kind", json.path("kind").asText(""));
+                msgResp.put("content", json.path("content").asText(""));
+                return Flux.just(objectMapper.writeValueAsString(msgResp));
+            }
+
+            // blackboard 事件：黑板共享工作区（M3）最终发现 + 收敛结论 + 仲裁
+            if ("blackboard".equalsIgnoreCase(type)) {
+                Map<String, Object> boardResp = baseResponse(talkId, generatedTitle[0], "blackboard");
+                boardResp.put("node", json.path("node").asText(""));
+                if (json.path("entries").isArray()) {
+                    boardResp.put("entries", objectMapper.convertValue(
+                            json.path("entries"), new TypeReference<List<Map<String, Object>>>() {}));
+                }
+                boardResp.put("convergence", json.path("convergence").asText(""));
+                boardResp.put("arbitration", json.path("arbitration").asText(""));
+                return Flux.just(objectMapper.writeValueAsString(boardResp));
+            }
+
             // ── 旧事件格式兼容（Python 回滚时仍能正常工作）──────────────────────────
 
             // heartbeat 事件：Python 端心跳保活，Java 侧静默丢弃，不透传前端
