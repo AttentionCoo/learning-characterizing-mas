@@ -274,17 +274,8 @@ class LearningAgent:
                             if report_text:
                                 yield {"type": "token", "content": report_text}
                             continue
-                        if node_name in self._STREAMING_NODES:
-                            report_text = output.get("report", "")
-                            if report_text:
-                                if node_name not in streamed_nodes:
-                                    streamed_nodes.add(node_name)
-                                    yield {"type": "token", "content": report_text}
-                                else:
-                                    yield {"type": "replace", "content": report_text}
-                            if show_thinking:
-                                yield self._build_node_done_event(node_name, output)
-                            continue
+                        # supervisor 是流式节点，需在其报告输出之外补发点将 events 事件，
+                        # 因此必须在 _STREAMING_NODES 分支之前处理
                         if node_name == "supervisor":
                             # 监督者点将名单 + 专家发言 + 选人理由（experts 事件）
                             roles = output.get("supervisor_roles") or []
@@ -308,6 +299,26 @@ class LearningAgent:
                                     "arbitration": "",
                                     "selection_reason": "；".join(reasons),
                                 }
+                            report_text = output.get("report", "")
+                            if report_text:
+                                if node_name not in streamed_nodes:
+                                    streamed_nodes.add(node_name)
+                                    yield {"type": "token", "content": report_text}
+                                else:
+                                    yield {"type": "replace", "content": report_text}
+                            if show_thinking:
+                                yield self._build_node_done_event(node_name, output)
+                            continue
+                        if node_name in self._STREAMING_NODES:
+                            report_text = output.get("report", "")
+                            if report_text:
+                                if node_name not in streamed_nodes:
+                                    streamed_nodes.add(node_name)
+                                    yield {"type": "token", "content": report_text}
+                                else:
+                                    yield {"type": "replace", "content": report_text}
+                            if show_thinking:
+                                yield self._build_node_done_event(node_name, output)
                             continue
                         if show_thinking:
                             yield self._build_node_done_event(node_name, output)
