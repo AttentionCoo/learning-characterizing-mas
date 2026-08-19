@@ -2,6 +2,7 @@ package com.learnagent.service.impl;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.learnagent.mapper.StudentProfileMapper;
 import com.learnagent.service.IChatMessageService;
 import com.learnagent.service.ITalkService;
 import org.junit.jupiter.api.Test;
@@ -27,7 +28,8 @@ class AIStreamingServiceImplTest {
                 mock(ITalkService.class),
                 mock(IChatMessageService.class),
                 mock(ConversationPersistenceService.class),
-                objectMapper
+                objectMapper,
+                mock(StudentProfileMapper.class)
         );
         StringBuilder fullAnswer = new StringBuilder();
         String[] title = {null};

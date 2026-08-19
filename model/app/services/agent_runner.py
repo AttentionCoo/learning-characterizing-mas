@@ -42,6 +42,7 @@ async def run_agent_background(
     images: List[str] = None,
     update_all_info: bool = False,
     original_all_info: str = "",
+    profile_summary: str = "",
 ):
     try:
         loop = asyncio.get_running_loop()
@@ -57,6 +58,7 @@ async def run_agent_background(
             report_mode=report_mode,
             show_thinking=True,
             images=images,
+            profile_summary=profile_summary,
         ):
             if not isinstance(event, dict):
                 continue

@@ -293,7 +293,8 @@ public class AssessmentController {
         if (score >= 90) return "excellent";
         if (score >= 75) return "good";
         if (score >= 60) return "moderate";
-        return "needs_improvement";
+        // 注意：数据库 level 列为 varchar(16)，needs_improvement 为 17 字符会截断
+        return "weak";
     }
 
     @GetMapping("/reports")
@@ -591,8 +592,69 @@ public class AssessmentController {
             report.setCreateTime(LocalDateTime.now());
             evalReportMapper.insert(report);
             log.info("学习评估报告已落库: userId={}, reportId={}, score={}", userId, report.getId(), score);
+
+            // 学习闭环：评估结果回流画像——把本次评估的薄弱点并入学生画像
+            // 的「易错模式」维度，供后续资源/路径/辅导个性化参考
+            feedbackProfileFromEvaluation(userId, report);
         } catch (Exception e) {
             log.error("学习评估报告落库失败", e);
+        }
+    }
+
+    /**
+     * 学习闭环：评估结果回流画像。
+     * 将本次评估的薄弱点并入 StudentProfile.errorPattern 维度的
+     * weakTopics/frequentErrors 字段（保留既有画像内容，增量合并去重）。
+     */
+    private void feedbackProfileFromEvaluation(Long userId, EvalReport report) {
+        try {
+            List<String> weaknesses = report.getWeaknesses() != null
+                    ? objectMapper.readValue(report.getWeaknesses(), new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {})
+                    : List.of();
+            if (weaknesses.isEmpty()) {
+                return;
+            }
+            StudentProfile profile = studentProfileMapper.selectOne(
+                    new LambdaQueryWrapper<StudentProfile>()
+                            .eq(StudentProfile::getUserId, userId)
+                            .orderByDesc(StudentProfile::getUpdateTime)
+                            .last("LIMIT 1")
+            );
+            if (profile == null || profile.getDimensions() == null || profile.getDimensions().isBlank()) {
+                return;
+            }
+            Map<String, Object> dims = objectMapper.readValue(profile.getDimensions(), Map.class);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> errorPattern = (Map<String, Object>) dims.get("errorPattern");
+            if (errorPattern == null) {
+                errorPattern = new HashMap<>();
+                dims.put("errorPattern", errorPattern);
+            }
+            @SuppressWarnings("unchecked")
+            List<String> weakTopics = (List<String>) errorPattern.get("weakTopics");
+            if (weakTopics == null) {
+                weakTopics = new ArrayList<>();
+                errorPattern.put("weakTopics", weakTopics);
+            }
+            boolean changed = false;
+            for (String w : weaknesses) {
+                String item = w.trim();
+                if (item.isEmpty() || item.length() > 30) continue;
+                if (!weakTopics.contains(item)) {
+                    weakTopics.add(item);
+                    changed = true;
+                }
+            }
+            if (changed) {
+                errorPattern.put("weakTopics", weakTopics);
+                profile.setDimensions(objectMapper.writeValueAsString(dims));
+                profile.setVersion((profile.getVersion() != null ? profile.getVersion() : 0) + 1);
+                profile.setUpdateTime(LocalDateTime.now());
+                studentProfileMapper.updateById(profile);
+                log.info("[profile_feedback] 评估薄弱点已回流画像: userId={}, 新增薄弱点={}", userId, weaknesses.size());
+            }
+        } catch (Exception e) {
+            log.warn("[profile_feedback] 评估结果回流画像失败: userId={}, err={}", userId, e.getMessage());
         }
     }
 

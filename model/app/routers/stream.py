@@ -25,6 +25,9 @@ class QueryRequest(BaseModel):
     report_mode: str = "emergency"
     show_thinking: bool = True
     images: List[str] = Field(default_factory=list)
+    # 学习闭环：学生画像摘要（后端从 StudentProfile 压缩而来），
+    # 注入多智能体链路实现全模块个性化
+    profile_summary: str = ""
 
 
 @router.post("/model/get_result")
@@ -61,6 +64,7 @@ async def get_model_result(request: QueryRequest):
         update_all_info=True,
         original_all_info=request.all_info,
         images=request.images,
+        profile_summary=request.profile_summary,
     ))
 
     init_event = {"type": "init", "taskId": task_id}

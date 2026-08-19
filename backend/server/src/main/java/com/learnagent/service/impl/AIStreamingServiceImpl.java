@@ -8,7 +8,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.learnagent.dto.ChatMessage;
 import com.learnagent.dto.ChatMessageDTO;
+import com.learnagent.entity.StudentProfile;
 import com.learnagent.entity.Talk;
+import com.learnagent.mapper.StudentProfileMapper;
 import com.learnagent.service.AIStreamingService;
 import com.learnagent.service.IChatMessageService;
 import com.learnagent.service.ITalkService;
@@ -58,6 +60,7 @@ public class AIStreamingServiceImpl implements AIStreamingService {
     private final IChatMessageService chatMessageService;
     private final ConversationPersistenceService conversationPersistenceService;
     private final ObjectMapper objectMapper;
+    private final StudentProfileMapper studentProfileMapper;
 
     private static final long CACHE_TTL = 1;
     private static final String HISTORY_KEY_PREFIX = "chat:history:";
@@ -191,6 +194,104 @@ public class AIStreamingServiceImpl implements AIStreamingService {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * 学习闭环：把该学生最新学习画像压缩为一段可读摘要，注入模型请求。
+     * 画像为 JSON 字符串（StudentProfile.dimensions），解析各维度关键信息；
+     * 未构建画像或解析失败时返回空串（模型侧自适应，不影响推理）。
+     */
+    private String buildProfileSummary(Long userId) {
+        try {
+            StudentProfile profile = studentProfileMapper.selectOne(
+                    new LambdaQueryWrapper<StudentProfile>()
+                            .eq(StudentProfile::getUserId, userId)
+                            .orderByDesc(StudentProfile::getUpdateTime)
+                            .last("LIMIT 1")
+            );
+            if (profile == null || StrUtil.isBlank(profile.getDimensions())) {
+                return "";
+            }
+            JsonNode dims = objectMapper.readTree(profile.getDimensions());
+            if (dims == null || !dims.isObject() || dims.isEmpty()) {
+                return "";
+            }
+            StringBuilder sb = new StringBuilder();
+            for (var it = dims.fields(); it.hasNext(); ) {
+                var entry = it.next();
+                String key = entry.getKey();
+                JsonNode val = entry.getValue();
+                if (val == null || val.isNull() || (val.isTextual() && val.asText().isBlank())) {
+                    continue;
+                }
+                String label = profileDimensionLabel(key);
+                if (val.isTextual()) {
+                    sb.append(label).append("：").append(val.asText().trim()).append("；");
+                } else if (val.isObject()) {
+                    // 各维度对象含 description/level/masteredTopics/weakTopics 等
+                    appendObjectSummary(sb, label, val);
+                }
+            }
+            String summary = sb.toString().trim();
+            return summary.length() > 800 ? summary.substring(0, 800) : summary;
+        } catch (Exception e) {
+            log.warn("[profile_summary] 构建画像摘要失败: userId={}, err={}", userId, e.getMessage());
+            return "";
+        }
+    }
+
+    private void appendObjectSummary(StringBuilder sb, String label, JsonNode obj) {
+        String desc = obj.path("description").asText("");
+        String level = obj.path("level").asText("");
+        String speed = obj.path("speed").asText("");
+        String type = obj.path("type").asText("");
+        String status = obj.path("status").asText("");
+        String levelVal = !level.isBlank() ? level : (!speed.isBlank() ? speed : (!type.isBlank() ? type : status));
+        if (!desc.isBlank() || !levelVal.isBlank()) {
+            sb.append(label).append("：");
+            if (!levelVal.isBlank()) sb.append("水平=").append(levelVal).append("，");
+            if (!desc.isBlank()) sb.append(desc.trim());
+            sb.append("；");
+        }
+        // 薄弱知识点 / 偏好资源对个性化最有价值
+        for (String field : new String[]{"weakTopics", "frequentErrors", "preferences"}) {
+            JsonNode arr = obj.path(field);
+            if (arr.isArray() && arr.size() > 0) {
+                StringBuilder items = new StringBuilder();
+                for (JsonNode item : arr) {
+                    if (item.isTextual() && !item.asText().isBlank()) {
+                        if (items.length() > 0) items.append("、");
+                        items.append(item.asText().trim());
+                    }
+                }
+                if (items.length() > 0) {
+                    sb.append(profileFieldLabel(field)).append("：").append(items).append("；");
+                }
+            }
+        }
+    }
+
+    private String profileDimensionLabel(String key) {
+        switch (key) {
+            case "knowledgeBase": return "知识基础";
+            case "cognitiveStyle": return "认知风格";
+            case "learningGoal": return "学习目标";
+            case "errorPattern": return "易错模式";
+            case "learningPace": return "学习节奏";
+            case "resourcePreference": return "资源偏好";
+            case "clinicalExperience": return "临床经验";
+            case "emotionState": return "情绪状态";
+            default: return key;
+        }
+    }
+
+    private String profileFieldLabel(String field) {
+        switch (field) {
+            case "weakTopics": return "薄弱知识点";
+            case "frequentErrors": return "高频错误";
+            case "preferences": return "偏好";
+            default: return field;
+        }
+    }
+
     private boolean tryAcquire(String key, int rate, int seconds) {
         try {
             RRateLimiter limiter = redissonClient.getRateLimiter(key);
@@ -302,6 +403,9 @@ public class AIStreamingServiceImpl implements AIStreamingService {
         request.put("token", requestToken);
         request.put("report_mode", finalReportMode);
         request.put("show_thinking", showThinking);
+        // 学习闭环：画像贯穿所有模块——读取该学生最新画像并注入模型，
+        // 使资源/路径/辅导/评估均基于画像个性化（画像缺失时注入空串，模型侧自适应）
+        request.put("profile_summary", buildProfileSummary(userId));
         // 影像识别：有图片时传入 images 列表，Python 层据此走 vision 分支
         if (images != null && !images.isEmpty()) {
             request.put("images", images);

@@ -131,6 +131,11 @@ class LearningAgent:
         if not profile_summary and all_info:
             profile_summary = all_info
 
+        logger.info(
+            "[agent] 收到画像摘要注入: len=%d, preview=%s",
+            len(profile_summary), profile_summary[:80],
+        )
+
         preset_intent = _REPORT_MODE_TO_INTENT.get(report_mode, "")
 
         initial_state: LearningState = {
