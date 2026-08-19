@@ -660,6 +660,8 @@ public class AIStreamingServiceImpl implements AIStreamingService {
                 }
                 expertsResp.put("debate_rounds", json.path("debate_rounds").asInt(0));
                 expertsResp.put("arbitration", json.path("arbitration").asText(""));
+                // 选人理由（监督者自主点将的依据），随 experts 事件送达前端可审计展示
+                expertsResp.put("selection_reason", json.path("selection_reason").asText(""));
                 return Flux.just(objectMapper.writeValueAsString(expertsResp));
             }
 
