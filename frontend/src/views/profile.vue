@@ -5,6 +5,7 @@ import { getProfileAPI, profileStreamAPI, updateProfileDimensionsAPI } from '@/a
 import AppAvatar from '@/components/AppAvatar.vue'
 import ImageUploader from '@/components/ImageUploader.vue'
 import ReasoningTrace from '@/components/ReasoningTrace.vue'
+import ThinkingIndicator from '@/components/ThinkingIndicator.vue'
 import { useUserStore } from '@/stores/user'
 import { useReasoningTrace } from '@/composables/useReasoningTrace'
 
@@ -363,10 +364,7 @@ function isDICOMDataUrl(dataUrl) {
             </div>
             <div class="message-body">
               <div v-if="msg.role === 'assistant' && idx === chatMessages.length - 1 && isThinking && !msg.content && !reasoningEntries.length" class="thinking-indicator">
-                <div class="thinking-dots">
-                  <span></span><span></span><span></span>
-                </div>
-                <span class="thinking-text">{{ thinkingHint }}</span>
+                <ThinkingIndicator :hint="thinkingHint" />
               </div>
               <ReasoningTrace
                 v-if="msg.role === 'assistant' && idx === chatMessages.length - 1"
@@ -775,44 +773,16 @@ function isDICOMDataUrl(dataUrl) {
   gap: 4px;
 }
 
+.thinking-indicator {
+  display: inline-flex;
+}
+
 .message-content {
   padding: 12px 16px;
   font-size: 14px;
   line-height: 1.65;
   color: var(--color-text-strong);
   word-break: break-word;
-}
-
-.thinking-indicator {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 16px;
-  background: var(--color-message-bg);
-  border: 1px solid var(--color-border-light);
-  border-radius: 16px 16px 16px 4px;
-}
-
-.thinking-dots {
-  display: flex;
-  gap: 4px;
-
-  span {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--color-primary);
-    animation: bounce 1.4s infinite ease-in-out;
-
-    &:nth-child(1) { animation-delay: 0s; }
-    &:nth-child(2) { animation-delay: 0.2s; }
-    &:nth-child(3) { animation-delay: 0.4s; }
-  }
-}
-
-.thinking-text {
-  font-size: 13px;
-  color: var(--color-text-medium);
 }
 
 @keyframes bounce {

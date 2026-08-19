@@ -5,6 +5,7 @@ import { tutorStreamAPI } from '@/api/tutor'
 import AppAvatar from '@/components/AppAvatar.vue'
 import ImageUploader from '@/components/ImageUploader.vue'
 import ReasoningTrace from '@/components/ReasoningTrace.vue'
+import ThinkingIndicator from '@/components/ThinkingIndicator.vue'
 import { useUserStore } from '@/stores/user'
 import { useReasoningTrace } from '@/composables/useReasoningTrace'
 
@@ -225,8 +226,7 @@ function isDICOMDataUrl(dataUrl) {
             </div>
             <div class="message-body">
               <div v-if="msg.role === 'assistant' && idx === chatMessages.length - 1 && isThinking && !msg.content && !reasoningEntries.length" class="thinking-indicator">
-                <div class="thinking-dots"><span></span><span></span><span></span></div>
-                <span class="thinking-text">{{ thinkingHint }}</span>
+                <ThinkingIndicator :hint="thinkingHint" />
               </div>
               <ReasoningTrace
                 v-if="msg.role === 'assistant' && idx === chatMessages.length - 1"
@@ -500,42 +500,7 @@ function isDICOMDataUrl(dataUrl) {
 }
 
 .thinking-indicator {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 18px;
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.03), rgba(17, 150, 127, 0.04));
-  border: 1px solid rgba(139, 92, 246, 0.12);
-  border-radius: 16px 16px 16px 4px;
-  box-shadow:
-    0 2px 8px rgba(139, 92, 246, 0.06),
-    inset 0 1px 0 rgba(255, 255, 255, 0.8);
-}
-
-.thinking-dots {
-  display: flex;
-  gap: 5px;
-  align-items: center;
-
-  span {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--gradient-aurora);
-    animation: bounce 1.4s infinite ease-in-out;
-    box-shadow: 0 2px 4px rgba(17, 150, 127, 0.3);
-
-    &:nth-child(1) { animation-delay: 0s; }
-    &:nth-child(2) { animation-delay: 0.16s; }
-    &:nth-child(3) { animation-delay: 0.32s; }
-  }
-}
-
-.thinking-text {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--color-primary);
-  letter-spacing: 0.01em;
+  display: inline-flex;
 }
 
 .stage-bar {

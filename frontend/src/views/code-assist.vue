@@ -3,6 +3,7 @@ import { ref, computed, nextTick, onMounted, onActivated, onDeactivated, onBefor
 import { renderMarkdown } from '@/utils/markdown'
 import { executeCodeAPI, codeAssistStreamAPI } from '@/api/code'
 import ReasoningTrace from '@/components/ReasoningTrace.vue'
+import ThinkingIndicator from '@/components/ThinkingIndicator.vue'
 import { useReasoningTrace } from '@/composables/useReasoningTrace'
 
 const assistTypes = [
@@ -330,7 +331,7 @@ print(df.describe())"
         </div>
         <div class="assist-pane" ref="resultPaneRef" @scroll="onPaneScroll">
           <div v-if="isThinking" class="thinking-hint">
-            <span class="thinking-dot"></span>{{ thinkingHint }}
+            <ThinkingIndicator :hint="thinkingHint" />
           </div>
           <ReasoningTrace :entries="reasoningEntries" :running="isAssisting" />
           <div v-if="assistError" class="output-error">{{ assistError }}</div>
@@ -578,23 +579,7 @@ print(df.describe())"
 .thinking-hint {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--color-text-medium);
   padding-bottom: 10px;
-}
-
-.thinking-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--color-primary-dark);
-  animation: pulse 1.2s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 0.3; transform: scale(0.85); }
-  50% { opacity: 1; transform: scale(1.1); }
 }
 
 .markdown-body {

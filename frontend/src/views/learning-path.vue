@@ -4,6 +4,7 @@ import { renderMarkdown } from '@/utils/markdown'
 import { getLearningPathAPI, updateTaskProgressAPI, learningPathStreamAPI } from '@/api/learningPath'
 import { submitBehaviorAPI } from '@/api/assessment'
 import ReasoningTrace from '@/components/ReasoningTrace.vue'
+import ThinkingIndicator from '@/components/ThinkingIndicator.vue'
 import { useReasoningTrace } from '@/composables/useReasoningTrace'
 
 const learningPath = ref(null)
@@ -336,6 +337,10 @@ const overallProgress = computed(() => {
               {{ isGenerating ? '生成中...' : '规划路径' }}
             </button>
           </div>
+        </div>
+
+        <div v-if="isThinking && !generatedContent && !reasoningEntries.length" class="thinking-wrap">
+          <ThinkingIndicator :hint="thinkingHint" />
         </div>
 
         <ReasoningTrace :entries="reasoningEntries" :running="isGenerating" />
@@ -754,6 +759,10 @@ const overallProgress = computed(() => {
 .expand-enter-from, .expand-leave-to {
   opacity: 0;
   max-height: 0;
+}
+
+.thinking-wrap {
+  padding: 4px 0 12px;
 }
 
 @media (max-width: 1024px) {

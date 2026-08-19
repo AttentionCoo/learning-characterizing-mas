@@ -4,6 +4,7 @@ import { renderMarkdown } from '@/utils/markdown'
 import { getAssessmentReportsAPI, getAssessmentReportDetailAPI, assessmentStreamAPI, getAssessmentReportAPI, optimizeLearningPathAPI } from '@/api/assessment'
 import { getLearningPathsAPI } from '@/api/learningPath'
 import ReasoningTrace from '@/components/ReasoningTrace.vue'
+import ThinkingIndicator from '@/components/ThinkingIndicator.vue'
 import AssessmentRadarChart from '@/components/AssessmentRadarChart.vue'
 import { useReasoningTrace } from '@/composables/useReasoningTrace'
 import { buildAssessmentRadar } from '@/utils/assessmentRadar'
@@ -301,8 +302,7 @@ function getScoreColor(score) {
           <div class="section-title">评估结果</div>
 
           <div v-if="isThinking && !generatedContent" class="thinking-bar">
-            <div class="thinking-dots"><span></span><span></span><span></span></div>
-            <span>{{ thinkingHint }}</span>
+            <ThinkingIndicator :hint="thinkingHint" />
           </div>
 
           <ReasoningTrace :entries="reasoningEntries" :running="isGenerating" />
@@ -577,21 +577,13 @@ function getScoreColor(score) {
   margin-bottom: 16px;
 }
 
-.thinking-dots {
+.thinking-bar {
   display: flex;
-  gap: 4px;
-  span {
-    width: 5px; height: 5px; border-radius: 50%; background: var(--color-primary);
-    animation: bounce 1.4s infinite ease-in-out;
-    &:nth-child(1) { animation-delay: 0s; }
-    &:nth-child(2) { animation-delay: 0.2s; }
-    &:nth-child(3) { animation-delay: 0.4s; }
-  }
-}
-
-@keyframes bounce {
-  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
-  40% { transform: scale(1); opacity: 1; }
+  align-items: center;
+  padding: 12px 16px;
+  background: rgba(17, 150, 127, 0.04);
+  border-radius: var(--radius-md);
+  margin-bottom: 16px;
 }
 
 .result-content {
