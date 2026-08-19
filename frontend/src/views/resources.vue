@@ -4,6 +4,7 @@ import { renderMarkdown } from '@/utils/markdown'
 import { getResourcesAPI, getResourceDetailAPI, resourceStreamAPI } from '@/api/resources'
 import ImageUploader from '@/components/ImageUploader.vue'
 import ReasoningTrace from '@/components/ReasoningTrace.vue'
+import ThinkingIndicator from '@/components/ThinkingIndicator.vue'
 import { useReasoningTrace } from '@/composables/useReasoningTrace'
 
 const resourceTypes = [
@@ -13,8 +14,6 @@ const resourceTypes = [
   { value: 'reading', label: '临床指南与文献', icon: '📖', color: '#10b981' },
   { value: 'case_study', label: '临床案例', icon: '🏥', color: '#f97316' },
   { value: 'plan', label: '资源设计方案', icon: '📋', color: '#14b8a6' },
-  { value: 'assessment', label: '学习评估报告', icon: '📊', color: '#ef4444' },
-  { value: 'code_practice', label: '代码实操案例', icon: '💻', color: '#6366f1' },
 ]
 
 const selectedTypes = ref([])
@@ -78,8 +77,6 @@ const typeEndpointMap = {
   reading: '/api/resources/generate/reading',
   case_study: '/api/resources/generate/case-study',
   plan: '/api/resources/generate/plan',
-  assessment: '/api/resources/generate/assessment',
-  code_practice: '/api/resources/generate/code-practice',
 }
 
 async function handleGenerate() {
@@ -339,8 +336,7 @@ onMounted(() => {
           </div>
 
           <div v-if="isThinking && !generatedContent" class="thinking-bar">
-            <div class="thinking-dots"><span></span><span></span><span></span></div>
-            <span>{{ thinkingHint }}</span>
+            <ThinkingIndicator :hint="thinkingHint" />
           </div>
 
           <div v-else-if="isGenerating && currentStage && !generatedContent" class="stage-bar">
@@ -694,29 +690,9 @@ onMounted(() => {
 .thinking-bar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 24px;
+  padding: 12px 24px;
   background: rgba(17, 150, 127, 0.04);
-  font-size: 13px;
-  color: var(--color-primary-dark);
   flex-shrink: 0;
-}
-
-.thinking-dots {
-  display: flex;
-  gap: 4px;
-  span {
-    width: 5px; height: 5px; border-radius: 50%; background: var(--color-primary);
-    animation: bounce 1.4s infinite ease-in-out;
-    &:nth-child(1) { animation-delay: 0s; }
-    &:nth-child(2) { animation-delay: 0.2s; }
-    &:nth-child(3) { animation-delay: 0.4s; }
-  }
-}
-
-@keyframes bounce {
-  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
-  40% { transform: scale(1); opacity: 1; }
 }
 
 .stage-bar {
