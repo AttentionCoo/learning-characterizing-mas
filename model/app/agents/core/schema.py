@@ -59,3 +59,5 @@ class LearningState(TypedDict):
     plan_rationale: str
     plan_results: List[Dict]
     supervisor_trace: List[Dict]
+    supervisor_roles: List[str]
+    expert_advices: List[Dict]

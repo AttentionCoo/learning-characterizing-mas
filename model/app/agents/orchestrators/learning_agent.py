@@ -172,6 +172,8 @@ class LearningAgent:
             "plan_rationale": "",
             "plan_results": [],
             "supervisor_trace": [],
+            "supervisor_roles": [],
+            "expert_advices": [],
         }
         streamed_nodes: set = set()
 
