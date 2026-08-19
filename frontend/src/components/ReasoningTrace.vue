@@ -43,6 +43,28 @@ function kindLabel(kind) {
   }
   return labels[kind] || kind || '消息'
 }
+
+// 角色头像：取专家名去掉「智能体」后缀的首字，做圆形徽标
+function roleAvatar(role) {
+  if (!role) return '专'
+  const cleaned = String(role).replace(/智能体$/, '').trim()
+  return cleaned ? cleaned.slice(0, 1) : '专'
+}
+
+// 给不同专家分配稳定的主题色（按名字哈希取色板）
+const AVATAR_COLORS = [
+  '#2563a8', '#0f9d7a', '#7c3aed', '#b45309',
+  '#c0392b', '#0e7490', '#1e7d46', '#9333ea',
+  '#d97706', '#0284c7', '#4d7c0f', '#be185d',
+]
+function roleColor(role) {
+  if (!role) return AVATAR_COLORS[0]
+  let hash = 0
+  for (let i = 0; i < role.length; i += 1) {
+    hash = (hash * 31 + role.charCodeAt(i)) >>> 0
+  }
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length]
+}
 </script>
 
 <template>
@@ -111,40 +133,71 @@ function kindLabel(kind) {
             </div>
 
             <div v-if="entry.messages?.length" class="dialogue-block">
-              <div class="dialogue-heading">专家间对话（{{ entry.messages.length }} 条消息）</div>
-              <div
-                v-for="(msg, index) in entry.messages"
-                :key="`${entry.key}-msg-${index}`"
-                class="dialogue-item"
-                :class="`kind-${msg.kind || 'msg'}`"
-              >
-                <div class="dialogue-role">
-                  第 {{ msg.round }} 轮 · {{ msg.from }}
-                  <span class="dialogue-arrow">→</span>
-                  {{ msg.to === '__all__' ? '全体' : msg.to }}
-                  <span class="dialogue-kind">{{ kindLabel(msg.kind) }}</span>
+              <div class="dialogue-heading">
+                <span class="dialogue-title-icon" aria-hidden="true">💬</span>
+                专家会诊对话（{{ entry.messages.length }} 条消息）
+              </div>
+              <div class="dialogue-timeline">
+                <div
+                  v-for="(msg, index) in entry.messages"
+                  :key="`${entry.key}-msg-${index}`"
+                  class="dialogue-row"
+                >
+                  <div class="dialogue-bubble" :class="`kind-${msg.kind || 'msg'}`">
+                    <div class="dialogue-meta">
+                      <span
+                        class="dialogue-avatar"
+                        :style="{ background: roleColor(msg.from) }"
+                        :title="msg.from"
+                      >{{ roleAvatar(msg.from) }}</span>
+                      <span class="dialogue-from">{{ msg.from }}</span>
+                      <span class="dialogue-arrow" aria-hidden="true">→</span>
+                      <span class="dialogue-to">{{ msg.to === '__all__' ? '全体专家' : msg.to }}</span>
+                      <span v-if="msg.round" class="dialogue-round">第 {{ msg.round }} 轮</span>
+                      <span class="dialogue-kind">{{ kindLabel(msg.kind) }}</span>
+                    </div>
+                    <p class="dialogue-text">{{ msg.content }}</p>
+                  </div>
                 </div>
-                <blockquote>{{ msg.content }}</blockquote>
               </div>
             </div>
 
             <div v-if="entry.blackboard && (entry.blackboard.entries?.length || entry.blackboard.convergence)" class="blackboard-block">
-              <div class="blackboard-heading">会诊黑板（{{ entry.blackboard.entries?.length || 0 }} 条发现）</div>
-              <div
-                v-for="(item, index) in entry.blackboard.entries"
-                :key="`${entry.key}-bb-${index}`"
-                class="blackboard-item"
-              >
-                <div class="blackboard-role">{{ item.role }}（第 {{ item.round }} 轮）</div>
-                <blockquote>{{ item.content }}</blockquote>
+              <div class="blackboard-heading">
+                <span class="blackboard-title-icon" aria-hidden="true">📋</span>
+                会诊黑板（{{ entry.blackboard.entries?.length || 0 }} 条发现）
               </div>
-              <div v-if="entry.blackboard.convergence" class="blackboard-item convergence">
-                <div class="blackboard-role">教学总监收敛结论</div>
-                <blockquote>{{ entry.blackboard.convergence }}</blockquote>
+              <div class="blackboard-board">
+                <div
+                  v-for="(item, index) in entry.blackboard.entries"
+                  :key="`${entry.key}-bb-${index}`"
+                  class="blackboard-card"
+                >
+                  <div class="blackboard-card-head">
+                    <span
+                      class="blackboard-avatar"
+                      :style="{ background: roleColor(item.role) }"
+                      :title="item.role"
+                    >{{ roleAvatar(item.role) }}</span>
+                    <span class="blackboard-role">{{ item.role }}</span>
+                    <span v-if="item.round" class="blackboard-round">第 {{ item.round }} 轮</span>
+                  </div>
+                  <p class="blackboard-text">{{ item.content }}</p>
+                </div>
               </div>
-              <div v-if="entry.blackboard.arbitration" class="blackboard-item arbitration">
-                <div class="blackboard-role">仲裁裁决</div>
-                <blockquote>{{ entry.blackboard.arbitration }}</blockquote>
+              <div v-if="entry.blackboard.convergence" class="blackboard-conclusion convergence">
+                <div class="conclusion-icon" aria-hidden="true">🧭</div>
+                <div class="conclusion-body">
+                  <div class="conclusion-label">教学总监收敛结论</div>
+                  <p class="conclusion-text">{{ entry.blackboard.convergence }}</p>
+                </div>
+              </div>
+              <div v-if="entry.blackboard.arbitration" class="blackboard-conclusion arbitration">
+                <div class="conclusion-icon" aria-hidden="true">⚖️</div>
+                <div class="conclusion-body">
+                  <div class="conclusion-label">仲裁裁决</div>
+                  <p class="conclusion-text">{{ entry.blackboard.arbitration }}</p>
+                </div>
               </div>
             </div>
 
@@ -520,129 +573,254 @@ blockquote {
   background: #fffbeb;
 }
 
-/* M2 专家间对话 */
+/* M2 专家间对话 — 会诊时间线 */
 .dialogue-block {
   margin-top: 10px;
   padding: 10px 12px;
   border: 1px solid #cfe0f0;
   border-radius: 8px;
-  background: #f7fafe;
+  background: linear-gradient(180deg, #f7fafe 0%, #f2f7fd 100%);
 }
 
 .dialogue-heading {
-  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
   color: #1e56a0;
   font-size: 12px;
   font-weight: 700;
 }
 
-.dialogue-item {
-  padding: 6px 0;
+.dialogue-title-icon {
+  font-size: 13px;
 }
 
-.dialogue-item + .dialogue-item {
-  border-top: 1px dashed #d7e3f2;
+.dialogue-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.dialogue-role {
-  color: #2563a8;
+.dialogue-row {
+  position: relative;
+  padding-left: 6px;
+}
+
+/* 时间线竖线 */
+.dialogue-row::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 20px;
+  bottom: -8px;
+  width: 2px;
+  background: #dbe7f5;
+  border-radius: 2px;
+}
+
+.dialogue-row:last-child::before {
+  display: none;
+}
+
+.dialogue-bubble {
+  padding: 8px 10px;
+  border: 1px solid #d3e2f3;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(30, 86, 160, 0.06);
+}
+
+.dialogue-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+
+.dialogue-avatar,
+.blackboard-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  color: #ffffff;
   font-size: 11px;
-  font-weight: 650;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.dialogue-from {
+  color: #1e56a0;
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .dialogue-arrow {
-  margin: 0 4px;
   color: #94a3b8;
+  font-size: 11px;
+}
+
+.dialogue-to {
+  color: #52616b;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.dialogue-round {
+  margin-left: auto;
+  color: #8a9bb0;
+  font-size: 10px;
 }
 
 .dialogue-kind {
   display: inline-block;
-  margin-left: 6px;
-  padding: 0 6px;
+  padding: 1px 7px;
   border-radius: 999px;
   background: #e3edf9;
   color: #2563a8;
   font-size: 10px;
   font-weight: 650;
+  white-space: nowrap;
 }
 
-.dialogue-item.kind-object .dialogue-kind {
+.dialogue-bubble.kind-object .dialogue-kind {
   background: #fde8e8;
   color: #c0392b;
 }
 
-.dialogue-item.kind-question .dialogue-kind {
+.dialogue-bubble.kind-question .dialogue-kind {
   background: #fef3e2;
   color: #b45309;
 }
 
-.dialogue-item.kind-revise .dialogue-kind {
+.dialogue-bubble.kind-revise .dialogue-kind {
   background: #e6f4ea;
   color: #1e7d46;
 }
 
-.dialogue-item blockquote {
-  border-left-color: #7fb1e0;
-  background: #ffffff;
+.dialogue-text {
+  margin: 0;
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
 }
 
-/* M3 会诊黑板 */
+/* M3 会诊黑板 — 看板卡片 */
 .blackboard-block {
   margin-top: 10px;
   padding: 10px 12px;
   border: 1px solid #d8d0e8;
   border-radius: 8px;
-  background: #fbf9fe;
+  background: linear-gradient(180deg, #fbf9fe 0%, #f7f3fd 100%);
 }
 
 .blackboard-heading {
-  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
   color: #5b21b6;
   font-size: 12px;
   font-weight: 700;
 }
 
-.blackboard-item {
-  padding: 6px 0;
+.blackboard-title-icon {
+  font-size: 13px;
 }
 
-.blackboard-item + .blackboard-item {
-  border-top: 1px dashed #e2daf0;
+.blackboard-board {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.blackboard-card {
+  padding: 8px 10px;
+  border: 1px solid #e2daf0;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(91, 33, 182, 0.06);
+}
+
+.blackboard-card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
 }
 
 .blackboard-role {
   color: #6d28d9;
   font-size: 11px;
-  font-weight: 650;
+  font-weight: 700;
 }
 
-.blackboard-item blockquote {
-  border-left-color: #a78bfa;
-  background: #ffffff;
+.blackboard-round {
+  margin-left: auto;
+  color: #8a7bb0;
+  font-size: 10px;
 }
 
-.blackboard-item.convergence {
-  margin-top: 6px;
-  padding-top: 8px;
-  border-top: 1px solid #c4b5fd;
+.blackboard-text {
+  margin: 0;
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 
-.blackboard-item.convergence .blackboard-role {
-  color: #0e7490;
+.blackboard-conclusion {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  align-items: flex-start;
 }
 
-.blackboard-item.convergence blockquote {
-  border-left-color: #06b6d4;
+.blackboard-conclusion.convergence {
+  border: 1px solid #a5e3ef;
   background: #f0fbfd;
 }
 
-.blackboard-item.arbitration .blackboard-role {
+.blackboard-conclusion.arbitration {
+  border: 1px solid #f0d9a8;
+  background: #fffbeb;
+}
+
+.conclusion-icon {
+  flex: none;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.conclusion-body {
+  min-width: 0;
+}
+
+.conclusion-label {
+  margin-bottom: 2px;
+  color: #0e7490;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.blackboard-conclusion.arbitration .conclusion-label {
   color: #b45309;
 }
 
-.blackboard-item.arbitration blockquote {
-  border-left-color: #f59e0b;
-  background: #fffbeb;
+.conclusion-text {
+  margin: 0;
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 640px) {
