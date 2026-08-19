@@ -164,6 +164,14 @@ class _FakeReasonNode:
         updates = {
             "active_experts": roles,
             "proposal": "综合提案内容。",
+            "agent_messages": [
+                {"from": "需求分析智能体", "to": "题目生成智能体", "round": 1,
+                 "kind": "question", "content": "难度怎么定？"},
+            ],
+            "blackboard": [
+                {"role": "需求分析智能体", "round": 1, "kind": "finding", "content": "先拆解需求。"},
+            ],
+            "convergence": "共识已达成。",
         }
         for role in roles:
             updates[f"{role}_advice"] = f"{role} 的发言。"
@@ -207,6 +215,10 @@ def test_consult_experts_filters_roles_to_whitelist_and_returns_speeches(monkeyp
     # reason 必须被记录，供学习链路以 supervisor_reason 流式送达前端审计
     assert workspace["last_reason"] == "该问题需要解剖图谱与认知负荷管理，故选需求分析智能体。"
     assert workspace["last_roles"] == ["需求分析智能体"]
+    # M2+M3 对话-黑板结果经 workspace 透传（learning_agent 补发事件用）
+    assert workspace["agent_messages"][0]["kind"] == "question"
+    assert workspace["blackboard"][0]["role"] == "需求分析智能体"
+    assert workspace["convergence"] == "共识已达成。"
 
 
 def test_consult_experts_empty_roles_falls_back_to_rule_selection(monkeypatch):

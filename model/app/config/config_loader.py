@@ -238,6 +238,11 @@ class ExpertConfigManager:
         debate = self._data.get("debate", {})
         return debate.get("enabled", False)
 
+    def is_dialogue_enabled(self) -> bool:
+        """是否启用 M2+M3 对话-黑板编排（结构化消息 + 黑板共享工作区）"""
+        debate = self._data.get("debate", {})
+        return debate.get("dialogue_enabled", False)
+
     def get_debate_max_rounds(self) -> int:
         """获取辩论最大轮数"""
         debate = self._data.get("debate", {})

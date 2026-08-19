@@ -4,6 +4,7 @@ from typing import Dict, List
 from app.agents.core.schema import LearningState
 from app.agents.orchestrators.nodes.base import BaseNode
 from app.agents.orchestrators.nodes.reason_debate import DebateOrchestrator
+from app.agents.orchestrators.nodes.reason_dialogue import DialogueOrchestrator
 from langchain_core.messages import HumanMessage, SystemMessage
 from app.config.config_loader import get_expert_manager
 
@@ -33,10 +34,21 @@ class ReasonNode(BaseNode):
             llm_synthesis=self.llm_synthesis,
             debate_max_rounds=self.debate_max_rounds,
         )
+        # M2+M3 对话-黑板编排（reason_dialogue.DialogueOrchestrator）
+        self.dialogue_enabled = self.expert_manager.is_dialogue_enabled()
+        self.dialogue = DialogueOrchestrator(
+            debate_config=self.debate_config,
+            arbitrator_role=self.arbitrator_role,
+            expert_manager=self.expert_manager,
+            llm=self.llm,
+            llm_synthesis=self.llm_synthesis,
+            debate_max_rounds=self.debate_max_rounds,
+        )
         logger.info(f"[reason] 已加载 {len(self.experts)} 位专家配置")
         logger.info(f"[reason] 专家推理模型: {getattr(self.llm, 'model_name', 'unknown')}")
         logger.info(f"[reason] 综合汇总模型: {getattr(self.llm_synthesis, 'model_name', 'unknown')}")
         logger.info(f"[reason] 辩论模式: {'启用' if self.debate_enabled else '禁用'} (最大轮数: {self.debate_max_rounds})")
+        logger.info(f"[reason] 对话-黑板模式(M2+M3): {'启用' if self.dialogue_enabled else '禁用'}")
         logger.info(f"[reason] 仲裁智能体: {self.arbitrator_role}")
         logger.info(f"[reason] 动态编排: {'启用' if self.dynamic_orchestration_enabled else '禁用'}")
         logger.info(f"[reason] 共享记忆: {'启用' if self.shared_memory_system else '禁用'}")
@@ -158,9 +170,49 @@ class ReasonNode(BaseNode):
         motivational_feedback = expert_advices.get("学习激励智能体_advice", "")
 
         debate_history = list(state.get('debate_history', []))
+        agent_messages = list(state.get('agent_messages', []))
+        blackboard = list(state.get('blackboard', []))
+        convergence = ""
 
-        if self.debate_enabled and len(expert_roles) > 1:
-            logger.info(f"[reason] 启动辩论-仲裁模式")
+        if self.dialogue_enabled and len(expert_roles) > 1:
+            logger.info(f"[reason] 启动对话-黑板编排 (M2 结构化消息 + M3 黑板)")
+            dialogue_results = await self.dialogue.run(
+                expert_roles, results, case_info, state.get('evidence', ''),
+                debate_history, agent_messages, blackboard,
+            )
+            debate_history = dialogue_results["debate_history"]
+            arbitration_result = dialogue_results["arbitration_result"]
+            agent_messages = dialogue_results["agent_messages"]
+            blackboard = dialogue_results["blackboard"]
+            convergence = dialogue_results.get("convergence", "") or ""
+            logger.info(
+                f"[reason] 对话-黑板完成: 消息 {len(agent_messages)} 条, 黑板 {len(blackboard)} 条, "
+                f"仲裁长度 {len(arbitration_result or '')}"
+            )
+            # 对话消息 + 黑板逐条实时推送（对话级流式审计）
+            for msg in agent_messages:
+                _emit({
+                    "type": "agent_msg",
+                    "node": "reason",
+                    "from": msg.get("from", ""),
+                    "to": msg.get("to", ""),
+                    "round": msg.get("round", 0),
+                    "kind": msg.get("kind", ""),
+                    "content": msg.get("content", ""),
+                })
+            _emit({
+                "type": "blackboard",
+                "node": "reason",
+                "entries": [
+                    {"role": e.get("role", ""), "round": e.get("round", 0),
+                     "kind": e.get("kind", ""), "content": e.get("content", "")}
+                    for e in blackboard
+                ],
+                "convergence": convergence,
+                "arbitration": arbitration_result or "",
+            })
+        elif self.debate_enabled and len(expert_roles) > 1:
+            logger.info(f"[reason] 启动辩论-仲裁模式（回退）")
             debate_results = await self.debate.run(
                 expert_roles, results, case_info, state.get('evidence', ''), debate_history
             )
@@ -184,6 +236,15 @@ class ReasonNode(BaseNode):
         logger.info(f"[reason] 专家意见文本长度: {len(expert_opinions_text)}")
 
         synthesis_input = expert_opinions_text
+        if convergence:
+            synthesis_input += f"\n\n【会诊收敛结论】\n{convergence}"
+        if agent_messages:
+            dialogue_summary = "\n".join(
+                f"第{m.get('round', 0)}轮 {m.get('from', '')} → {m.get('to', '')} "
+                f"[{m.get('kind', '')}]: {(m.get('content', '') or '')[:200]}"
+                for m in agent_messages[-10:]
+            )
+            synthesis_input += f"\n\n【专家间对话摘要】\n{dialogue_summary}"
         if arbitration_result:
             synthesis_input += f"\n\n【仲裁裁决】\n{arbitration_result}"
 
@@ -266,6 +327,9 @@ class ReasonNode(BaseNode):
             "debate_history": debate_history,
             "arbitration_result": arbitration_result or "",
             "motivational_feedback": motivational_feedback,
+            "agent_messages": agent_messages,
+            "blackboard": blackboard,
+            "convergence": convergence,
         }
 
         if consensus_result:

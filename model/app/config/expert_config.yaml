@@ -117,6 +117,22 @@ debate:
   enabled: true
   max_rounds: 1
   arbitrator_role: "仲裁智能体"
+  # M2+M3 对话-黑板编排：专家间结构化消息（定向提问/回复/修订）+ 黑板共享工作区
+  dialogue_enabled: true
+  dialogue_max_rounds: 2
+  dialogue_prompt_template: |
+    你正在与其他脑卒中教育专家进行会诊讨论（第{round}轮）。
+
+    {dialogue_context}
+
+    请输出 0~2 条结构化消息（JSON 数组），表达你对其他专家观点的回应。可选类型：
+    - {"kind":"question","to":"某专家","content":"向该专家提问的问题"}
+    - {"kind":"object","to":"某专家","content":"指出对方观点的问题并给出证据"}
+    - {"kind":"reply","to":"某专家","content":"回答对方对你的提问"}
+    - {"kind":"agree","to":"某专家","content":"表示认同并补充"}
+    - {"kind":"revise","to":"__all__","content":"基于讨论修正你的最终意见"}
+    - {"kind":"finding","to":"__all__","content":"补充一条你认为重要的新发现"}
+    如果无话可说，输出 []。只输出 JSON 数组，不要任何解释。
   debate_prompt_template: |
     你目前参与第{round}轮辩论。以下是其他智能体的观点和之前的辩论记录：
 

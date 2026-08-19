@@ -175,6 +175,9 @@ class LearningAgent:
             "supervisor_roles": [],
             "supervisor_reason": "",
             "expert_advices": [],
+            "agent_messages": [],
+            "blackboard": [],
+            "convergence": "",
         }
         streamed_nodes: set = set()
 
@@ -262,6 +265,30 @@ class LearningAgent:
                         }
                         continue
 
+                    if evt_type == "agent_msg":
+                        # M2 结构化消息：专家间定向对话（谁 → 谁：内容）
+                        yield {
+                            "type": "agent_msg",
+                            "node": data.get("node", "reason"),
+                            "from": data.get("from", ""),
+                            "to": data.get("to", ""),
+                            "round": data.get("round", 0),
+                            "kind": data.get("kind", ""),
+                            "content": data.get("content", ""),
+                        }
+                        continue
+
+                    if evt_type == "blackboard":
+                        # M3 黑板共享工作区：最终发现 + 收敛结论 + 仲裁
+                        yield {
+                            "type": "blackboard",
+                            "node": data.get("node", "reason"),
+                            "entries": data.get("entries", []),
+                            "convergence": data.get("convergence", ""),
+                            "arbitration": data.get("arbitration", ""),
+                        }
+                        continue
+
                     logger.debug("[stream] 未识别的 custom 事件类型: %s", evt_type)
                     continue
 
@@ -302,6 +329,33 @@ class LearningAgent:
                                     "debate_rounds": 0,
                                     "arbitration": "",
                                     "selection_reason": selection_reason,
+                                }
+                            # supervisor 路径下 reason_node 嵌套运行，其 custom 事件不冒泡；
+                            # 这里从 supervisor 输出补发 agent_msg/blackboard 对话事件
+                            supervisor_msgs = output.get("agent_messages") or []
+                            for msg in supervisor_msgs:
+                                yield {
+                                    "type": "agent_msg",
+                                    "node": "supervisor",
+                                    "from": msg.get("from", ""),
+                                    "to": msg.get("to", ""),
+                                    "round": msg.get("round", 0),
+                                    "kind": msg.get("kind", ""),
+                                    "content": msg.get("content", ""),
+                                }
+                            supervisor_blackboard = output.get("blackboard") or []
+                            supervisor_convergence = output.get("convergence") or ""
+                            if supervisor_blackboard or supervisor_convergence:
+                                yield {
+                                    "type": "blackboard",
+                                    "node": "supervisor",
+                                    "entries": [
+                                        {"role": e.get("role", ""), "round": e.get("round", 0),
+                                         "kind": e.get("kind", ""), "content": e.get("content", "")}
+                                        for e in supervisor_blackboard
+                                    ],
+                                    "convergence": supervisor_convergence,
+                                    "arbitration": output.get("arbitration_result") or "",
                                 }
                             report_text = output.get("report", "")
                             if report_text:

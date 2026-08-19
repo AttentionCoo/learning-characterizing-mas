@@ -91,6 +91,10 @@ class TutorSupervisor:
             "last_roles": [],
             "last_reason": "",
             "expert_advices": [],
+            "agent_messages": [],
+            "blackboard": [],
+            "convergence": "",
+            "arbitration_result": "",
         }
         profile_text = self._format_profile(state)
 
@@ -143,6 +147,14 @@ class TutorSupervisor:
 
                 updates = await self.reason_node.run(mini_state) or {}
 
+                logger.info(
+                    "[supervisor] reason_node 返回: conv=%s arb=%s msgs=%d board=%d",
+                    (updates.get("convergence") or "")[:30],
+                    (updates.get("arbitration_result") or "")[:30],
+                    len(updates.get("agent_messages") or []),
+                    len(updates.get("blackboard") or []),
+                )
+
                 # 收集各专家完整发言（回流前端可审计展示）
                 resolved_roles = updates.get("active_experts", []) or chosen
                 speeches = []
@@ -151,6 +163,13 @@ class TutorSupervisor:
                     if advice and not advice.startswith("未能获取"):
                         speeches.append({"role": role, "content": advice})
                 workspace["expert_advices"] = speeches
+
+                # M2+M3 对话-黑板结果（reason_node 嵌套运行时 custom 事件不冒泡，
+                # 需经 supervisor 返回后由 learning_agent 补发 agent_msg/blackboard 事件）
+                workspace["agent_messages"] = updates.get("agent_messages", []) or []
+                workspace["blackboard"] = updates.get("blackboard", []) or []
+                workspace["convergence"] = updates.get("convergence", "") or ""
+                workspace["arbitration_result"] = updates.get("arbitration_result", "") or ""
 
                 proposal = updates.get("proposal", "") or ""
                 if proposal:
@@ -218,6 +237,10 @@ class TutorSupervisor:
                 "supervisor_trace": [],
                 "supervisor_roles": [],
                 "expert_advices": [],
+                "agent_messages": [],
+                "blackboard": [],
+                "convergence": "",
+                "arbitration_result": "",
             }
 
         messages = result.get("messages", []) or []
@@ -238,6 +261,10 @@ class TutorSupervisor:
             "supervisor_roles": workspace.get("last_roles", []),
             "supervisor_reason": workspace.get("last_reason", ""),
             "expert_advices": workspace.get("expert_advices", []),
+            "agent_messages": workspace.get("agent_messages", []),
+            "blackboard": workspace.get("blackboard", []),
+            "convergence": workspace.get("convergence", ""),
+            "arbitration_result": workspace.get("arbitration_result", ""),
         }
 
     @staticmethod

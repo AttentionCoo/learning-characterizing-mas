@@ -62,3 +62,9 @@ class LearningState(TypedDict):
     supervisor_roles: List[str]
     supervisor_reason: str
     expert_advices: List[Dict]
+    # Agent 间对话（M2）：结构化消息通道（from/to/round/kind/content）
+    agent_messages: List[Dict]
+    # 黑板共享工作区（M3）：专家写发现/认领子问题/读他人发现
+    blackboard: List[Dict]
+    # 教学总监收敛结论（M3 黑板收敛）
+    convergence: str
