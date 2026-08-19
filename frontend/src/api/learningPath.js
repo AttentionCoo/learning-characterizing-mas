@@ -16,8 +16,6 @@ export const updateTaskProgressAPI = (taskId, data) => request.put(`/learning-pa
 
 export const getRecommendationsAPI = (params) => request.get('/learning-path/recommendations', { params })
 
-export const getLearningPathConversationsAPI = () => request.get('/learning-path/conversations')
-
 export function learningPathStreamAPI(params, onChunk, onThinking) {
   return sseStreamRequest('/api/learning-path/generate', params, { onChunk, onThinking })
 }

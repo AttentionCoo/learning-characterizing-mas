@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted, nextTick, computed } from 'vue'
 import { renderMarkdown } from '@/utils/markdown'
-import { getTutorConversationsAPI, getTutorConversationHistoryAPI, deleteTutorConversationAPI, tutorStreamAPI } from '@/api/tutor'
+import { tutorStreamAPI } from '@/api/tutor'
 import AppAvatar from '@/components/AppAvatar.vue'
 import ImageUploader from '@/components/ImageUploader.vue'
 import ReasoningTrace from '@/components/ReasoningTrace.vue'
@@ -10,11 +10,6 @@ import { useReasoningTrace } from '@/composables/useReasoningTrace'
 
 const userStore = useUserStore()
 
-const MAX_CONVERSATIONS = 50
-
-const conversations = ref([])
-const conversationsLoading = ref(false)
-const activeConversationId = ref(null)
 const chatMessages = ref([])
 const draftMessage = ref('')
 const isStreaming = ref(false)
@@ -27,79 +22,16 @@ const inputRef = ref(null)
 const shouldAutoScroll = ref(true)
 const { reasoningEntries, resetReasoningTrace, appendReasoningEvent } = useReasoningTrace()
 
-const showSidebar = ref(true)
 const uploadedImages = ref([])
 const showImageUploader = ref(false)
 
 
 onMounted(() => {
-  fetchConversations()
   chatMessages.value.push({
     role: 'assistant',
     content: '你好！我是你的脑卒中智能辅导助手 🎓\n\n我可以为你解答脑卒中相关问题、讲解神经病学知识点、分析脑血管病例，并提供多模态辅导支持。\n\n请随时向我提问！',
   })
 })
-
-async function fetchConversations() {
-  conversationsLoading.value = true
-  try {
-    const res = await getTutorConversationsAPI()
-    let convList = res.data || []
-    convList.sort((a, b) => new Date(b.updateTime || b.createTime || 0) - new Date(a.updateTime || a.createTime || 0))
-    if (convList.length > MAX_CONVERSATIONS) {
-      const toDelete = convList.slice(MAX_CONVERSATIONS)
-      convList = convList.slice(0, MAX_CONVERSATIONS)
-      toDelete.forEach(async (conv) => {
-        try { await deleteTutorConversationAPI(conv.talkId) } catch {}
-      })
-    }
-    conversations.value = convList
-  } catch {
-    // ignore
-  } finally {
-    conversationsLoading.value = false
-  }
-}
-
-async function selectConversation(conv) {
-  resetReasoningTrace()
-  activeConversationId.value = conv.talkId
-  talkId.value = conv.talkId
-  try {
-    const res = await getTutorConversationHistoryAPI(conv.talkId)
-    chatMessages.value = (res.data || []).map(m => ({
-      role: m.role,
-      content: m.content,
-    }))
-    await nextTick()
-    scrollToBottom()
-  } catch {
-    // ignore
-  }
-}
-
-function startNewConversation() {
-  resetReasoningTrace()
-  activeConversationId.value = null
-  talkId.value = null
-  chatMessages.value = [{
-    role: 'assistant',
-    content: '开始新的辅导对话吧！请告诉我你想学习或讨论的内容。',
-  }]
-}
-
-async function deleteConversation(conv, e) {
-  e.stopPropagation()
-  try {
-    await deleteTutorConversationAPI(conv.talkId)
-    conversations.value = conversations.value.filter(c => c.talkId !== conv.talkId)
-    if (activeConversationId.value === conv.talkId) {
-      startNewConversation()
-    }
-  } catch {
-    // ignore
-  }
-}
 
 async function handleSend() {
   const message = draftMessage.value.trim()
@@ -176,7 +108,6 @@ async function handleSend() {
     chatMessages.value[aiIndex] = { role: 'assistant', content }
     if (result.data?.talkId) talkId.value = result.data.talkId
 
-    await fetchConversations()
   } catch (error) {
     console.error('辅导对话失败', error)
     chatMessages.value.splice(aiIndex, 1)
@@ -389,50 +320,6 @@ function isDICOMDataUrl(dataUrl) {
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="22" y1="2" x2="11" y2="13"/>
                 <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-              </svg>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div class="conversation-sidebar">
-        <div class="sidebar-header">
-          <span class="sidebar-title">对话历史</span>
-          <button class="new-chat-btn" @click="startNewConversation">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            新对话
-          </button>
-        </div>
-
-        <div class="conversation-list">
-          <div v-if="conversationsLoading" class="list-loading">
-            <div class="loading-spinner"></div>
-          </div>
-          <div v-else-if="!conversations.length" class="list-empty">
-            <span>暂无对话</span>
-          </div>
-          <div
-            v-else
-            v-for="conv in conversations"
-            :key="conv.talkId"
-            class="conv-item"
-            :class="{ active: activeConversationId === conv.talkId }"
-            @click="selectConversation(conv)"
-          >
-            <div class="conv-icon">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-              </svg>
-            </div>
-            <div class="conv-info">
-              <div class="conv-title">{{ conv.title || '新对话' }}</div>
-              <div class="conv-time">{{ formatTime(conv.updateTime || conv.createTime) }}</div>
-            </div>
-            <button class="conv-delete" @click="deleteConversation(conv, $event)">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
               </svg>
             </button>
           </div>
@@ -783,132 +670,8 @@ function isDICOMDataUrl(dataUrl) {
   &:disabled { opacity: 0.4; cursor: not-allowed; animation: none; }
 }
 
-.conversation-sidebar {
-  width: 280px;
-  min-width: 280px;
-  display: flex;
-  flex-direction: column;
-  border-left: 1px solid var(--color-border-light);
-  background: var(--color-bg-light);
-}
-
-.sidebar-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--color-border-light);
-  flex-shrink: 0;
-}
-
-.sidebar-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--color-text-strong);
-}
-
-.new-chat-btn {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 10px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-base);
-  color: var(--color-text-medium);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-
-  &:hover { border-color: var(--color-primary); color: var(--color-primary-dark); }
-}
-
-.conversation-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 8px;
-}
-
-.list-loading, .list-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 40px;
-  color: var(--color-text-weak);
-  font-size: 13px;
-}
-
-.loading-spinner {
-  width: 24px; height: 24px;
-  border: 3px solid var(--color-border-light);
-  border-top-color: var(--color-primary);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin { to { transform: rotate(360deg); } }
-
-.conv-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 10px;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-
-  &:hover { background: var(--color-hover-bg); }
-  &.active { background: var(--color-active-bg); }
-}
-
-.conv-icon {
-  flex-shrink: 0;
-  color: var(--color-text-weak);
-}
-
-.conv-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.conv-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--color-text-strong);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.conv-time {
-  font-size: 11px;
-  color: var(--color-text-weak);
-  margin-top: 1px;
-}
-
-.conv-delete {
-  flex-shrink: 0;
-  width: 24px;
-  height: 24px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--color-text-weak);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: all var(--transition-fast);
-
-  .conv-item:hover & { opacity: 1; }
-  &:hover { background: rgba(220, 38, 38, 0.1); color: #dc2626; }
-}
-
 @media (max-width: 768px) {
   .tutor-body { flex-direction: column; }
-  .conversation-sidebar { width: 100%; min-width: 100%; max-height: 28vh; border-left: none; border-top: 1px solid var(--color-border-light); }
 
   .chat-messages { padding: 14px 12px; }
   .chat-message { max-width: 94%; gap: 8px; }
@@ -925,8 +688,6 @@ function isDICOMDataUrl(dataUrl) {
 }
 
 .message { animation: fade-in-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) both; }
-.conv-item { transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
-.conv-item:hover { transform: translateX(4px); }
 
 // ── 图片上传面板 ──
 .image-uploader-panel {

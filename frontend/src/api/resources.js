@@ -9,10 +9,6 @@ export const downloadResourceAPI = (id) => request.get(`/resources/${id}/downloa
 
 export const deleteResourceAPI = (id) => request.delete(`/resources/${id}`)
 
-export const getResourceConversationsAPI = () => request.get('/resources/conversations')
-
-export const getResourceConversationHistoryAPI = (talkId) => request.get(`/resources/conversation/${talkId}`)
-
 export function resourceStreamAPI(url, params, onChunk, onThinking) {
   return sseStreamRequest(url, params, { onChunk, onThinking })
 }

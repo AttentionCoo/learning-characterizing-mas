@@ -5,12 +5,6 @@ export const getProfileAPI = () => request.get('/profile')
 
 export const updateProfileDimensionsAPI = (data) => request.put('/profile/dimensions', data)
 
-export const getProfileConversationsAPI = () => request.get('/profile/conversations')
-
-export const getProfileConversationHistoryAPI = (talkId) => request.get(`/profile/conversation/${talkId}`)
-
-export const deleteProfileConversationAPI = (talkId) => request.delete(`/profile/conversation/${talkId}`)
-
 export function profileStreamAPI(params, onChunk, onThinking) {
   return sseStreamRequest('/api/profile/conversation', params, { onChunk, onThinking })
 }
