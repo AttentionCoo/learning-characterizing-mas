@@ -150,6 +150,9 @@ def test_build_agent_registers_three_tools(monkeypatch):
     assert "教学辅导" in captured["prompt"]
     assert "专家白名单" in captured["prompt"]
     assert "画像对话智能体" in captured["prompt"]
+    # supervisor 最终回答要求结构化章节 + 学习激励段落
+    assert "下一步建议" in captured["prompt"]
+    assert "学习激励" in captured["prompt"]
 
 
 class _FakeReasonNode:

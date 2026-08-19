@@ -54,3 +54,40 @@ def test_inject_matches_real_profile_template():
     idx_inject = result.index("💡 **学习激励**")
     idx_heading = result.index("## 九、个性化建议")
     assert idx_inject < idx_heading
+
+
+def test_inject_matches_real_tutor_template():
+    """用真实 tutor 模板验证注入命中「## 下一步建议」。
+
+    回归：旧正则只匹配 5 种「建议」标题，漏掉 tutor 的「下一步建议」。
+    """
+    from app.config.config_loader import get_report_manager
+
+    mgr = get_report_manager()
+    template = mgr.get_template("tutor")
+    assert template, "tutor 模板应存在"
+    assert "## 下一步建议" in template
+
+    result = _inject_before_suggestion(template, "💡 **学习激励**: 测试")
+    idx_inject = result.index("💡 **学习激励**")
+    idx_heading = result.index("## 下一步建议")
+    assert idx_inject < idx_heading
+
+
+def test_inject_matches_all_suggestion_variants():
+    """所有含「建议」的标题变体都应命中注入点。"""
+    variants = [
+        "## 下一步建议",
+        "## 进阶建议",
+        "## 八、知识提升建议",
+        "## 八、技能提升建议",
+        "## 八、进度优化建议",
+        "## 建议行动",
+        "## 六、信息缺口与追踪建议",
+        "## 四、学习建议与行动方案",
+        "### 中长期发展建议（1-3个月）",
+    ]
+    for heading in variants:
+        template = f"## 一、正文\n内容\n\n{heading}\n- 建议内容\n"
+        result = _inject_before_suggestion(template, "💡 激励")
+        assert result.index("💡 激励") < result.index(heading), f"未命中: {heading}"
