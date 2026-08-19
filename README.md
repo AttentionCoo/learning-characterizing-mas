@@ -1,21 +1,36 @@
 # LearnAgent
 
-LearnAgent 是面向脑卒中医学教育的多智能体个性化学习系统。系统以学生画像为起点，提供学习资源生成、路径规划、循证辅导、学习评估、医学影像分析和代码辅助，并通过 SSE 展示可审计的推理节点与最终结果。
+LearnAgent 是面向脑卒中医学教育的多智能体个性化学习系统。系统以学生画像为起点，形成「画像 → 个性化学习 → 效果评估 → 反馈优化」的完整学习闭环：专家间通过结构化消息会诊、共享黑板协作，画像贯穿资源生成、路径规划、循证辅导与学习评估，并通过 SSE 展示可审计的推理节点、专家对话与最终结果。
 
-> 文档状态：已于 2026-08-17 按当前代码、Docker 编排和自动化测试核对。系统用于教学辅助，不替代教师指导或临床诊疗意见。
+> 文档状态：已于 2026-08-19 按当前代码、Docker 编排和自动化测试核对。系统用于教学辅助，不替代教师指导或临床诊疗意见。
+
+## 项目定位
+
+LearnAgent 是一个以多智能体编排为 AI 内核的完整应用系统，兼具应用产品、多智能体系统与编排驱动三层属性：
+
+| 视角 | 定位 |
+|:---|:---|
+| 项目性质 | 应用系统（脑卒中医学教育学习产品），非框架或平台 |
+| AI 架构 | 多智能体系统（multi-agent system）：9 位领域专家 + 辩论仲裁 + 监督者（Supervisor） |
+| 智能核心 | 编排主导（orchestration-centric）：LangGraph 状态图 + 规划-执行-校验（RePlan）循环 + 专家间对话/黑板协作 |
+| agent 形态 | 角色型领域专家 + 有界自主的监督者试点，非通用自主 agent 框架 |
+| 自主程度 | 有界自主：RePlan 迭代上限、工具白名单、意图门控与医学红线保留在编排层外层 |
+
+一句话概括：**编排为骨架、专家 agent 为能力单元**——编排层决定"怎么走"（规划 → 执行 → 校验 → 重规划），agent 层决定"谁来干"（9 位专家通过结构化消息会诊、共享黑板协作），外层再封装完整的业务产品（Vue 前端 / Spring Boot 后端 / FastAPI 模型服务），并以「画像 → 学习 → 评估 → 优化」闭环贯穿全部模块。
 
 ## 当前功能
 
 | 模块 | 当前实现 |
 |:---|:---|
-| 学习画像 | 对话收集学习背景并维护 8 维画像；画像抽取在原画像对话完成后异步更新，不额外创建“画像生成”对话 |
-| 资源生成 | 统一生成入口支持课程讲解文档、思维导图、练习题、拓展阅读、临床案例、学习方案、代码实操、评估报告 8 种互斥类型 |
+| 学习总览 | 登录后默认首页：聚合画像完整度、路径进度、资源数、评估分数、辅导轮数，展示学习闭环阶段（未开始/学习中/已评估/完成） |
+| 学习画像 | 对话收集学习背景并维护 8 维画像；画像抽取在原画像对话完成后异步更新，不额外创建"画像生成"对话；画像摘要自动注入其余全部模块 |
+| 资源生成 | 统一生成入口支持课程讲解文档、思维导图、练习题、拓展阅读、临床案例、资源设计方案 6 种互斥类型 |
 | 学习路径 | 生成路径、查询详情、更新步骤和任务进度、资源推荐、动态调整 |
-| 智能辅导 | 多轮 SSE 问答、历史记录、图片和代码片段上下文；tutor 意图由监督者 LLM（三工具白名单）试点调度 |
-| 学习评估 | 综合、知识、技能、进度等评估模式，五维雷达展示，行为记录与路径优化 |
+| 智能辅导 | 多轮 SSE 问答、图片和代码片段上下文；tutor 意图由监督者 LLM（三工具白名单）试点调度；最终回答按「解答/关键要点/易错提示/拓展思考/下一步建议/学习激励」六章节结构化输出 |
+| 学习评估 | 综合、知识、技能、进度等评估模式，五维雷达展示，行为记录与路径优化；评估薄弱点自动回流画像 |
 | 代码辅助 | Python 执行；代码补全、错误诊断、优化建议、代码讲解四种互斥模式 |
 | 医学多模态 | Qwen VL 影像分析、病例流式分析、多图对比、DICOM 元数据与预览、检验报告和处方 OCR |
-| 质量控制 | 功能级输入守卫、Hybrid RAG、结构化规划与重规划（RePlan）、规则校验、反思修正、辩论仲裁、共享记忆、推理并发治理 |
+| 质量控制 | 功能级输入守卫、Hybrid RAG、结构化规划与重规划（RePlan）、规则校验、反思修正、专家会诊（结构化消息 + 黑板）与仲裁、共享记忆、推理并发治理 |
 
 ## 系统架构
 
@@ -37,7 +52,7 @@ flowchart LR
 |:---|:---|:---|
 | 接入层 | HTTP/SSE 路由与鉴权 | FastAPI 路由（stream/medical/code/profile/evaluation/admin）、`verify_token`（HS256+HS512 共享 JWT） |
 | 治理层 | 并发与流式协议 | `InferenceSlot` 推理信号量（默认 10）、自实现 `EventSourceResponse`（心跳 + 帧编码） |
-| 编排层 | 规划-执行-监督 | `PlannerNode` / `ExecutorNode` / `TutorSupervisor` / LangGraph 状态图（RePlan 循环） |
+| 编排层 | 规划-执行-监督-会诊 | `PlannerNode` / `ExecutorNode` / `TutorSupervisor` / `DialogueOrchestrator`（专家对话+黑板） / LangGraph 状态图（RePlan 循环） |
 | 能力层 | 领域能力 | 9 位专家（YAML 配置 + 规则/LM 选人）、Hybrid RAG（Chroma + 自实现 BM25 + 医学评分重排）、共享记忆、医学多模态（Qwen VL/OCR/DICOM） |
 | 运行时 | 资源与外部依赖 | `runtime.resources`、ThreadPoolExecutor、AsyncTaskManager、DashScope Qwen、ChromaDB |
 
@@ -56,9 +71,10 @@ flowchart LR
 ```
 
 - **Planner 主链路**：多步任务（画像/资源/路径/评估）先由 `PlannerNode` 用轻量模型生成结构化执行计划（步骤类型白名单：analyze/retrieve/expert_reason/finalize，最多 6 步），`ExecutorNode` 按计划复用既有能力逐步执行；校验失败时反馈回到规划器**重新规划**（RePlan 循环），规划失败自动回退默认计划（等价于升级前固定管线）。
-- **推理链全量流式打印**：外层运行器基于 `astream(stream_mode=["custom","updates","messages"])` 三通道——节点进入（node_start）、执行步骤进度、专家名单与逐位专家完整发言（完成即推）、辩论记录与仲裁裁决、综合提案与风险批判、质量校验反馈（含驳回原因）全部实时流式到达前端推理轨迹；最终报告逐字流式输出。
+- **推理链全量流式打印**：外层运行器基于 `astream(stream_mode=["custom","updates","messages"])` 三通道——节点进入（node_start）、执行步骤进度、专家名单与逐位专家完整发言（完成即推）、专家间结构化对话、会诊黑板、辩论记录与仲裁裁决、综合提案与风险批判、质量校验反馈（含驳回原因）全部实时流式到达前端推理轨迹；最终报告逐字流式输出。
+- **专家会诊（M2 结构化消息 + M3 黑板）**：专家完成初稿后互见彼此观点，通过 `DialogueOrchestrator` 输出结构化消息（question/reply/revise/agree/object/finding）定向提问互答（多轮、异议驱动提前收敛），并在黑板共享工作区写入/修订发现；教学总监从黑板提炼收敛结论，仲裁智能体依据对话记录 + 黑板发现 + 证据链裁决。对话消息经 `agent_msg` 事件、黑板快照经 `blackboard` 事件流式送达前端。
 - **Supervisor 试点**：tutor 意图由监督者 LLM（qwen-turbo）在工具白名单内自主调度——`evidence_search`（循证检索）、`consult_experts`（多专家辩论仲裁）、`get_student_profile`（画像查询），迭代轮数受上限约束；意图门控与医学红线保留在监督者外层。可用 `SUPERVISOR_TUTOR_ENABLED=false` 切回 Planner 链路。
-- **监督者自主点将**：`consult_experts(question, roles)` 允许监督者从专家白名单（`expert_config.yaml` 动态生成菜单）自主选择 2~5 位专家并说明选人理由，工具内白名单过滤，留空回退意图+难度规则编排；点将名单与各专家完整发言经 `experts` 事件流式送达前端推理轨迹。
+- **监督者自主点将**：`consult_experts(question, reason, roles)` 允许监督者从专家白名单（`expert_config.yaml` 动态生成菜单）自主选择 2~5 位专家并说明选人理由（reason 必填），工具内白名单过滤，留空回退意图+难度规则编排；点将名单、选人理由与各专家完整发言经 `experts` 事件流式送达前端推理轨迹。
 - 模型层从 `model/app/config/expert_config.yaml` 加载 9 位专家：画像对话、特征抽取、需求分析、文档撰写、题目生成、质量审核、学习激励、仲裁和医学影像分析智能体。
 
 **推理链流式事件**（一次请求按到达顺序输出，前端"AI 推理与检索依据"面板实时展示）：
@@ -66,12 +82,30 @@ flowchart LR
 | 事件 | 含义 |
 |:---|:---|
 | `node_start` / `thinking` | 节点开始标签；执行步骤进度、专家发言、提案批判、校验反馈等中途内容 |
-| `experts` | 本轮参与专家名单（先到达）与各专家完整发言（监督者/规划器点将，可审计） |
-| `debate` | 多专家辩论记录 + 仲裁裁决全文 |
+| `experts` | 本轮参与专家名单（先到达）与各专家完整发言（监督者/规划器点将，可审计），含选人理由 |
+| `agent_msg` | 专家间结构化对话消息（谁 → 谁、轮次、类型：提问/回复/修订/认同/异议/发现） |
+| `blackboard` | 会诊黑板快照：各专家最终发现 + 教学总监收敛结论 + 仲裁裁决 |
+| `debate` | 多专家辩论记录 + 仲裁裁决全文（回退路径） |
 | `node_done` | 节点完成摘要（含 RAG 指南依据与来源页码） |
 | `token` / `replace` | 最终报告逐字流 / 完整报告替换 |
 | `done` | 流结束（画像模式携带 `profile_dimensions`） |
 | `error` | 结构化错误（含错误码） |
+
+## 学习闭环
+
+系统以「画像 → 学习 → 评估 → 优化」四步闭环串联全部模块，画像贯穿始终：
+
+```mermaid
+flowchart LR
+    A["① 构建画像\n对话生成 8 维画像"] --> B["② 个性化学习\n资源/路径/辅导\n（画像注入全模块）"]
+    B --> C["③ 效果评估\n多维评估识别薄弱点"]
+    C --> D["④ 反馈优化\n薄弱点回流画像\n路径动态调整"]
+    D -.->|"再学习"| B
+```
+
+- **画像注入**：后端从 `StudentProfile` 压缩画像摘要（薄弱知识点/认知风格/资源偏好等）注入每个模型请求的 `profile_summary`，模型端全链路透传，专家推理时案例信息携带画像——资源/路径/辅导/评估均按学生个性化。
+- **评估回流**：评估完成后提取的薄弱点增量合并进画像 `errorPattern.weakTopics`（去重、保留既有内容），供后续模块参考。
+- **总览页**：`GET /api/user/overview` 聚合画像完整度、路径进度、资源数、评估分数、辅导轮数，并按状态推断闭环阶段（`not_started`/`learning`/`assessed`/`completed`），登录后默认展示于「学习总览」首页。
 
 ## 技术栈
 
@@ -158,7 +192,7 @@ docker compose ps
 
 ## 验证与测试
 
-2026-08-17 升级后验证结果：模型层 167 项通过，前端 20 项通过，后端 11 项通过、1 项跳过；合计 198 项通过、1 项跳过。
+2026-08-19 升级后验证结果：模型层 185 项通过，前端 27 项通过，后端 11 项通过、1 项跳过；合计 223 项通过、1 项跳过。
 
 Windows PowerShell 若默认代码页不是 UTF-8，运行模型测试前先执行
 `$env:PYTHONUTF8 = "1"`，否则 `pytest.ini` 中的中文注释可能触发解码错误。
@@ -193,10 +227,11 @@ docker compose ps
 | 模块 | 主要接口 |
 |:---|:---|
 | 认证 | `POST /api/user/register`、`POST /api/user/login`、`POST /api/user/logOut` |
+| 总览 | `GET /api/user/overview`（学习闭环聚合数据） |
 | 画像 | `POST /api/profile/conversation`、`GET /api/profile`、`PUT /api/profile/dimensions` |
 | 资源 | `POST /api/resources/generate`、`POST /api/resources/generate/{type}`、`GET /api/resources` |
 | 路径 | `POST /api/learning-path/generate`、`PUT /api/learning-path/{pathId}/steps/{stepId}/progress` |
-| 辅导 | `POST /api/tutor/chat`、`GET /api/tutor/conversations` |
+| 辅导 | `POST /api/tutor/chat` |
 | 评估 | `POST /api/evaluation/generate`、`GET /api/evaluation/reports`、`POST /api/evaluation/optimize` |
 | 代码 | `POST /api/code/execute`、`POST /api/code/assist` |
 | 医学影像 | `/api/medical/**` |
@@ -211,7 +246,7 @@ docker compose ps
 }
 ```
 
-SSE 可能包含 `init`、`meta`、`node_start`、`thinking`、`node_done`、`debate`、`experts`、`token`、`replace`、`done` 和 `error`。`replace` 表示完整报告，应替换此前累计的 `token` 内容；画像模式下模型层发出的 `done` 事件携带 `profile_dimensions`，由后端透传给前端保存画像。`debate` 携带多专家辩论记录与仲裁裁决；`experts` 携带本轮参与专家名单与各专家完整发言（`active_experts` / `advices`），供前端推理轨迹可审计展示。
+SSE 可能包含 `init`、`meta`、`node_start`、`thinking`、`node_done`、`debate`、`experts`、`agent_msg`、`blackboard`、`token`、`replace`、`done` 和 `error`。`replace` 表示完整报告，应替换此前累计的 `token` 内容；画像模式下模型层发出的 `done` 事件携带 `profile_dimensions`，由后端透传给前端保存画像。`debate` 携带多专家辩论记录与仲裁裁决；`experts` 携带本轮参与专家名单、选人理由与各专家完整发言（`active_experts` / `advices` / `selection_reason`）；`agent_msg` 携带专家间结构化对话消息（`from` / `to` / `round` / `kind` / `content`）；`blackboard` 携带会诊黑板快照（各专家发现 `entries`、教学总监收敛结论 `convergence`、仲裁裁决 `arbitration`），供前端推理轨迹可审计展示。
 
 完整端点、请求字段和 SSE 约定见 [接口文档](docs/api/LearnAgent系统接口文档.md)。
 
@@ -220,6 +255,7 @@ SSE 可能包含 `init`、`meta`、`node_start`、`thinking`、`node_done`、`de
 | 路由 | 功能 |
 |:---|:---|
 | `/login` | 登录与注册 |
+| `/overview` | 学习总览（登录后默认首页） |
 | `/profile` | 学习画像 |
 | `/resources` | 学习资源 |
 | `/learning-path` | 学习路径 |
@@ -248,8 +284,10 @@ learning-multi-agent-system/
 - 代码执行沙箱当前仅支持 Python；代码辅助的 `language` 字段尚未驱动多语言沙箱。
 - `DocumentController.java` 为空，当前没有 `/api/documents/**` REST 接口；文献由模型层从本地 PDF 知识库加载。
 - 模型层只有统一推理入口 `/model/get_result` 校验内部 JWT；其他专用路由依赖网络隔离，不应映射公网端口。
-- 推理链中途事件（执行步骤/专家发言/辩论/提案/校验反馈）经 `stream_mode="custom"` 实时推送；监督者（Supervisor）内部推理文本不外泄，其最终答案在节点完成时整体替换输出。
+- 推理链中途事件（执行步骤/专家发言/专家对话/黑板/提案/校验反馈）经 `stream_mode="custom"` 实时推送；监督者（Supervisor）内部推理文本不外泄，其最终答案在节点完成时整体替换输出。
 - 监督者（Supervisor）当前仅试点 tutor 意图，其他意图走 Planner 主链路；可通过 `SUPERVISOR_TUTOR_ENABLED=false` 关闭。
+- 专家会诊（结构化消息 + 黑板）默认启用（`debate.dialogue_enabled=true`），可在 `expert_config.yaml` 关闭回退旧广播辩论。
+- 会话列表/历史查询等面向用户的对话历史接口已移除（前端不再展示历史对话，每次进入默认新对话）；画像自动更新等内部机制依赖的消息持久化仍保留。
 - 模型层任务状态与 SSE 事件缓存均在进程内存中，多实例部署前需改为共享存储（Redis/DB）。
 - `backend/server/learningo_agents.sql` 同时包含结构和演示数据，生产部署前应审查并按需拆分。
 - 性能会受外部模型配额、网络和首次向量库初始化影响；未经当次压测的数据不作为当前性能承诺。
