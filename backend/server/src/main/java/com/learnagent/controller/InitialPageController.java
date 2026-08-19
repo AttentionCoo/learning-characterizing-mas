@@ -19,11 +19,4 @@ public class InitialPageController {
     public Result getTitle(){
         return Result.success(initialPageService.getPage(ThreadLocalUtil.getCurrentUser().getId()));
     }
-
-    @DeleteMapping("deleteTalk/{talk_id}")
-    public Result deleteTalk(@PathVariable("talk_id") Long talkId){
-        Long userId = ThreadLocalUtil.getCurrentUser().getId();
-        initialPageService.deleteTalk(userId,talkId);
-        return Result.success();
-    }
 }

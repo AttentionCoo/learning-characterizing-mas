@@ -10,6 +10,21 @@ from app.agents.utils.text_utils import truncate_text
 
 logger = logging.getLogger(__name__)
 
+# 匹配模板中的「建议」章节标题行（如 "## 九、个性化建议" / "## 六、学习建议"），
+# 用于在标题前插入学习激励 / 质量警告。此前用固定字符串 "### 个性化建议"
+# replace，而模板标题是 "## 九、个性化建议"，永远匹配不上。
+_SUGGESTION_HEADING = re.compile(
+    r"(?m)^(#{1,6}\s*[^\n]*?(?:个性化建议|学习建议|改进建议|综合建议|行动建议))"
+)
+
+
+def _inject_before_suggestion(prompt_text: str, injected: str) -> str:
+    """把 injected 文本插入到第一个「建议」章节标题之前；找不到则追加到末尾。"""
+    match = _SUGGESTION_HEADING.search(prompt_text)
+    if match:
+        return prompt_text[:match.start()] + "\n" + injected + "\n" + prompt_text[match.start():]
+    return prompt_text + "\n" + injected
+
 
 class ReportNode(BaseNode):
 
@@ -106,10 +121,14 @@ class ReportNode(BaseNode):
             )
 
         if warning_text:
-            prompt_text = prompt_text.replace("### 个性化建议", f"### 质量警告{warning_text}### 个性化建议")
+            prompt_text = _inject_before_suggestion(
+                prompt_text, f"⚠️ **质量警告**: {warning_text}"
+            )
 
         if motivational_text:
-            prompt_text = prompt_text.replace("### 个性化建议", f"### 学习激励{motivational_text}### 个性化建议")
+            prompt_text = _inject_before_suggestion(
+                prompt_text, motivational_text
+            )
 
         logger.info(f"[report] Prompt长度: {len(prompt_text)}")
         logger.info(f"[report] 开始生成报告")

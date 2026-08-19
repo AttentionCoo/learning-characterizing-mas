@@ -14,9 +14,7 @@ import com.learnagent.entity.*;
 import com.learnagent.param.PathAdjustParam;
 import com.learnagent.param.PathGenerateParam;
 import com.learnagent.param.StepProgressParam;
-import com.learnagent.vo.InitialPageVO;
 import com.learnagent.service.AIStreamingService;
-import com.learnagent.service.IInitialPageService;
 import com.learnagent.utils.ThreadLocalUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -49,7 +47,6 @@ public class LearningPathController {
     private final LearningPathStepMapper learningPathStepMapper;
     private final LearningResourceMapper learningResourceMapper;
     private final StepResourceRelMapper stepResourceRelMapper;
-    private final IInitialPageService initialPageService;
 
     @PostMapping(value = "/generate", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<String>> generate(
@@ -382,13 +379,6 @@ public class LearningPathController {
         Map<String, Object> data = new HashMap<>();
         data.put("recommendations", recommendations);
         return Result.success(data);
-    }
-
-    @GetMapping("/conversations")
-    public Result getConversationList() {
-        Long userId = ThreadLocalUtil.getCurrentUser().getId();
-        List<InitialPageVO> talks = initialPageService.getPage(userId);
-        return Result.success(talks);
     }
 
     private Map<String, Object> buildPathDetail(LearningPath path, Long userId) {

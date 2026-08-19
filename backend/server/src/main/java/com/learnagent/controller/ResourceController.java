@@ -10,9 +10,7 @@ import com.learnagent.entity.Result;
 import com.learnagent.entity.Talk;
 import com.learnagent.param.QuestionParam;
 import com.learnagent.param.ResourceGenerateParam;
-import com.learnagent.vo.InitialPageVO;
 import com.learnagent.service.AIStreamingService;
-import com.learnagent.service.IInitialPageService;
 import com.learnagent.utils.ThreadLocalUtil;
 import com.learnagent.utils.ConversationType;
 import lombok.RequiredArgsConstructor;
@@ -65,7 +63,6 @@ public class ResourceController {
     private final ObjectMapper objectMapper;
     private final SSEEventCache eventCache;
     private final LearningResourceMapper learningResourceMapper;
-    private final IInitialPageService initialPageService;
 
     @PostMapping(value = "/generate", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<String>> generate(
@@ -213,19 +210,6 @@ public class ResourceController {
         }
         learningResourceMapper.deleteById(id);
         return Result.success();
-    }
-
-    @GetMapping("/conversation/{talkId}")
-    public Result getConversationHistory(@PathVariable Long talkId) {
-        Long userId = ThreadLocalUtil.getCurrentUser().getId();
-        return Result.success(streamingService.getPreContent(userId, talkId));
-    }
-
-    @GetMapping("/conversations")
-    public Result getConversationList() {
-        Long userId = ThreadLocalUtil.getCurrentUser().getId();
-        List<InitialPageVO> talks = initialPageService.getPage(userId);
-        return Result.success(talks);
     }
 
     @PostMapping(value = "/generate/document", produces = MediaType.TEXT_EVENT_STREAM_VALUE)

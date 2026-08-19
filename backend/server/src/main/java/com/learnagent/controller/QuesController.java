@@ -33,20 +33,6 @@ public class QuesController {
     private final ObjectMapper objectMapper;
     private final SSEEventCache eventCache;
 
-    @GetMapping("/getQues/{talk_id}")
-    public Result getPreContent(@PathVariable("talk_id") String talkIdStr) {
-        Long talkId = Long.parseLong(talkIdStr);
-        log.info("收到对话内容请求: talkId={}", talkId);  // 添加这行
-        if (talkId == null || talkId <= 0) {
-            return Result.success(List.of());
-        }
-        if (ThreadLocalUtil.getCurrentUser() == null) {
-            return Result.error("未登录");
-        }
-        Long userId = ThreadLocalUtil.getCurrentUser().getId();
-        return Result.success(streamingService.getPreContent(userId, talkId));
-    }
-
     @PostMapping(value = "/streamingQues", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<String>> streamingQues(
             @RequestBody QuestionParam questionParam,

@@ -6,9 +6,7 @@ import com.learnagent.entity.Result;
 import com.learnagent.entity.Talk;
 import com.learnagent.param.QuestionParam;
 import com.learnagent.param.TutorChatParam;
-import com.learnagent.vo.InitialPageVO;
 import com.learnagent.service.AIStreamingService;
-import com.learnagent.service.IInitialPageService;
 import com.learnagent.utils.ThreadLocalUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,7 +33,6 @@ public class TutorController {
     private final AIStreamingService streamingService;
     private final ObjectMapper objectMapper;
     private final SSEEventCache eventCache;
-    private final IInitialPageService initialPageService;
 
     @PostMapping(value = "/chat", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<String>> chat(
@@ -117,26 +114,6 @@ public class TutorController {
         questionParam.setImages(images);
 
         return buildSSEStream(userId, questionParam, upstreamToken, lastEventId);
-    }
-
-    @GetMapping("/conversation/{talkId}")
-    public Result getConversationHistory(@PathVariable Long talkId) {
-        Long userId = ThreadLocalUtil.getCurrentUser().getId();
-        return Result.success(streamingService.getPreContent(userId, talkId));
-    }
-
-    @GetMapping("/conversations")
-    public Result getConversationList() {
-        Long userId = ThreadLocalUtil.getCurrentUser().getId();
-        List<InitialPageVO> talks = initialPageService.getPage(userId);
-        return Result.success(talks);
-    }
-
-    @DeleteMapping("/conversation/{talkId}")
-    public Result deleteConversation(@PathVariable Long talkId) {
-        Long userId = ThreadLocalUtil.getCurrentUser().getId();
-        initialPageService.deleteTalk(userId, talkId);
-        return Result.success();
     }
 
     private Flux<ServerSentEvent<String>> buildSSEStream(Long userId, QuestionParam questionParam,

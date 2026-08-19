@@ -8,9 +8,7 @@ import com.learnagent.entity.Talk;
 import com.learnagent.dto.ChatMessageDTO;
 import com.learnagent.param.ProfileConversationParam;
 import com.learnagent.param.QuestionParam;
-import com.learnagent.vo.InitialPageVO;
 import com.learnagent.service.AIStreamingService;
-import com.learnagent.service.IInitialPageService;
 import com.learnagent.mapper.StudentProfileMapper;
 import com.learnagent.utils.ThreadLocalUtil;
 import com.learnagent.utils.ConversationType;
@@ -43,7 +41,6 @@ public class ProfileController {
     private final ObjectMapper objectMapper;
     private final SSEEventCache eventCache;
     private final StudentProfileMapper studentProfileMapper;
-    private final IInitialPageService initialPageService;
     private final WebClient webClient;
 
     @PostMapping(value = "/conversation", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -129,33 +126,6 @@ public class ProfileController {
             log.error("更新画像维度失败", e);
             return Result.error("更新画像维度失败");
         }
-    }
-
-    @GetMapping("/conversation/{talkId}")
-    public Result getConversationHistory(@PathVariable Long talkId) {
-        Long userId = ThreadLocalUtil.getCurrentUser().getId();
-        if (!initialPageService.isConversationType(userId, talkId, ConversationType.PROFILE)) {
-            return Result.error("该对话不属于学习画像模块");
-        }
-        List<ChatMessageDTO> history = streamingService.getPreContent(userId, talkId);
-        return Result.success(history);
-    }
-
-    @GetMapping("/conversations")
-    public Result getConversationList() {
-        Long userId = ThreadLocalUtil.getCurrentUser().getId();
-        List<InitialPageVO> talks = initialPageService.getPage(userId, ConversationType.PROFILE);
-        return Result.success(talks);
-    }
-
-    @DeleteMapping("/conversation/{talkId}")
-    public Result deleteConversation(@PathVariable Long talkId) {
-        Long userId = ThreadLocalUtil.getCurrentUser().getId();
-        if (!initialPageService.isConversationType(userId, talkId, ConversationType.PROFILE)) {
-            return Result.error("该对话不属于学习画像模块");
-        }
-        initialPageService.deleteTalk(userId, talkId);
-        return Result.success();
     }
 
     private Flux<ServerSentEvent<String>> buildSSEStream(Long userId, QuestionParam questionParam,
