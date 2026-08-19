@@ -2,7 +2,7 @@
 
 用 qwen-turbo 作为监督者 LLM，在工具白名单内自主调度：
 - evidence_search(query)   — 检索脑卒中指南证据（Hybrid RAG + 共享记忆）
-- consult_experts(question) — 召集多学科专家并行推理 + 辩论仲裁（复用 ReasonNode）
+- consult_experts(question, reason, roles) — 召集多学科专家并行推理 + 辩论仲裁（复用 ReasonNode）
 - get_student_profile()    — 获取学生画像信息
 
 安全边界：
@@ -33,7 +33,7 @@ _SUPERVISOR_SYSTEM_PROMPT = """你是脑卒中医学教育辅导的监督者（s
 
 你可以调用以下工具（只能调用这些工具，不能虚构其他能力）：
 1. evidence_search(query)：检索权威脑卒中指南证据，回答需要循证依据的问题前应调用
-2. consult_experts(question, roles)：召集指定专家并行讨论并仲裁，返回各专家发言与综合提案
+2. consult_experts(question, reason, roles)：召集指定专家并行讨论并仲裁，reason 为选人理由（必填），返回各专家发言与综合提案
 3. get_student_profile()：获取当前学生的学习画像，个性化建议前应调用
 
 专家白名单（consult_experts 的 roles 只能从中选择）：
@@ -41,8 +41,8 @@ _SUPERVISOR_SYSTEM_PROMPT = """你是脑卒中医学教育辅导的监督者（s
 
 工作原则：
 - 教学辅导定位：只做医学教育辅导，不替代临床诊疗决策；不确定时明确说明
-- 召集专家时根据问题性质选择 2~5 位最相关的专家，并在工具调用前用一句话说明选人理由；
-  例如需要循证依据时先 evidence_search，需要多角度教学建议时 consult_experts
+- 召集专家时根据问题性质选择 2~5 位最相关的专家；consult_experts 的 reason 参数必填，
+  用一句话说明选人理由（该理由会展示给学生作为可审计依据）
 - 引用指南证据时标注来源；证据不足时先检索再回答
 - 回答用中文、结构清晰；工具调用不超过 {max_rounds} 轮，信息足够后直接给出最终答案
 - 最终输出是给学生的完整回答，不要再输出工具调用指令"""
@@ -89,6 +89,7 @@ class TutorSupervisor:
             "evidence": state.get("evidence", "") or "",
             "proposal": "",
             "last_roles": [],
+            "last_reason": "",
             "expert_advices": [],
         }
         profile_text = self._format_profile(state)
@@ -113,10 +114,11 @@ class TutorSupervisor:
                 return f"检索失败：{e}"
 
         @tool
-        async def consult_experts(question: str, roles: List[str] = None) -> str:
+        async def consult_experts(question: str, reason: str, roles: List[str] = None) -> str:
             """召集指定专家并行讨论并仲裁。
 
-            参数 question 为要讨论的问题；roles 为本轮召集的专家角色列表，
+            参数 question 为要讨论的问题；reason 为本轮选人理由（必填，用一句话说明
+            为什么选择这些专家，将随推理轨迹展示给学生）；roles 为本轮召集的专家角色列表，
             只能从系统提示中的专家白名单选择 1~5 位（留空则按系统规则自动编排）。
             返回各专家发言与综合提案。"""
             try:
@@ -125,6 +127,7 @@ class TutorSupervisor:
                 valid_roles = {e["role"] for e in self.expert_menu}
                 chosen = [r for r in (roles or []) if r in valid_roles]
                 workspace["last_roles"] = list(chosen)
+                workspace["last_reason"] = (reason or "").strip()
                 if roles and len(chosen) != len(roles):
                     logger.info(
                         "[supervisor] 点将名单过滤: 请求=%s, 白名单内=%s", roles, chosen
@@ -233,6 +236,7 @@ class TutorSupervisor:
             "proposal": answer,
             "supervisor_trace": trace,
             "supervisor_roles": workspace.get("last_roles", []),
+            "supervisor_reason": workspace.get("last_reason", ""),
             "expert_advices": workspace.get("expert_advices", []),
         }
 

@@ -173,6 +173,7 @@ class LearningAgent:
             "plan_results": [],
             "supervisor_trace": [],
             "supervisor_roles": [],
+            "supervisor_reason": "",
             "expert_advices": [],
         }
         streamed_nodes: set = set()
@@ -285,10 +286,13 @@ class LearningAgent:
                                 t.get("reason", "") for t in trace_items
                                 if isinstance(t, dict) and t.get("reason")
                             ]
+                            selection_reason = (
+                                output.get("supervisor_reason") or "；".join(reasons)
+                            )
                             if roles:
                                 logger.info(
-                                    "[event] ✅ 推送 supervisor 点将结果到前端 (roles=%s, advices=%s, reasons=%s)",
-                                    roles, len(advices), len(reasons),
+                                    "[event] ✅ 推送 supervisor 点将结果到前端 (roles=%s, advices=%s, reason=%s)",
+                                    roles, len(advices), selection_reason[:40],
                                 )
                                 yield {
                                     "type": "experts",
@@ -297,7 +301,7 @@ class LearningAgent:
                                     "advices": advices,
                                     "debate_rounds": 0,
                                     "arbitration": "",
-                                    "selection_reason": "；".join(reasons),
+                                    "selection_reason": selection_reason,
                                 }
                             report_text = output.get("report", "")
                             if report_text:

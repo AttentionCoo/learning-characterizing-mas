@@ -189,13 +189,14 @@ def test_consult_experts_filters_roles_to_whitelist_and_returns_speeches(monkeyp
     fake_reason = _FakeReasonNode()
     supervisor = _supervisor(llm="fake-model")
     supervisor.reason_node = fake_reason
-    supervisor._build_agent(_make_state())
+    _, workspace = supervisor._build_agent(_make_state())
 
     tool_map = {t.name: t for t in captured["tools"]}
     consult = tool_map["consult_experts"]
 
     result = asyncio.run(consult.ainvoke({
         "question": "怎么学好脑血管解剖？",
+        "reason": "该问题需要解剖图谱与认知负荷管理，故选需求分析智能体。",
         "roles": ["需求分析智能体", "不存在的专家"],
     }))
 
@@ -203,6 +204,9 @@ def test_consult_experts_filters_roles_to_whitelist_and_returns_speeches(monkeyp
     assert "【需求分析智能体】" in result
     assert "综合提案" in result
     assert "不存在的专家" not in result
+    # reason 必须被记录，供学习链路以 supervisor_reason 流式送达前端审计
+    assert workspace["last_reason"] == "该问题需要解剖图谱与认知负荷管理，故选需求分析智能体。"
+    assert workspace["last_roles"] == ["需求分析智能体"]
 
 
 def test_consult_experts_empty_roles_falls_back_to_rule_selection(monkeypatch):
@@ -213,7 +217,7 @@ def test_consult_experts_empty_roles_falls_back_to_rule_selection(monkeypatch):
     supervisor._build_agent(_make_state())
 
     consult = {t.name: t for t in captured["tools"]}["consult_experts"]
-    result = asyncio.run(consult.ainvoke({"question": "问题", "roles": []}))
+    result = asyncio.run(consult.ainvoke({"question": "问题", "reason": "未指定名单，走规则兜底。", "roles": []}))
 
     assert "active_experts_override" not in fake_reason.last_state
     assert "综合提案" in result
