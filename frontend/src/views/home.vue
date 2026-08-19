@@ -446,11 +446,25 @@ function toggleSidebar() {
   transform: translateX(-6px);
 }
 
-// ── 页面切换 ──
-.page-fade-enter-active { transition: opacity 0.2s ease; }
-.page-fade-leave-active { transition: opacity 0.15s ease; }
-.page-fade-enter-from,
-.page-fade-leave-to { opacity: 0; }
+// ── 页面切换：柔和的淡入 + 轻微上浮，滚动位置不跳动 ──
+.page-fade-enter-active {
+  transition:
+    opacity 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.page-fade-leave-active {
+  transition:
+    opacity 0.18s cubic-bezier(0.4, 0, 1, 1),
+    transform 0.18s cubic-bezier(0.4, 0, 1, 1);
+}
+.page-fade-enter-from {
+  opacity: 0;
+  transform: translateY(10px);
+}
+.page-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
 
 // ── 移动端 ──
 @media (max-width: 768px) {

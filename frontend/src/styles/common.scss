@@ -882,6 +882,89 @@ button {
   -webkit-tap-highlight-color: transparent;
 }
 
+// ─────────────────── 丝滑滚动全局优化 ───────────────────
+// 1) 全局平滑滚动（滚轮/键盘/程序化滚动统一平滑）
+html {
+  scroll-behavior: smooth;
+}
+
+// 2) 所有可滚动容器：惯性滚动 + 防滚动链（内层滚到底不再带动外层）
+body,
+.app-layout,
+.main-content,
+.panel-main,
+.chat-messages,
+.result-content,
+.result-area,
+.generator-area,
+.generator-form,
+.path-body,
+.path-sidebar,
+.path-main,
+.ai-advice-card,
+.assist-pane,
+.output-body,
+.code-body,
+.code-editor-pane,
+.overview-body,
+.trace-body,
+.conversation-list,
+.generated-content,
+.code-pane,
+.report-content,
+.assessment-main,
+.reports-list,
+.profile-panel,
+.resource-list,
+.eval-report-content,
+.sidebar-nav {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-scrollbar-thumb) transparent;
+}
+
+// 3) WebKit/Blink 自定义滚动条：细窄、圆角、主题色、hover 加深
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-scrollbar-thumb);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  min-height: 36px;
+  transition: background 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-scrollbar-thumb-hover);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+// 4) 鼠标滚轮节流：让滚轮滚动更跟手（非平滑滚动时仍保持原生手感）
+//    保持默认行为即可，这里只统一滚动条的视觉与触感。
+
+// 5) 移动端更细的滚动条（不占屏幕空间）
+@media (max-width: 768px) {
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+}
+
 @media (max-width: 768px) {
   .markdown-body {
     font-size: 14px;
