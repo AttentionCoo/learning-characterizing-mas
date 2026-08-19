@@ -176,3 +176,31 @@ def test_run_convergence_skipped_when_single_expert():
         "证据",
     ))
     assert convergence == ""
+
+
+def test_arbitration_prompt_includes_dialogue_and_findings():
+    """仲裁 prompt 必须包含专家对话记录与黑板发现，而非只有辩论记录/证据。
+
+    回归：YAML 模板曾只含 {debate_history}/{evidence} 占位符，
+    format() 多余参数被静默忽略，导致仲裁只看到空记录而无法评估。
+    """
+    from app.config.config_loader import get_expert_manager
+    mgr = get_expert_manager()
+    yaml_template = mgr.get_debate_config().get("arbitration_prompt_template", "")
+
+    assert "{agent_messages}" in yaml_template
+    assert "{findings}" in yaml_template
+    assert "{debate_history}" in yaml_template
+    assert "{evidence}" in yaml_template
+
+    # 用 YAML 模板实际渲染，确认对话与黑板内容进入 prompt
+    orch = _make_orchestrator([], [])
+    orch.debate_config = mgr.get_debate_config()
+    rendered = yaml_template.format(
+        agent_messages="第1轮 需求分析智能体 → 题目生成智能体 [question]: 难度怎么定？",
+        findings="需求分析智能体: 先拆解需求。",
+        debate_history="（无）",
+        evidence="无",
+    )
+    assert "需求分析智能体 → 题目生成智能体" in rendered
+    assert "先拆解需求" in rendered

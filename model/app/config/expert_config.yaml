@@ -145,7 +145,13 @@ debate:
     3. 对反方观点的回应
 
   arbitration_prompt_template: |
-    作为仲裁智能体，请根据以下辩论记录和证据链，对各方观点做出最终裁决。
+    作为仲裁智能体，请根据以下专家对话记录、黑板发现和证据链，对各方观点做出最终裁决。
+
+    【专家对话记录】
+    {agent_messages}
+
+    【黑板发现】
+    {findings}
 
     【辩论记录】
     {debate_history}
