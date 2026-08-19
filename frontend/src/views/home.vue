@@ -16,16 +16,17 @@ const sidebarCollapsed = ref(false)
 const showUserDialog = ref(false)
 
 const navItems = [
-  { path: '/profile',       label: '学习画像', icon: 'profile',    desc: '脑卒中画像构建' },
-  { path: '/resources',     label: '资源生成', icon: 'resources',  desc: '脑卒中资源生成' },
-  { path: '/learning-path', label: '学习路径', icon: 'path',       desc: '脑卒中路径规划' },
-  { path: '/tutor',         label: '智能辅导', icon: 'tutor',      desc: '脑卒中答疑解惑' },
-  { path: '/assessment',    label: '学习评估', icon: 'assessment', desc: '脑卒中效果评估' },
-  { path: '/code-assist',   label: '代码辅助', icon: 'code',       desc: '医学数据分析编程' },
+  { path: '/overview',     label: '学习总览', icon: 'overview',   desc: '学习闭环总览' },
+  { path: '/profile',      label: '学习画像', icon: 'profile',    desc: '脑卒中画像构建' },
+  { path: '/resources',    label: '资源生成', icon: 'resources',  desc: '脑卒中资源生成' },
+  { path: '/learning-path', label: '学习路径', icon: 'path',      desc: '脑卒中路径规划' },
+  { path: '/tutor',        label: '智能辅导', icon: 'tutor',      desc: '脑卒中答疑解惑' },
+  { path: '/assessment',   label: '学习评估', icon: 'assessment', desc: '脑卒中效果评估' },
+  { path: '/code-assist',  label: '代码辅助', icon: 'code',       desc: '医学数据分析编程' },
 ]
 
 const activeNav = computed(() =>
-  navItems.find((item) => route.path.startsWith(item.path))?.path || '/profile'
+  navItems.find((item) => route.path.startsWith(item.path))?.path || '/overview'
 )
 
 function onResize() {
@@ -91,7 +92,11 @@ function toggleSidebar() {
           :title="sidebarCollapsed ? item.label : ''"
         >
           <div class="nav-icon">
-            <svg v-if="item.icon === 'profile'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg v-if="item.icon === 'overview'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+            <svg v-else-if="item.icon === 'profile'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
               <circle cx="12" cy="7" r="4"/>
             </svg>

@@ -3,6 +3,7 @@ import login from '@/views/login.vue'
 import home from '@/views/home.vue'
 
 // 路由级代码分割：业务视图按需加载，显著减小首屏 JS 体积
+const overview = () => import('@/views/overview.vue')
 const profile = () => import('@/views/profile.vue')
 const resources = () => import('@/views/resources.vue')
 const learningPath = () => import('@/views/learning-path.vue')
@@ -20,7 +21,8 @@ const router = createRouter({
       path: '/',
       component: home,
       children: [
-        { path: '', redirect: '/profile' },
+        { path: '', redirect: '/overview' },
+        { path: 'overview', component: overview },
         { path: 'profile', component: profile },
         { path: 'resources', component: resources },
         { path: 'learning-path', component: learningPath },
@@ -37,7 +39,7 @@ router.beforeEach((to, from, next) => {
   if (to.path !== '/login' && !userStore.hasToken) {
     next('/login')
   } else if (to.path === '/login' && userStore.hasToken) {
-    next('/profile')
+    next('/overview')
   } else {
     next()
   }
