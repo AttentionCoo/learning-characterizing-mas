@@ -369,8 +369,8 @@ function isDICOMDataUrl(dataUrl) {
                 :entries="reasoningEntries"
                 :running="isStreaming"
               />
-              <div v-if="msg.role === 'assistant'" class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
-              <div v-else class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
+              <div v-if="msg.role === 'assistant' && msg.content" class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
+              <div v-else-if="msg.role === 'user'" class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
               <!-- 用户消息中的医学影像 -->
               <div v-if="msg.role === 'user' && msg.images?.length" class="message-images">
                 <div

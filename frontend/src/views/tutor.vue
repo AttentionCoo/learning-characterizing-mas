@@ -98,7 +98,6 @@ async function handleSend() {
       (thinking) => {
         const title = thinking.title || 'AI 思考中...'
         thinkingHint.value = title
-        currentStage.value = title
         appendReasoningEvent(thinking)
       },
     )
@@ -216,8 +215,8 @@ function isDICOMDataUrl(dataUrl) {
                 :entries="reasoningEntries"
                 :running="isStreaming"
               />
-              <div v-if="msg.role === 'assistant'" class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
-              <div v-else class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
+              <div v-if="msg.role === 'assistant' && msg.content" class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
+              <div v-else-if="msg.role === 'user'" class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
               <!-- 用户消息中的医学影像 -->
               <div v-if="msg.role === 'user' && msg.images?.length" class="message-images">
                 <div
@@ -490,35 +489,6 @@ function isDICOMDataUrl(dataUrl) {
 
 .thinking-indicator {
   display: inline-flex;
-}
-
-.stage-bar {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 6px;
-  padding: 4px 12px;
-  background: var(--color-active-bg);
-  border-radius: 12px;
-}
-
-.stage-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--gradient-aurora);
-  animation: pulse 1.5s ease-in-out infinite;
-}
-
-.stage-text {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--color-text-label);
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 0.4; transform: scale(0.8); }
-  50% { opacity: 1; transform: scale(1.2); }
 }
 
 @keyframes bounce {
