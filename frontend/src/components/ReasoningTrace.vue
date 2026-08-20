@@ -11,14 +11,50 @@ const sourceCount = computed(() => props.entries.reduce(
   0,
 ))
 const traceBodyRef = ref(null)
+// 推理窗自动跟随：用户滚离底部时暂停贴底（不与用户抢滚轮），滚回底部自动恢复
+const followTrace = ref(true)
+const TRACE_FOLLOW_THRESHOLD = 40
+let wheelTimer = null
+let wheelActive = false
+
+function onTraceScroll() {
+  const el = traceBodyRef.value
+  if (!el) return
+  const dist = el.scrollHeight - el.scrollTop - el.clientHeight
+  followTrace.value = dist < TRACE_FOLLOW_THRESHOLD
+}
+
+// 用户主动滚动推理窗（离开底部）时暂停贴底，手势结束后自动恢复
+function onTraceWheel(e) {
+  const el = traceBodyRef.value
+  if (!el) return
+  const dist = el.scrollHeight - el.scrollTop - el.clientHeight
+  // 已在底部且继续向下滚 = 保持跟随；其余手势 = 用户主动滚动
+  if (dist < TRACE_FOLLOW_THRESHOLD && e.deltaY > 0) return
+  wheelActive = true
+  clearTimeout(wheelTimer)
+  wheelTimer = setTimeout(() => { wheelActive = false }, 250)
+}
 
 watch(
   () => props.entries.length,
   async () => {
-    if (!props.running) return
+    if (!props.running || !followTrace.value || wheelActive) return
     await nextTick()
     const element = traceBodyRef.value
     if (element) element.scrollTop = element.scrollHeight
+  },
+)
+
+// 新一轮推理开始时重置跟随状态
+watch(
+  () => props.entries.length,
+  (len) => {
+    if (len === 0) {
+      followTrace.value = true
+      wheelActive = false
+      clearTimeout(wheelTimer)
+    }
   },
 )
 
@@ -82,7 +118,7 @@ function roleColor(role) {
       <span class="trace-chevron" aria-hidden="true"></span>
     </summary>
 
-    <div ref="traceBodyRef" class="trace-body" aria-live="polite">
+    <div ref="traceBodyRef" class="trace-body" aria-live="polite" @scroll="onTraceScroll" @wheel="onTraceWheel">
       <ol class="trace-list">
         <li v-for="entry in entries" :key="entry.key" class="trace-step" :class="entry.phase">
           <div class="timeline-rail" aria-hidden="true">
@@ -317,7 +353,7 @@ details[open] .trace-chevron { transform: rotate(225deg) translate(-1px, -1px); 
 .trace-body {
   max-height: min(42vh, 420px);
   overflow-y: auto;
-  overscroll-behavior: contain;
+  /* 保留自然滚动链：面板滚到底后滚轮继续带动外层（聊天列表/页面）滚动 */
   scrollbar-width: thin;
   scrollbar-color: #cbd5e1 transparent;
 }
