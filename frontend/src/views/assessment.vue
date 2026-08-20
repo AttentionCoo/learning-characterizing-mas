@@ -6,7 +6,9 @@ import { getLearningPathsAPI } from '@/api/learningPath'
 import ReasoningTrace from '@/components/ReasoningTrace.vue'
 import ThinkingIndicator from '@/components/ThinkingIndicator.vue'
 import AssessmentRadarChart from '@/components/AssessmentRadarChart.vue'
+import BackToLatest from '@/components/BackToLatest.vue'
 import { useReasoningTrace } from '@/composables/useReasoningTrace'
+import { useAutoScroll } from '@/composables/useAutoScroll'
 import { buildAssessmentRadar } from '@/utils/assessmentRadar'
 
 const reports = ref([])
@@ -34,7 +36,7 @@ const currentReportData = ref(null)
 const learningPathId = ref(null)
 
 const resultContentRef = ref(null)
-const userScrolled = ref(false)
+const { showBackToLatest, unread, onScroll, scrollToLatest, notifyNewContent, reset } = useAutoScroll(resultContentRef)
 
 const radarDimensions = computed(() => {
   const generatedSource = generatedContent.value
@@ -57,20 +59,6 @@ const radarOverallScore = computed(() => (
   ?? currentReportData.value?.overallScore
   ?? null
 ))
-
-function onResultScroll() {
-  const el = resultContentRef.value
-  if (!el) return
-  const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-  userScrolled.value = distFromBottom > 80
-}
-
-function scrollToBottom(force = false) {
-  const el = resultContentRef.value
-  if (!el) return
-  if (!force && userScrolled.value) return
-  el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
-}
 
 const assessmentTypes = [
   { value: 'comprehensive', label: '综合评估', icon: '📊', desc: '全面评估脑卒中学习效果' },
@@ -142,7 +130,7 @@ async function handleGenerate() {
   resetReasoningTrace()
   reportDetail.value = null
   selectedReportId.value = null
-  userScrolled.value = false
+  reset()
 
   let displayText = ''
   const charBuffer = []
@@ -157,7 +145,7 @@ async function handleGenerate() {
       const chars = charBuffer.splice(0, 2)
       displayText += chars.join('')
       generatedContent.value = displayText
-      nextTick(() => scrollToBottom())
+      nextTick(() => notifyNewContent())
       timerId = setTimeout(tick, delay)
     }
     timerId = setTimeout(tick, 0)
@@ -192,7 +180,7 @@ async function handleGenerate() {
     if (timerId !== null) { clearTimeout(timerId); timerId = null }
     generatedContent.value = result.data?.content || displayText
     if (result.data?.talkId) talkId.value = result.data.talkId
-    nextTick(() => scrollToBottom(true))
+    nextTick(() => scrollToLatest({ smooth: false }))
 
     await fetchReports()
     setTimeout(fetchReports, 1200)
@@ -312,7 +300,9 @@ function getScoreColor(score) {
             :overall-score="radarOverallScore"
           />
 
-          <div ref="resultContentRef" v-if="generatedContent" class="result-content markdown-body" @scroll="onResultScroll" v-html="renderMarkdown(generatedContent)"></div>
+          <div ref="resultContentRef" v-if="generatedContent" class="result-content markdown-body" @scroll="onScroll" v-html="renderMarkdown(generatedContent)"></div>
+
+          <BackToLatest :unread="unread" @click="scrollToLatest({ smooth: true })" />
 
           <div v-if="reportDetail || currentReportData" class="optimize-section">
             <button class="optimize-btn" :disabled="isOptimizing" @click="handleOptimize">
@@ -559,6 +549,7 @@ function getScoreColor(score) {
 }
 
 .result-section {
+  position: relative;
   background: var(--color-bg-light);
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-xl);
@@ -590,7 +581,6 @@ function getScoreColor(score) {
   line-height: 1.7;
   max-height: 60vh;
   overflow-y: auto;
-  scroll-behavior: smooth;
 }
 
 .reports-sidebar {

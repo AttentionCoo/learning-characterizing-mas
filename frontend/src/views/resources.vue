@@ -5,7 +5,9 @@ import { getResourcesAPI, getResourceDetailAPI, resourceStreamAPI } from '@/api/
 import ImageUploader from '@/components/ImageUploader.vue'
 import ReasoningTrace from '@/components/ReasoningTrace.vue'
 import ThinkingIndicator from '@/components/ThinkingIndicator.vue'
+import BackToLatest from '@/components/BackToLatest.vue'
 import { useReasoningTrace } from '@/composables/useReasoningTrace'
+import { useAutoScroll } from '@/composables/useAutoScroll'
 
 const resourceTypes = [
   { value: 'document', label: '课程讲解文档', icon: '📄', color: '#3b82f6' },
@@ -41,21 +43,7 @@ const showGenerator = ref(true)
 const uploadedImages = ref([])
 
 const resultContentRef = ref(null)
-const userScrolled = ref(false)
-
-function onResultScroll() {
-  const el = resultContentRef.value
-  if (!el) return
-  const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-  userScrolled.value = distFromBottom > 80
-}
-
-function scrollToBottom(force = false) {
-  const el = resultContentRef.value
-  if (!el) return
-  if (!force && userScrolled.value) return
-  el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
-}
+const { showBackToLatest, unread, onScroll, scrollToLatest, notifyNewContent, reset } = useAutoScroll(resultContentRef)
 
 const difficultyOptions = [
   { value: 'beginner', label: '入门' },
@@ -92,7 +80,7 @@ async function handleGenerate() {
   currentStage.value = '正在分析学习需求...'
   generatedContent.value = ''
   showGenerator.value = false
-  userScrolled.value = false
+  reset()
 
   let allContent = ''
   const charBuffer = []
@@ -107,7 +95,7 @@ async function handleGenerate() {
       const chars = charBuffer.splice(0, 2)
       allContent += chars.join('')
       generatedContent.value = allContent
-      nextTick(() => scrollToBottom())
+      nextTick(() => notifyNewContent())
       timerId = setTimeout(tick, delay)
     }
     timerId = setTimeout(tick, 0)
@@ -191,7 +179,7 @@ async function handleGenerate() {
   thinkingHint.value = ''
   currentStage.value = ''
 
-  nextTick(() => scrollToBottom(true))
+  nextTick(() => scrollToLatest({ smooth: false }))
 
   await new Promise(r => setTimeout(r, 800))
   await fetchResources()
@@ -214,12 +202,12 @@ async function handleSelectResource(id) {
   selectedResource.value = id
   resourceDetailLoading.value = true
   showGenerator.value = false
-  userScrolled.value = false
+  reset()
   try {
     const res = await getResourceDetailAPI(id)
     resourceDetail.value = res.data
     generatedContent.value = res.data?.content || ''
-    nextTick(() => scrollToBottom(true))
+    nextTick(() => scrollToLatest({ smooth: false }))
   } catch {
     // ignore
   } finally {
@@ -346,7 +334,9 @@ onMounted(() => {
 
           <ReasoningTrace :entries="reasoningEntries" :running="isGenerating" />
 
-          <div ref="resultContentRef" class="result-content markdown-body" @scroll="onResultScroll" v-html="renderMarkdown(generatedContent)"></div>
+          <div ref="resultContentRef" class="result-content markdown-body" @scroll="onScroll" v-html="renderMarkdown(generatedContent)"></div>
+
+          <BackToLatest :unread="unread" @click="scrollToLatest({ smooth: true })" />
 
           <div v-if="isGenerating && !generatedContent" class="generating-overlay">
             <div class="gen-spinner"></div>

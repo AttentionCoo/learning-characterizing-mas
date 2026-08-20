@@ -6,8 +6,10 @@ import AppAvatar from '@/components/AppAvatar.vue'
 import ImageUploader from '@/components/ImageUploader.vue'
 import ReasoningTrace from '@/components/ReasoningTrace.vue'
 import ThinkingIndicator from '@/components/ThinkingIndicator.vue'
+import BackToLatest from '@/components/BackToLatest.vue'
 import { useUserStore } from '@/stores/user'
 import { useReasoningTrace } from '@/composables/useReasoningTrace'
+import { useAutoScroll } from '@/composables/useAutoScroll'
 
 const userStore = useUserStore()
 
@@ -21,6 +23,7 @@ const isThinking = ref(false)
 const thinkingHint = ref('')
 const chatContainerRef = ref(null)
 const inputRef = ref(null)
+const { showBackToLatest, unread, onScroll, scrollToLatest, notifyNewContent } = useAutoScroll(chatContainerRef)
 const talkId = ref(null)
 const editingDim = ref(null)
 const editForm = reactive({})
@@ -228,7 +231,7 @@ async function handleSend() {
   resetReasoningTrace()
 
   await nextTick()
-  scrollToBottom()
+  scrollToLatest({ smooth: false })
 
   let displayText = ''
   const charBuffer = []
@@ -243,7 +246,7 @@ async function handleSend() {
       const chars = charBuffer.splice(0, 2)
       displayText += chars.join('')
       chatMessages.value[aiIndex] = { role: 'assistant', content: displayText }
-      scrollToBottom()
+      nextTick(() => notifyNewContent())
       timerId = setTimeout(tick, delay)
     }
     timerId = setTimeout(tick, 0)
@@ -303,13 +306,7 @@ async function handleSend() {
   }
 
   await nextTick()
-  scrollToBottom()
-}
-
-function scrollToBottom() {
-  if (chatContainerRef.value) {
-    chatContainerRef.value.scrollTop = chatContainerRef.value.scrollHeight
-  }
+  scrollToLatest({ smooth: false })
 }
 
 function handleKeydown(e) {
@@ -340,7 +337,8 @@ function isDICOMDataUrl(dataUrl) {
 
     <div class="profile-body">
       <div class="chat-panel">
-        <div class="chat-messages" ref="chatContainerRef">
+        <div class="chat-scroll-wrap">
+          <div class="chat-messages" ref="chatContainerRef" @scroll="onScroll">
           <div
             v-for="(msg, idx) in chatMessages"
             :key="idx"
@@ -386,6 +384,8 @@ function isDICOMDataUrl(dataUrl) {
               </div>
             </div>
           </div>
+          </div>
+          <BackToLatest :unread="unread" @click="scrollToLatest({ smooth: true })" />
         </div>
 
         <div class="chat-input-area">
@@ -685,6 +685,14 @@ function isDICOMDataUrl(dataUrl) {
   flex-direction: column;
   min-width: 0;
   border-right: 1px solid var(--color-border-light);
+}
+
+.chat-scroll-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
 }
 
 .chat-messages {

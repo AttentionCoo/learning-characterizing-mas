@@ -4,7 +4,9 @@ import { renderMarkdown } from '@/utils/markdown'
 import { executeCodeAPI, codeAssistStreamAPI } from '@/api/code'
 import ReasoningTrace from '@/components/ReasoningTrace.vue'
 import ThinkingIndicator from '@/components/ThinkingIndicator.vue'
+import BackToLatest from '@/components/BackToLatest.vue'
 import { useReasoningTrace } from '@/composables/useReasoningTrace'
+import { useAutoScroll } from '@/composables/useAutoScroll'
 
 const assistTypes = [
   { value: 'complete', label: '代码补全', icon: '✍️', detail: '补齐缺失实现，保持现有结构', placeholder: '描述需要补全的函数、流程或预期结果' },
@@ -30,7 +32,7 @@ const assistContent = ref('')
 const assistError = ref('')
 
 const resultPaneRef = ref(null)
-const userScrolled = ref(false)
+const { showBackToLatest, unread, onScroll, scrollToLatest, notifyNewContent, reset } = useAutoScroll(resultPaneRef)
 const inlineError = ref('')
 const { reasoningEntries, resetReasoningTrace, appendReasoningEvent } = useReasoningTrace()
 
@@ -56,7 +58,7 @@ function resetAssistState() {
   assistContent.value = ''
   assistError.value = ''
   inlineError.value = ''
-  userScrolled.value = false
+  reset()
   resetReasoningTrace()
 }
 
@@ -91,12 +93,12 @@ function startSafetyTimer() {
 
 onMounted(() => {
   const el = resultPaneRef.value
-  if (el) el.addEventListener('scroll', onPaneScroll, { passive: true })
+  if (el) el.addEventListener('scroll', onScroll, { passive: true })
 })
 
 onActivated(() => {
   const el = resultPaneRef.value
-  if (el) el.addEventListener('scroll', onPaneScroll, { passive: true })
+  if (el) el.addEventListener('scroll', onScroll, { passive: true })
 })
 
 onDeactivated(() => {
@@ -106,22 +108,9 @@ onDeactivated(() => {
 onBeforeUnmount(() => {
   clearSafetyTimer()
   const el = resultPaneRef.value
-  if (el) el.removeEventListener('scroll', onPaneScroll)
+  if (el) el.removeEventListener('scroll', onScroll)
   cancelAssist()
 })
-
-function onPaneScroll() {
-  const el = resultPaneRef.value
-  if (!el) return
-  userScrolled.value = el.scrollHeight - el.scrollTop - el.clientHeight > 80
-}
-
-function scrollToBottom() {
-  const el = resultPaneRef.value
-  if (!el || userScrolled.value) return
-  el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
-}
-
 
 async function runCode() {
   if (!code.value.trim() || isRunning.value) return
@@ -171,7 +160,7 @@ async function requestAssist() {
   assistContent.value = ''
   assistError.value = ''
   inlineError.value = ''
-  userScrolled.value = false
+  reset()
   resetReasoningTrace()
 
   assistAbortController = new AbortController()
@@ -194,7 +183,7 @@ async function requestAssist() {
         if (isThinking.value) isThinking.value = false
         if (chunk != null && chunk !== '') {
           assistContent.value = event.replace ? chunk : assistContent.value + chunk
-          nextTick(scrollToBottom)
+          nextTick(() => notifyNewContent())
         }
       },
       (thinking) => {
@@ -329,7 +318,7 @@ print(df.describe())"
         <div class="panel-title">
           <span>{{ selectedAssist ? `${selectedAssist.label}结果` : 'AI 辅助结果' }}</span>
         </div>
-        <div class="assist-pane" ref="resultPaneRef" @scroll="onPaneScroll">
+        <div class="assist-pane" ref="resultPaneRef" @scroll="onScroll">
           <div v-if="isThinking" class="thinking-hint">
             <ThinkingIndicator :hint="thinkingHint" />
           </div>
@@ -344,6 +333,7 @@ print(df.describe())"
             选择一种辅助功能后，结果将在此流式呈现
           </div>
         </div>
+        <BackToLatest :unread="unread" @click="scrollToLatest({ smooth: true })" />
       </div>
     </div>
   </div>
@@ -567,7 +557,7 @@ print(df.describe())"
   padding: 24px 0;
 }
 
-.assist-column { min-height: 0; }
+.assist-column { min-height: 0; position: relative; }
 
 .assist-pane {
   flex: 1;

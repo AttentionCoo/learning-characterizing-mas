@@ -6,8 +6,10 @@ import AppAvatar from '@/components/AppAvatar.vue'
 import ImageUploader from '@/components/ImageUploader.vue'
 import ReasoningTrace from '@/components/ReasoningTrace.vue'
 import ThinkingIndicator from '@/components/ThinkingIndicator.vue'
+import BackToLatest from '@/components/BackToLatest.vue'
 import { useUserStore } from '@/stores/user'
 import { useReasoningTrace } from '@/composables/useReasoningTrace'
+import { useAutoScroll } from '@/composables/useAutoScroll'
 
 const userStore = useUserStore()
 
@@ -16,11 +18,10 @@ const draftMessage = ref('')
 const isStreaming = ref(false)
 const isThinking = ref(false)
 const thinkingHint = ref('')
-const currentStage = ref('')
 const talkId = ref(null)
 const chatContainerRef = ref(null)
 const inputRef = ref(null)
-const shouldAutoScroll = ref(true)
+const { showBackToLatest, unread, onScroll, scrollToLatest, notifyNewContent } = useAutoScroll(chatContainerRef)
 const { reasoningEntries, resetReasoningTrace, appendReasoningEvent } = useReasoningTrace()
 
 const uploadedImages = ref([])
@@ -39,7 +40,7 @@ async function handleSend() {
   if (!message || isStreaming.value) return
 
   draftMessage.value = ''
-  shouldAutoScroll.value = true
+  scrollToLatest({ smooth: false })
   showImageUploader.value = false
 
   // 保存当前图片并清空上传列表
@@ -73,9 +74,7 @@ async function handleSend() {
       const chars = charBuffer.splice(0, 2)
       displayText += chars.join('')
       chatMessages.value[aiIndex] = { role: 'assistant', content: displayText }
-      if (shouldAutoScroll.value) {
-        nextTick(() => scrollToBottom())
-      }
+      nextTick(() => notifyNewContent())
       timerId = setTimeout(tick, delay)
     }
     timerId = setTimeout(tick, 0)
@@ -116,27 +115,10 @@ async function handleSend() {
     isStreaming.value = false
     isThinking.value = false
     thinkingHint.value = ''
-    currentStage.value = ''
   }
 
   await nextTick()
-  scrollToBottom()
-}
-
-function scrollToBottom() {
-  if (chatContainerRef.value) {
-    chatContainerRef.value.scrollTo({
-      top: chatContainerRef.value.scrollHeight,
-      behavior: 'smooth'
-    })
-  }
-}
-
-function handleScroll() {
-  if (!chatContainerRef.value) return
-  const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.value
-  const distanceFromBottom = scrollHeight - scrollTop - clientHeight
-  shouldAutoScroll.value = distanceFromBottom < 100
+  scrollToLatest({ smooth: false })
 }
 
 function formatTime(timeStr) {
@@ -198,7 +180,8 @@ function isDICOMDataUrl(dataUrl) {
 
     <div class="tutor-body">
       <div class="chat-area">
-        <div class="chat-messages" ref="chatContainerRef" @scroll="handleScroll">
+        <div class="chat-scroll-wrap">
+          <div class="chat-messages" ref="chatContainerRef" @scroll="onScroll">
           <div
             v-for="(msg, idx) in chatMessages"
             :key="idx"
@@ -246,12 +229,10 @@ function isDICOMDataUrl(dataUrl) {
                   <div v-else class="msg-dicom-badge">🏥 DICOM</div>
                 </div>
               </div>
-              <div v-if="msg.role === 'assistant' && idx === chatMessages.length - 1 && isStreaming && !isThinking && currentStage" class="stage-bar">
-                <span class="stage-dot"></span>
-                <span class="stage-text">{{ currentStage }}</span>
-              </div>
             </div>
           </div>
+          </div>
+          <BackToLatest :unread="unread" @click="scrollToLatest({ smooth: true })" />
         </div>
 
         <div v-if="chatMessages.length <= 1" class="quick-questions">
@@ -394,6 +375,14 @@ function isDICOMDataUrl(dataUrl) {
   display: flex;
   flex-direction: column;
   min-width: 0;
+}
+
+.chat-scroll-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
 }
 
 .chat-messages {
