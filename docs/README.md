@@ -21,6 +21,7 @@
 |:---|:---|:---|
 | [接口文档](api/LearnAgent系统接口文档.md) | Java 业务端点、Python 内部端点、请求字段、SSE 协议 | `backend/server/.../controller`、`param`、`model/app/routers` |
 | [系统设计说明书](architecture/系统设计说明书.md) | 分层架构、运行时组件、数据流、安全边界、部署 | `docker-compose.yml`、三端入口与配置 |
+| [模型层技术文档](architecture/模型层技术文档.md) | 模型层全部技术实现：编排、RAG、共享记忆、多模态、SSE 协议 | `model/app/**` 全部代码与配置 |
 | [需求规格说明书](architecture/需求规格说明书.md) | 功能和非功能需求、验收口径 | 当前页面、控制器和业务流程 |
 | [核心算法设计文档](architecture/核心算法设计文档.md) | LangGraph、RAG、校验、画像、共享记忆 | `model/app/agents`、`model/app/rag` |
 | [数据库设计手册](architecture/数据库设计手册.md) | 14 张表、索引与关系 | `backend/server/learningo_agents.sql` |
