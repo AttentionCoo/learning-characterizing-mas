@@ -22,7 +22,7 @@ const talkId = ref(null)
 const chatContainerRef = ref(null)
 const inputRef = ref(null)
 const { showBackToLatest, unread, onScroll, scrollToLatest, notifyNewContent } = useAutoScroll(chatContainerRef)
-const { reasoningEntries, resetReasoningTrace, appendReasoningEvent } = useReasoningTrace()
+const { appendReasoningEvent } = useReasoningTrace()
 
 const uploadedImages = ref([])
 const showImageUploader = ref(false)
@@ -53,13 +53,13 @@ async function handleSend() {
     userMsg.images = currentImages
   }
   chatMessages.value.push(userMsg)
-  chatMessages.value.push({ role: 'assistant', content: '' })
+  // 每条 AI 回复自带 reasoning 数组，推理轨迹随消息留存，可回看历史回答的推理
+  chatMessages.value.push({ role: 'assistant', content: '', reasoning: [] })
   const aiIndex = chatMessages.value.length - 1
 
   isStreaming.value = true
   isThinking.value = true
   thinkingHint.value = '正在思考...'
-  resetReasoningTrace()
 
   let displayText = ''
   const charBuffer = []
@@ -73,7 +73,7 @@ async function handleSend() {
       const delay = pending > 200 ? 2 : pending > 50 ? 8 : 25
       const chars = charBuffer.splice(0, 2)
       displayText += chars.join('')
-      chatMessages.value[aiIndex] = { role: 'assistant', content: displayText }
+      chatMessages.value[aiIndex].content = displayText
       nextTick(() => notifyNewContent())
       timerId = setTimeout(tick, delay)
     }
@@ -89,7 +89,7 @@ async function handleSend() {
           if (timerId !== null) { clearTimeout(timerId); timerId = null }
           charBuffer.length = 0
           displayText = chunk
-          chatMessages.value[aiIndex] = { role: 'assistant', content: displayText }
+          chatMessages.value[aiIndex].content = displayText
           return
         }
         charBuffer.push(...Array.from(chunk))
@@ -98,13 +98,13 @@ async function handleSend() {
       (thinking) => {
         const title = thinking.title || 'AI 思考中...'
         thinkingHint.value = title
-        appendReasoningEvent(thinking)
+        appendReasoningEvent(thinking, '', chatMessages.value[aiIndex].reasoning)
       },
     )
 
     if (timerId !== null) { clearTimeout(timerId); timerId = null }
     const content = result.data?.content || displayText
-    chatMessages.value[aiIndex] = { role: 'assistant', content }
+    chatMessages.value[aiIndex].content = content
     if (result.data?.talkId) talkId.value = result.data.talkId
 
   } catch (error) {
@@ -207,13 +207,13 @@ function isDICOMDataUrl(dataUrl) {
               <AppAvatar v-else :src="userStore.image" :name="userStore.name" :size="40" />
             </div>
             <div class="message-body">
-              <div v-if="msg.role === 'assistant' && idx === chatMessages.length - 1 && isThinking && !msg.content && !reasoningEntries.length" class="thinking-indicator">
+              <div v-if="msg.role === 'assistant' && idx === chatMessages.length - 1 && isThinking && !msg.content && !msg.reasoning?.length" class="thinking-indicator">
                 <ThinkingIndicator :hint="thinkingHint" />
               </div>
               <ReasoningTrace
-                v-if="msg.role === 'assistant' && idx === chatMessages.length - 1"
-                :entries="reasoningEntries"
-                :running="isStreaming"
+                v-if="msg.role === 'assistant' && msg.reasoning?.length"
+                :entries="msg.reasoning"
+                :running="isStreaming && idx === chatMessages.length - 1"
               />
               <div v-if="msg.role === 'assistant' && msg.content" class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
               <div v-else-if="msg.role === 'user'" class="message-content markdown-body" v-html="renderMarkdown(msg.content)"></div>
