@@ -154,6 +154,64 @@ async function fetchProfile() {
   }
 }
 
+const copied = ref(false)
+let copyTimer = null
+
+/** 一键复制学习画像为 Markdown 文本 */
+function copyProfile() {
+  if (!dimensionList.value.length) return
+  const CN_NUMS = ['一', '二', '三', '四', '五', '六', '七', '八']
+  const lines = ['## 🧠 学习画像（LearnAgent）', '']
+  dimensionList.value.forEach((dim, i) => {
+    const num = CN_NUMS[i] || `${i + 1}`
+    lines.push(`### ${num}、${dim.label} ${dim.icon}`)
+    const parts = []
+    if (dim.levelText) parts.push(`水平：${dim.levelText}`)
+    if (dim.description) parts.push(`描述：${dim.description}`)
+    if (dim.masteredTopics?.length) parts.push(`已掌握：${dim.masteredTopics.join('、')}`)
+    if (dim.weakTopics?.length) parts.push(`薄弱知识点：${dim.weakTopics.join('、')}`)
+    if (dim.preferences?.length) parts.push(`偏好：${dim.preferences.join('、')}`)
+    if (dim.frequentErrors?.length) parts.push(`高频错误：${dim.frequentErrors.join('、')}`)
+    if (dim.shortTerm) parts.push(`短期目标：${dim.shortTerm}`)
+    if (dim.longTerm) parts.push(`长期目标：${dim.longTerm}`)
+    if (dim.currentCourse) parts.push(`当前课程：${dim.currentCourse}`)
+    if (dim.weeklyHours) parts.push(`每周可投入：${dim.weeklyHours} 小时`)
+    if (parts.length) parts.forEach(p => lines.push(`- ${p}`))
+    else lines.push('- （暂无详细信息）')
+    lines.push('')
+  })
+  lines.push('> 由 LearnAgent 学习画像系统生成')
+
+  const text = lines.join('\n')
+  const done = () => {
+    copied.value = true
+    clearTimeout(copyTimer)
+    copyTimer = setTimeout(() => { copied.value = false }, 1600)
+  }
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopyText(text, done))
+  } else {
+    fallbackCopyText(text, done)
+  }
+}
+
+/** 剪贴板 API 不可用时的兜底复制 */
+function fallbackCopyText(text, done) {
+  try {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.style.position = 'fixed'
+    ta.style.opacity = '0'
+    document.body.appendChild(ta)
+    ta.select()
+    document.execCommand('copy')
+    document.body.removeChild(ta)
+    done()
+  } catch {
+    // 复制失败静默
+  }
+}
+
 
 function startEdit(dim) {
   const raw = profile.value?.dimensions?.[dim.key] || {}
@@ -459,6 +517,22 @@ function isDICOMDataUrl(dataUrl) {
           </svg>
           <span v-if="!isProfileCollapsed">我的学习画像</span>
           <span v-if="!isProfileCollapsed && hasProfile" class="edit-hint">点击卡片可编辑</span>
+          <button
+            v-if="hasProfile"
+            class="profile-copy-btn"
+            :class="{ copied }"
+            :title="copied ? '已复制' : '一键复制学习画像'"
+            @click="copyProfile"
+          >
+            <svg v-if="!copied" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+            </svg>
+            <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            <span>{{ copied ? '已复制' : '复制画像' }}</span>
+          </button>
           <button
             class="profile-collapse-btn"
             :title="isProfileCollapsed ? '展开学习画像' : '收起学习画像'"
@@ -940,6 +1014,35 @@ function isDICOMDataUrl(dataUrl) {
 
   .collapsed & {
     margin-left: 0;
+  }
+}
+
+.profile-copy-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-medium);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+
+  &:hover {
+    border-color: var(--color-primary);
+    background: var(--color-hover-bg);
+    color: var(--color-primary);
+  }
+
+  &.copied {
+    border-color: #10b981;
+    background: rgba(16, 185, 129, 0.1);
+    color: #10b981;
   }
 }
 
