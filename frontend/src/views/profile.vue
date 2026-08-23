@@ -92,8 +92,24 @@ const levelLabels = {
   motivated: '积极', anxious: '焦虑', confident: '自信', overwhelmed: '压力',
 }
 
+// Knowledge State 子主题（脑血管解剖）
+const TOPIC_LABELS = {
+  willis_circle: 'Willis环', ica_system: 'ICA系统', mca: 'MCA', aca: 'ACA', pca: 'PCA',
+  vertebrobasilar: '椎基底动脉', brainstem: '脑干供血', cerebellum: '小脑供血', venous_system: '静脉系统',
+}
+
+const TOPIC_STATUS_LABELS = { unknown: '未知', weak: '薄弱', ok: '掌握' }
+
 function levelLabel(val) {
   return levelLabels[val] || val || ''
+}
+
+/** 证据链来源 → 徽标文案与样式 */
+function sourceBadge(source) {
+  if (source === 'user_statement') return { label: '✅ 已确认', cls: 'source-confirmed' }
+  if (source === 'case_performance') return { label: '📝 测验证据', cls: 'source-performance' }
+  if (source === 'inferred') return { label: '🧠 推断', cls: 'source-inferred' }
+  return { label: '❓ 未知', cls: 'source-unknown' }
 }
 
 const levelColors = {
@@ -128,6 +144,26 @@ const dimensionList = computed(() => {
       dim.longTerm = cleanText(value.longTerm)
       dim.currentCourse = cleanText(value.currentCourse)
       dim.weeklyHours = value.weeklyHours || 0
+      // 证据链元数据（阶段一）：来源/置信度/原话证据
+      dim.source = value.source || ''
+      dim.confidence = typeof value.confidence === 'number' ? value.confidence : null
+      dim.evidence = cleanText(value.evidence)
+      // 情绪状态观测时间（当前状态语义）
+      dim.observedAt = value.observed_at || ''
+      // Knowledge State 子主题（阶段二）
+      if (value.topics && typeof value.topics === 'object') {
+        dim.topics = Object.entries(value.topics).map(([tKey, tVal]) => ({
+          key: tKey,
+          label: TOPIC_LABELS[tKey] || tKey,
+          status: tVal?.status || 'unknown',
+          statusText: TOPIC_STATUS_LABELS[tVal?.status] || '未知',
+          source: tVal?.source || '',
+          confidence: typeof tVal?.confidence === 'number' ? tVal.confidence : null,
+          evidence: cleanText(tVal?.evidence),
+        }))
+      } else {
+        dim.topics = []
+      }
     }
     return dim
   })
@@ -156,6 +192,7 @@ async function fetchProfile() {
 
 const copied = ref(false)
 let copyTimer = null
+const profileUpdateNote = ref('')
 
 /** 一键复制学习画像为 Markdown 文本 */
 function copyProfile() {
@@ -167,7 +204,10 @@ function copyProfile() {
     lines.push(`### ${num}、${dim.label} ${dim.icon}`)
     const parts = []
     if (dim.levelText) parts.push(`水平：${dim.levelText}`)
+    if (dim.source) parts.push(`来源：${sourceBadge(dim.source).label}`)
+    if (dim.confidence != null) parts.push(`置信度：${dim.confidence}`)
     if (dim.description) parts.push(`描述：${dim.description}`)
+    if (dim.evidence) parts.push(`证据：「${dim.evidence}」`)
     if (dim.masteredTopics?.length) parts.push(`已掌握：${dim.masteredTopics.join('、')}`)
     if (dim.weakTopics?.length) parts.push(`薄弱知识点：${dim.weakTopics.join('、')}`)
     if (dim.preferences?.length) parts.push(`偏好：${dim.preferences.join('、')}`)
@@ -176,6 +216,11 @@ function copyProfile() {
     if (dim.longTerm) parts.push(`长期目标：${dim.longTerm}`)
     if (dim.currentCourse) parts.push(`当前课程：${dim.currentCourse}`)
     if (dim.weeklyHours) parts.push(`每周可投入：${dim.weeklyHours} 小时`)
+    if (dim.topics?.length) {
+      const lines = dim.topics.map(t => `  - ${t.label}：${t.statusText}${t.evidence ? `（证据：${t.evidence}）` : ''}`)
+      parts.push(`知识状态：\n${lines.join('\n')}`)
+    }
+    if (dim.observedAt) parts.push(`观测时间：${dim.observedAt}`)
     if (parts.length) parts.forEach(p => lines.push(`- ${p}`))
     else lines.push('- （暂无详细信息）')
     lines.push('')
@@ -347,6 +392,11 @@ async function handleSend() {
       } catch (saveError) {
         console.error('❌ 自动保存画像维度失败:', saveError)
       }
+    }
+
+    // Profile Update Candidate 闭环：会话证据经后端校验写入画像
+    if (result.data?.appliedProfileUpdates) {
+      profileUpdateNote.value = `画像已根据本轮对话更新 ${result.data.appliedProfileUpdates} 项（带证据链）`
     }
 
     await fetchProfile()
@@ -545,6 +595,11 @@ function isDICOMDataUrl(dataUrl) {
           </button>
         </div>
 
+        <div v-if="profileUpdateNote" class="profile-update-note">
+          <span>📌 {{ profileUpdateNote }}</span>
+          <button class="note-close" :aria-label="'关闭提示'" @click="profileUpdateNote = ''">✕</button>
+        </div>
+
         <template v-if="!isProfileCollapsed">
           <div v-if="profileLoading" class="profile-loading">
             <div class="loading-spinner"></div>
@@ -571,6 +626,7 @@ function isDICOMDataUrl(dataUrl) {
               <span v-if="dim.levelText" class="dim-level-badge" :style="{ background: dim.levelColor + '18', color: dim.levelColor }">
                 {{ dim.levelText }}
               </span>
+              <span v-if="dim.source" class="dim-source-badge" :class="sourceBadge(dim.source).cls">{{ sourceBadge(dim.source).label }}</span>
               <button class="dim-edit-btn" @click.stop="startEdit(dim)" title="编辑">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
@@ -632,6 +688,27 @@ function isDICOMDataUrl(dataUrl) {
 
             <template v-else>
               <div v-if="dim.description" class="dim-description">{{ dim.description }}</div>
+
+              <div v-if="dim.evidence" class="dim-evidence" :title="`证据原文：${dim.evidence}`">
+                证据：「{{ dim.evidence }}」<span v-if="dim.confidence != null"> · 置信度 {{ dim.confidence }}</span>
+              </div>
+
+              <div v-if="dim.key === 'knowledgeBase' && dim.topics.length" class="topic-grid">
+                <span
+                  v-for="t in dim.topics"
+                  :key="t.key"
+                  class="topic-chip"
+                  :class="`topic-${t.status}`"
+                  :title="t.evidence ? `证据：${t.evidence}` : ''"
+                >
+                  {{ t.label }}
+                  <i>{{ t.statusText }}</i>
+                </span>
+              </div>
+
+              <div v-if="dim.key === 'emotionState' && dim.observedAt" class="dim-observed">
+                当前状态 · 观测于 {{ dim.observedAt }}
+              </div>
 
               <div v-if="dim.key === 'learningGoal'" class="goal-section">
                 <div v-if="dim.shortTerm" class="goal-item">
@@ -1046,6 +1123,31 @@ function isDICOMDataUrl(dataUrl) {
   }
 }
 
+.profile-update-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 10px 12px 0;
+  padding: 8px 12px;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  border-radius: var(--radius-md);
+  background: rgba(16, 185, 129, 0.06);
+  font-size: 12px;
+  font-weight: 600;
+  color: #0b7a5e;
+  flex-shrink: 0;
+
+  .note-close {
+    border: none;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 0 2px;
+  }
+}
+
 .profile-loading,
 .profile-empty {
   flex: 1;
@@ -1161,6 +1263,20 @@ function isDICOMDataUrl(dataUrl) {
   letter-spacing: 0.02em;
 }
 
+.dim-source-badge {
+  margin-left: 4px;
+  padding: 1px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+
+  &.source-confirmed { background: rgba(16, 185, 129, 0.1); color: #10b981; }
+  &.source-performance { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
+  &.source-inferred { background: rgba(245, 158, 11, 0.12); color: #d97706; }
+  &.source-unknown { background: rgba(148, 163, 184, 0.15); color: #64748b; }
+}
+
 .dim-edit-btn {
   margin-left: auto;
   width: 28px;
@@ -1189,6 +1305,67 @@ function isDICOMDataUrl(dataUrl) {
   color: var(--color-text-medium);
   line-height: 1.55;
   margin-bottom: 8px;
+}
+
+.dim-evidence {
+  margin-bottom: 8px;
+  padding-left: 8px;
+  border-left: 2px solid var(--color-border);
+  font-size: 11px;
+  color: var(--color-text-weak);
+  line-height: 1.5;
+}
+
+.topic-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.topic-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border-light);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-medium);
+
+  i {
+    font-style: normal;
+    font-size: 10px;
+    font-weight: 700;
+  }
+
+  &.topic-ok {
+    border-color: rgba(16, 185, 129, 0.3);
+    background: rgba(16, 185, 129, 0.08);
+    color: #0b7a5e;
+    i { color: #10b981; }
+  }
+
+  &.topic-weak {
+    border-color: rgba(245, 158, 11, 0.35);
+    background: rgba(245, 158, 11, 0.1);
+    color: #b45309;
+    i { color: #d97706; }
+  }
+
+  &.topic-unknown {
+    border-color: var(--color-border-light);
+    background: var(--color-bg-light);
+    color: var(--color-text-weak);
+    i { color: #94a3b8; }
+  }
+}
+
+.dim-observed {
+  margin-bottom: 8px;
+  font-size: 11px;
+  color: var(--color-text-weak);
 }
 
 .goal-section {
