@@ -170,6 +170,32 @@ data: {"type":"token","content":"增量内容"}
 
 画像维度键：`knowledgeBase`、`cognitiveStyle`、`learningGoal`、`errorPattern`、`learningPace`、`resourcePreference`、`clinicalExperience`、`emotionState`。
 
+### 画像维度证据链元数据
+
+每个维度值携带证据链字段，区分"用户确认的事实"与"系统推断"：
+
+| 字段 | 说明 |
+|:---|:---|
+| `source` | `user_statement`（用户明确陈述）/ `case_performance`（测验表现）/ `inferred`（系统推断）/ `unknown` |
+| `confidence` | 0~1 置信度 |
+| `evidence` | 对话原文引用（证据链，无则空） |
+| `updated_at` | 提取/更新日期（YYYY-MM-DD） |
+| `observed_at` | 仅 `emotionState`：观测时间（情绪属于"当前状态"，每次覆盖，不参与长期合并） |
+
+`knowledgeBase` 额外携带 `topics` 子主题树（脑血管解剖知识状态）：
+
+```
+willis_circle / ica_system / mca / aca / pca / vertebrobasilar / brainstem / cerebellum / venous_system
+```
+
+每个子主题：`status`（`unknown`/`weak`/`ok`）+ `source`/`confidence`/`evidence`/`updated_at`。未提及的子主题保持 `unknown`，不猜测。
+
+写入策略（`PUT /api/profile/dimensions` 与对话后异步更新共用）：状态感知合并——`user_statement` 可覆盖旧值；已确认事实不被推断值降级；推断间按置信度与时间戳择优；`emotionState` 始终以最新观测为准；`knowledgeBase.topics` 逐子主题合并（新观测到 MCA weak 不抹掉既有的 Willis环 ok）。
+
+### Profile Update Candidate 闭环
+
+任意会话（画像/辅导/评估等）结束后，模型层从对话中提取"有证据支撑的画像更新候选"（每条必带 `evidence`），后端经上述状态感知合并校验后写入画像。`done` 事件在应用了候选时携带 `applied_profile_updates`（本次写入的候选条数），前端据此提示"画像已更新"。
+
 ## 5. 学习资源
 
 | 方法 | 路径 | SSE | 说明 |
