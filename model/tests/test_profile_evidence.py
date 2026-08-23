@@ -122,6 +122,154 @@ def test_normalize_topic_invalid_status_falls_back_to_unknown():
     assert result["knowledgeBase"]["topics"]["aca"]["status"] == "unknown"
 
 
+def test_status_derivation_five_states():
+    raw = {
+        "learningPace": {
+            "weeklyHours": 12, "source": "user_statement",
+            "confidence": 1.0, "evidence": "我每周能学12小时",
+        },
+        "errorPattern": {
+            "errorType": "conceptual", "source": "case_performance",
+            "confidence": 0.7, "evidence": "答题2/5",
+        },
+        "cognitiveStyle": {
+            "type": "visual", "source": "inferred",
+            "confidence": 0.6, "evidence": "喜欢看视频",
+        },
+        "learningGoal": {
+            "shortTerm": "x", "source": "inferred",
+            "confidence": 0.5, "evidence": "",
+        },
+        "clinicalExperience": {"source": "unknown", "confidence": 0.1, "evidence": ""},
+    }
+
+    result = _normalize_dimensions(raw)
+
+    assert result["learningPace"]["status"] == "confirmed"
+    assert result["errorPattern"]["status"] == "observed"
+    assert result["cognitiveStyle"]["status"] == "inferred"
+    assert result["learningGoal"]["status"] == "suspected"
+    assert result["clinicalExperience"]["status"] == "unknown"
+
+
+def test_restraint_clears_inferred_enumerables_and_numbers():
+    raw = {
+        "learningPace": {
+            "weeklyHours": 12, "speed": "moderate",
+            "source": "inferred", "confidence": 0.5, "evidence": "",
+        },
+        "knowledgeBase": {
+            "level": "beginner", "source": "inferred",
+            "confidence": 0.5, "evidence": "",
+        },
+        "cognitiveStyle": {
+            "type": "visual", "source": "inferred",
+            "confidence": 0.6, "evidence": "",
+        },
+        "errorPattern": {
+            "errorType": "conceptual", "source": "inferred",
+            "confidence": 0.4, "evidence": "",
+        },
+        "clinicalExperience": {
+            "level": "none", "source": "inferred",
+            "confidence": 0.3, "evidence": "",
+        },
+    }
+
+    result = _normalize_dimensions(raw)
+
+    assert result["learningPace"]["weeklyHours"] == 0
+    assert result["learningPace"]["speed"] == ""
+    assert result["knowledgeBase"]["level"] == ""
+    assert result["cognitiveStyle"]["type"] == ""
+    assert result["errorPattern"]["errorType"] == ""
+    assert result["clinicalExperience"]["level"] == ""
+
+
+def test_restraint_keeps_user_confirmed_enumerables():
+    raw = {
+        "learningPace": {
+            "weeklyHours": 12, "speed": "moderate",
+            "source": "user_statement", "confidence": 1.0,
+            "evidence": "我每周能学12小时，节奏中等",
+        },
+    }
+
+    result = _normalize_dimensions(raw)
+
+    assert result["learningPace"]["weeklyHours"] == 12
+    assert result["learningPace"]["speed"] == "moderate"
+
+
+def test_restraint_field_level_evidence():
+    """枚举字段即便维度 source 为 user_statement，证据不含对应提示词也要清空。"""
+    raw = {
+        "cognitiveStyle": {
+            "type": "visual", "source": "user_statement",
+            "confidence": 1.0, "evidence": "我偏好看视频和病例分析",
+        },
+        "clinicalExperience": {
+            "level": "none", "source": "user_statement",
+            "confidence": 1.0, "evidence": "我是大三学生，正在学神经病学",
+        },
+        "knowledgeBase": {
+            "level": "beginner", "source": "user_statement",
+            "confidence": 1.0, "evidence": "我的脑血管解剖比较薄弱",
+        },
+        "errorPattern": {
+            "errorType": "conceptual", "source": "user_statement",
+            "confidence": 1.0, "evidence": "我的脑血管解剖比较薄弱",
+        },
+    }
+
+    result = _normalize_dimensions(raw)
+
+    assert result["cognitiveStyle"]["type"] == ""
+    assert result["clinicalExperience"]["level"] == ""
+    assert result["knowledgeBase"]["level"] == ""
+    assert result["errorPattern"]["errorType"] == ""
+
+
+def test_restraint_keeps_field_when_evidence_matches():
+    raw = {
+        "cognitiveStyle": {
+            "type": "visual", "source": "user_statement",
+            "confidence": 1.0, "evidence": "我是视觉型学习者，喜欢看视频",
+        },
+        "clinicalExperience": {
+            "level": "none", "source": "user_statement",
+            "confidence": 1.0, "evidence": "我还没有进入临床实习",
+        },
+    }
+
+    result = _normalize_dimensions(raw)
+
+    assert result["cognitiveStyle"]["type"] == "visual"
+    assert result["clinicalExperience"]["level"] == "none"
+
+
+def test_topic_ev_status_and_restraint():
+    raw = {
+        "knowledgeBase": {
+            "topics": {
+                "mca": {"status": "weak", "source": "user_statement",
+                        "confidence": 0.9, "evidence": "MCA容易搞混"},
+                "pca": {"status": "weak", "source": "inferred",
+                        "confidence": 0.5, "evidence": ""},
+            },
+        }
+    }
+
+    result = _normalize_dimensions(raw)
+    topics = result["knowledgeBase"]["topics"]
+
+    assert topics["mca"]["ev_status"] == "confirmed"
+    assert topics["mca"]["status"] == "weak"
+    # 无事实证据的推断：知识状态清回 unknown，证据状态 suspected
+    assert topics["pca"]["status"] == "unknown"
+    assert topics["pca"]["ev_status"] == "suspected"
+
+
 @pytest.mark.asyncio
 async def test_extract_profile_dimensions_returns_normalized_dict():
     from types import SimpleNamespace

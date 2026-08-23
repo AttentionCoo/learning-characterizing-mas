@@ -133,7 +133,8 @@ async def run_agent_background(
         if report_mode == "profile_build" and result_text:
             try:
                 logger.info("[background] 检测到画像构建模式，自动提取学习画像维度...")
-                conversation_for_extract = f"用户: {case_text}\n助手: {result_text}"
+                # 只从用户陈述提取事实，助手报告的"建议/推荐"绝不作为画像事实来源
+                conversation_for_extract = f"用户陈述：{case_text}"
                 extract_result = await asyncio.wait_for(
                     extract_profile_dimensions(resources.get("llm_turbo"), conversation_for_extract),
                     timeout=30,
@@ -152,7 +153,8 @@ async def run_agent_background(
         # 由后端 ProfileMergePolicy 校验后决定是否写入长期画像。
         if result_text and resources.get("llm_turbo"):
             try:
-                conversation_for_candidates = f"用户: {case_text}\n助手: {result_text}"
+                # 候选同样只从用户陈述提取，助手报告的建议不作为事实
+                conversation_for_candidates = f"用户陈述：{case_text}"
                 candidates = await asyncio.wait_for(
                     generate_profile_candidates(
                         resources.get("llm_turbo"),

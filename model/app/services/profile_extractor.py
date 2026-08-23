@@ -37,10 +37,26 @@ _KNOWLEDGE_TOPICS = (
 
 _TOPIC_STATUS_VALUES = ("unknown", "weak", "ok")
 
+# 证据状态五态（Evidence Status）
+_STATUS_VALUES = ("confirmed", "observed", "inferred", "suspected", "unknown")
+
+
+def _derive_status(source: str, evidence: str) -> str:
+    """由来源+证据推导证据状态五态。"""
+    if source == "user_statement":
+        return "confirmed"
+    if source == "case_performance":
+        return "observed"
+    if source == "unknown":
+        return "unknown"
+    # inferred：有原话证据 = 有依据推断；无证据 = 存疑待验证
+    return "inferred" if evidence else "suspected"
+
 
 def _topic_meta():
     return {
-        "status": "unknown",
+        "status": "unknown",          # 知识掌握状态 unknown/weak/ok
+        "ev_status": "unknown",       # 证据状态五态
         "source": "unknown",
         "confidence": 0.2,
         "evidence": "",
@@ -49,10 +65,14 @@ def _topic_meta():
 
 
 def _meta_field(source: str = "inferred", confidence: float = 0.5, evidence: str = ""):
+    source = source if source in _SOURCE_VALUES else "inferred"
+    confidence = round(max(0.0, min(1.0, confidence)), 2)
+    evidence = (evidence or "").strip()
     return {
         "source": source,
-        "confidence": round(max(0.0, min(1.0, confidence)), 2),
-        "evidence": (evidence or "").strip(),
+        "status": _derive_status(source, evidence),
+        "confidence": confidence,
+        "evidence": evidence,
         "updated_at": date.today().isoformat(),
     }
 
@@ -79,12 +99,54 @@ def _normalize_topics(topics: dict) -> dict:
             conf = 0.2
         meta["confidence"] = round(max(0.0, min(1.0, conf)), 2)
         meta["evidence"] = str(value.get("evidence", "") or "").strip()
+        meta["ev_status"] = _derive_status(meta["source"], meta["evidence"])
+        # 克制：非事实证据的知识掌握状态清为 unknown
+        if meta["source"] not in ("user_statement", "case_performance"):
+            meta["status"] = "unknown"
         normalized[key] = {**value, **meta}
     return normalized
 
 
+# 字段级证据提示词：枚举/数值字段只有在证据原文中出现这些提示时才保留
+_FIELD_HINTS = {
+    "knowledgeBase": {"level": ("水平", "基础", "掌握", "入门", "进阶", "高级", "零基础", "了解", "熟悉")},
+    "cognitiveStyle": {"type": ("视觉", "听觉", "动觉", "阅读", "visual", "auditory", "kinesthetic", "reading")},
+    "errorPattern": {"errorType": ("易错", "搞混", "混淆", "常错", "粗心", "概念", "程序", "细节", "记混")},
+    "learningPace": {
+        "speed": ("节奏", "快", "慢", "适中", "速度"),
+        "weeklyHours": ("小时", "每周", "学时"),
+    },
+    "clinicalExperience": {"level": ("实习", "见习", "规培", "轮转", "临床经验", "无临床", "临床接触", "临床经历")},
+}
+
+
+def _apply_restraint(dimensions: dict) -> dict:
+    """克制校验（字段级）：枚举/数值字段只有同时满足
+    ① source 为用户陈述/测验表现 ② 证据原文包含对应提示词 才保留，
+    否则清空为"待评估"，杜绝"Agent 推断 → 画像事实"。"""
+    for key, value in dimensions.items():
+        if not isinstance(value, dict):
+            continue
+        source = value.get("source", "inferred")
+        evidence = (value.get("evidence") or "").strip()
+        factual = source in ("user_statement", "case_performance")
+        hints = _FIELD_HINTS.get(key, {})
+        for field, keywords in hints.items():
+            if field not in value:
+                continue
+            keep = factual and any(k in evidence for k in keywords)
+            if not keep:
+                current = value[field]
+                if isinstance(current, (int, float)):
+                    value[field] = 0
+                else:
+                    value[field] = ""
+    return dimensions
+
+
 def _normalize_dimensions(dimensions: dict) -> dict:
-    """为每个维度补齐证据链元数据；source 非法值回退 inferred，confidence 收敛到 0~1。"""
+    """为每个维度补齐证据链元数据；source 非法值回退 inferred，confidence 收敛到 0~1，
+    并执行克制校验（非事实证据的枚举/数值字段清空）。"""
     normalized = {}
     for key, value in (dimensions or {}).items():
         if key not in _DIMENSION_KEYS or not isinstance(value, dict):
@@ -100,6 +162,7 @@ def _normalize_dimensions(dimensions: dict) -> dict:
             raw_conf = 0.5
         meta["confidence"] = round(max(0.0, min(1.0, raw_conf)), 2)
         meta["evidence"] = str(value.get("evidence", "") or "").strip()
+        meta["status"] = _derive_status(meta["source"], meta["evidence"])
         # 情绪状态属于"当前状态"，额外记录观测时间
         if key == "emotionState":
             meta["observed_at"] = date.today().isoformat()
@@ -107,7 +170,7 @@ def _normalize_dimensions(dimensions: dict) -> dict:
         if key == "knowledgeBase":
             value = {**value, "topics": _normalize_topics(value.get("topics"))}
         normalized[key] = {**value, **meta}
-    return normalized
+    return _apply_restraint(normalized)
 
 
 _EXTRACT_PROMPT_TEMPLATE = """你是一位专业的学习画像分析专家。请从以下师生对话内容中，自动抽取学生的结构化学习画像维度。
@@ -211,7 +274,14 @@ knowledgeBase.topics 子主题状态判定（脑血管解剖知识状态）：
 1. 只输出 JSON，不要任何解释文字
 2. description 必须具体、有信息量，不要写"根据对话推断""暂无信息""信息不足"等无意义的话；如果某维度确实无法判断，description 留空字符串
 3. masteredTopics/weakTopics/frequentErrors/preferences 列表中的元素要具体，不要写"待补充"等占位文字；如果无法提取则留空列表
-4. level/speed/errorType/type/status 等枚举值必须从给定选项中选择"""
+4. level/speed/errorType/type/status 等枚举值必须从给定选项中选择
+5. 【克制】枚举与数值字段（level/type/errorType/speed/weeklyHours 等）只填写学生明确陈述的内容：
+   - 学生说"我基础一般/基本掌握"才填 level；仅说"脑血管解剖薄弱"不能推断 level，level 留空
+   - 学生说"我是视觉型"才填 cognitiveStyle.type；只说"喜欢看视频"只记 preferences，type 留空
+   - 学生明确说每周学时/单次时长才填 weeklyHours；"建议每周几次"等系统建议绝不算学生事实
+   - 学生说"我容易把 X 和 Y 搞混"才填 errorType/frequentErrors；只说"薄弱"不能推断具体易错点
+6. 【建议与画像分离·只取用户陈述】输入的【用户陈述】才是事实来源；对话中助手/系统给出的"建议""推荐""计划""鼓励"（如"建议每周2-3次每次60分钟"）不是用户事实，绝不能提取为画像字段，也绝不能作为 evidence 引用
+7. source 与 evidence 必须一致：evidence 引用的是学生原话才可用 user_statement；无法引用原话的推断用 inferred 且 confidence ≤ 0.6；完全拿不准用 unknown"""
 
 
 async def extract_profile_dimensions(llm, conversation: str) -> dict | None:
