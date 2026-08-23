@@ -6,6 +6,7 @@ from typing import List
 
 from app.runtime import resources
 from app.services.profile_extractor import extract_profile_dimensions
+from app.services.profile_candidates import generate_profile_candidates
 from app.utils.error_codes import build_error_event
 from app.utils.task_manager import AsyncTaskManager
 
@@ -145,6 +146,26 @@ async def run_agent_background(
                 logger.error("[background] 画像提取超时(30s)")
             except Exception as e:
                 logger.error(f"[background] 自动提取画像异常: {e}", exc_info=True)
+
+        # ── Profile Update Candidate 闭环 ──
+        # 任意会话类型结束后，从对话提取"有证据支撑的画像更新候选"，
+        # 由后端 ProfileMergePolicy 校验后决定是否写入长期画像。
+        if result_text and resources.get("llm_turbo"):
+            try:
+                conversation_for_candidates = f"用户: {case_text}\n助手: {result_text}"
+                candidates = await asyncio.wait_for(
+                    generate_profile_candidates(
+                        resources.get("llm_turbo"),
+                        conversation_for_candidates,
+                    ),
+                    timeout=20,
+                )
+                if candidates:
+                    done_event["profile_update_candidates"] = candidates
+            except asyncio.TimeoutError:
+                logger.warning("[background] 画像更新候选生成超时(20s)")
+            except Exception as e:
+                logger.error(f"[background] 画像更新候选生成异常: {e}")
 
         task_mgr.add_event(task_id, done_event)
         task_mgr.complete_task(task_id, result=result_text)
