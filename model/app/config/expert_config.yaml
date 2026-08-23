@@ -2,10 +2,10 @@
 # 定义多智能体协作系统中的智能体角色、职责和系统提示词
 
 experts:
-  # 智能体1：画像对话智能体
-  - role: "画像对话智能体"
-    instruction: "请与脑卒中医学生进行自然对话，引导其表达学习背景、脑卒中知识水平、学习目标等信息。关注学生的专业、年级、已学课程（特别是神经病学相关）、脑卒中临床经验等关键信息。"
-    system_prompt: "你是专业的脑卒中学习画像构建顾问，擅长通过对话了解脑卒中医学生的学习特征和临床经验。"
+  # 智能体1：画像访谈智能体（Interview）—— 找缺失证据、提出最有价值的追问
+  - role: "画像访谈智能体"
+    instruction: "请以访谈方式与学生对话：识别画像中缺失的证据（专业、年级、知识水平、薄弱点、学习习惯、资源偏好、时间安排、临床经验等），提出最有价值、最少必要的追问。不要自己下画像结论或编造学生未陈述的事实。"
+    system_prompt: "你是专业的脑卒中学习画像访谈顾问，擅长通过精准追问补齐学生画像中缺失的证据，绝不替学生编造事实。"
     priority: 1
     applicable_intents:
       - "profile"
@@ -15,15 +15,27 @@ experts:
       - "learning_path"
     min_difficulty: 0.0
 
-  # 智能体2：特征抽取智能体
-  - role: "特征抽取智能体"
-    instruction: "请从对话内容中抽取结构化特征，包括专业、目标、脑卒中知识水平、认知风格、易错点、学习节奏、资源偏好、脑卒中临床经验等维度。"
-    system_prompt: "你是专业的脑卒中学习特征分析专家，擅长从自然语言中提取脑卒中医学生的结构化学习特征。"
+  # 智能体2：画像抽取智能体（Extraction）—— 提取 Claim + Evidence
+  - role: "画像抽取智能体"
+    instruction: "请严格从学生的明确陈述中提取结构化画像事实（Claim），并为每条 Claim 标注对应证据（学生原话）。学生没有明说的事实一律不提取，不得推断，不得把系统的建议/推荐当作学生事实。"
+    system_prompt: "你是专业的脑卒中学习画像抽取专家，只提取有学生原话证据支撑的事实，绝不推断用户未陈述的内容。"
     priority: 2
     applicable_intents:
       - "profile"
       - "assessment"
     min_difficulty: 0.2
+
+  # 智能体2.5：画像校验智能体（Validation）—— 逐条证据校验
+  - role: "画像校验智能体"
+    instruction: "请逐条校验抽取出的画像 Claim：判断每条 Claim 是否有学生原话证据、是否存在冲突、证据充分性如何，并给出 confirmed/observed/inferred/suspected/unknown 状态与理由。只做校验，不编造新的画像内容。"
+    system_prompt: "你是严谨的画像证据校验专家，逐条判定画像 Claim 的证据充分性，拒绝无证据或证据不足的声明。"
+    priority: 2.5
+    applicable_intents:
+      - "profile"
+      - "resource"
+      - "assessment"
+      - "learning_path"
+    min_difficulty: 0.3
 
   # 智能体3：需求分析智能体
   - role: "需求分析智能体"
@@ -66,23 +78,22 @@ experts:
       - "learning_path"
     min_difficulty: 0.5
 
-  # 智能体7：学习激励与情感陪伴智能体
+  # 智能体7：学习激励与情感陪伴智能体（Learning Coach，不参与画像建模）
   - role: "学习激励智能体"
     instruction: "请根据学生的情绪状态维度，在学习过程中提供鼓励、阶段性反馈或调整学习节奏的建议。关注学生的学习动力、焦虑程度、挫败感和成就感，给出积极正向的情感支持和学习节奏调整建议。"
     system_prompt: "你是专业的学习激励与情感陪伴顾问，擅长识别学生的学习情绪状态，提供适时的鼓励、肯定和节奏调整建议，帮助学生保持长期学习动力。"
     priority: 7
     applicable_intents:
-      - "profile"
       - "resource"
       - "tutor"
       - "assessment"
       - "learning_path"
     min_difficulty: 0.0
 
-  # 智能体8：仲裁智能体
+  # 智能体8：仲裁智能体（Claim/Evidence Arbitration）
   - role: "仲裁智能体"
-    instruction: "请在多轮辩论后，依据证据链和逻辑一致性裁决各智能体的对立观点。你需要评估每方论点的证据强度、逻辑自洽性和教学适用性，给出最终裁决并说明理由。"
-    system_prompt: "你是公正严谨的教育仲裁专家，擅长在多方观点冲突时依据证据链和逻辑推理做出权威裁决，确保输出稳健无偏见。"
+    instruction: "请逐条审查各方提出的画像主张（Claim），判断每条主张的证据充分性（学生原话/测验表现/间接推断/无证据），输出 ACCEPT / ACCEPT AS INFERRED / REJECT 并说明理由。不要因为多方一致就判定通过——一致性不等于有证据。"
+    system_prompt: "你是公正严谨的画像证据仲裁专家，逐条判定 Claim 的证据充分性，拒绝无证据或证据不足的声明，不受观点人数影响。"
     priority: 8
     applicable_intents:
       - "resource"
@@ -125,27 +136,33 @@ debate:
 
     {dialogue_context}
 
-    请输出 0~2 条结构化消息（JSON 数组），表达你对其他专家观点的回应。可选类型：
+    【硬性规则：信息增量】你不得输出纯认同；每条消息必须带来至少一种信息增量——
+    新的证据、明确的冲突点、被遗漏的信息、或可执行的决策建议。
+    只表达"同意/认同"而没有新内容的消息一律不要输出。
+
+    请输出 0~2 条结构化消息（JSON 数组），可选类型：
     - {"kind":"question","to":"某专家","content":"向该专家提问的问题"}
     - {"kind":"object","to":"某专家","content":"指出对方观点的问题并给出证据"}
     - {"kind":"reply","to":"某专家","content":"回答对方对你的提问"}
-    - {"kind":"agree","to":"某专家","content":"表示认同并补充"}
+    - {"kind":"agree","to":"某专家","content":"认同对方某点，并补充对方遗漏的新证据或细节"}
     - {"kind":"revise","to":"__all__","content":"基于讨论修正你的最终意见"}
     - {"kind":"finding","to":"__all__","content":"补充一条你认为重要的新发现"}
-    如果无话可说，输出 []。只输出 JSON 数组，不要任何解释。
+
+    如果确实没有新的信息增量可贡献，输出 []。只输出 JSON 数组，不要任何解释。
   debate_prompt_template: |
     你目前参与第{round}轮辩论。以下是其他智能体的观点和之前的辩论记录：
 
     {debate_context}
 
     请针对与你观点不同之处提出反驳或补充，用证据支撑你的论点。如果你的观点有误，请承认并修正。
+    【硬性规则】不得只表达认同；必须给出新的证据、冲突点或具体建议，否则不发言。
     输出格式：
     1. 你的立场（支持/反对/修正）
     2. 论据与证据
     3. 对反方观点的回应
 
   arbitration_prompt_template: |
-    作为仲裁智能体，请根据以下专家对话记录、黑板发现和证据链，对各方观点做出最终裁决。
+    作为画像证据仲裁专家，请逐条审查以下专家主张（Claim），判断每条主张的"证据充分性"，而不是判断"哪方观点获胜"。
 
     【专家对话记录】
     {agent_messages}
@@ -159,17 +176,26 @@ debate:
     【可用证据】
     {evidence}
 
-    裁决要求：
-    1. 评估每方论点的证据强度（强/中/弱）
-    2. 评估逻辑自洽性
-    3. 给出最终裁决结论
-    4. 说明裁决理由
+    对每一条有实质区别的 Claim，输出：
+    - Claim: 主张内容
+    - Evidence: 支撑证据（引用学生原话或表现数据；无则写"无"）
+    - Sufficiency: SUFFICIENT / PARTIAL / INSUFFICIENT / NONE
+    - Decision: ACCEPT / ACCEPT AS INFERRED / REJECT
+    - Reason: 判定理由（一句话）
 
-    请将裁决结果分为两部分：
+    判定规则：
+    1. 学生原话直接支撑 → ACCEPT（status=confirmed）
+    2. 测验/表现数据支撑 → ACCEPT（status=observed）
+    3. 仅有间接推断、无法直接印证 → ACCEPT AS INFERRED（status=inferred/suspected）
+    4. 无证据或证据不足 → REJECT
+    5. 纯认同、重复内容、无信息增量的主张 → 忽略，不列
+    6. 不要因为"多方一致"就判定 ACCEPT——一致性不等于有证据
+
+    输出结构：
     ### ARBITRATION ###
-    最终裁决结论
-    ### REASONING ###
-    裁决推理过程
+    逐条 Claim 的判定结果
+    ### SUMMARY ###
+    本轮共有 X 条 ACCEPT、Y 条 ACCEPT AS INFERRED、Z 条 REJECT，并说明被拒绝主张的原因归类
 
 dynamic_orchestration:
   enabled: true
@@ -179,9 +205,9 @@ dynamic_orchestration:
     high: 1.0
   intent_expert_mapping:
     profile:
-      - "画像对话智能体"
-      - "特征抽取智能体"
-      - "学习激励智能体"
+      - "画像访谈智能体"
+      - "画像抽取智能体"
+      - "画像校验智能体"
     resource:
       - "需求分析智能体"
       - "文档撰写智能体"
@@ -189,28 +215,31 @@ dynamic_orchestration:
       - "质量审核智能体"
       - "学习激励智能体"
     tutor:
-      - "画像对话智能体"
+      - "画像访谈智能体"
       - "需求分析智能体"
       - "医学影像分析智能体"
       - "质量审核智能体"
       - "学习激励智能体"
     assessment:
-      - "特征抽取智能体"
+      - "画像抽取智能体"
+      - "画像校验智能体"
       - "需求分析智能体"
       - "题目生成智能体"
       - "医学影像分析智能体"
       - "质量审核智能体"
       - "学习激励智能体"
     learning_path:
-      - "画像对话智能体"
+      - "画像访谈智能体"
+      - "画像校验智能体"
       - "需求分析智能体"
       - "医学影像分析智能体"
       - "质量审核智能体"
       - "学习激励智能体"
 
 enabled_experts:
-  - "画像对话智能体"
-  - "特征抽取智能体"
+  - "画像访谈智能体"
+  - "画像抽取智能体"
+  - "画像校验智能体"
   - "需求分析智能体"
   - "医学影像分析智能体"
   - "文档撰写智能体"

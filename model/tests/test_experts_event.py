@@ -24,13 +24,13 @@ def test_build_experts_event_extracts_roles_and_advices():
 
 def test_build_experts_event_skips_failed_advices():
     output = {
-        "active_experts": ["画像对话智能体", "特征抽取智能体"],
-        "画像对话智能体_advice": "未能获取有效建议",
-        "特征抽取智能体_advice": "已抽取专业与年级信息。",
+        "active_experts": ["画像访谈智能体", "画像抽取智能体"],
+        "画像访谈智能体_advice": "未能获取有效建议",
+        "画像抽取智能体_advice": "已抽取专业与年级信息。",
     }
     event = LearningAgent._build_experts_event(output)
 
-    assert [a["role"] for a in event["advices"]] == ["特征抽取智能体"]
+    assert [a["role"] for a in event["advices"]] == ["画像抽取智能体"]
     assert len(event["active_experts"]) == 2
 
 

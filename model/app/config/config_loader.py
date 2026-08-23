@@ -181,16 +181,22 @@ class ExpertConfigManager:
         return {
             "experts": [
                 {
-                    "role": "画像对话智能体",
-                    "instruction": "请与学生进行自然对话，引导其表达学习背景、知识水平、学习目标等信息。",
-                    "system_prompt": "你是专业的学习画像构建顾问",
+                    "role": "画像访谈智能体",
+                    "instruction": "请以访谈方式与学生对话，识别画像中缺失的证据并提出最有价值的追问，不要编造事实。",
+                    "system_prompt": "你是专业的学习画像访谈顾问",
                     "priority": 1
                 },
                 {
-                    "role": "特征抽取智能体",
-                    "instruction": "请从对话内容中抽取结构化特征，包括专业、目标、知识水平、认知风格等维度。",
-                    "system_prompt": "你是专业的学习特征分析专家",
+                    "role": "画像抽取智能体",
+                    "instruction": "请严格从学生的明确陈述中提取画像事实（Claim）并标注证据，不得推断。",
+                    "system_prompt": "你是专业的学习画像抽取专家",
                     "priority": 2
+                },
+                {
+                    "role": "画像校验智能体",
+                    "instruction": "请逐条校验画像 Claim 的证据充分性并给出 confirmed/observed/inferred/suspected/unknown 状态。",
+                    "system_prompt": "你是严谨的画像证据校验专家",
+                    "priority": 2.5
                 },
                 {
                     "role": "需求分析智能体",
@@ -205,7 +211,7 @@ class ExpertConfigManager:
                 "proposal_separator": "### PROPOSAL ###",
                 "critique_separator": "### CRITIQUE ###"
             },
-            "enabled_experts": ["画像对话智能体", "特征抽取智能体", "需求分析智能体"]
+            "enabled_experts": ["画像访谈智能体", "画像抽取智能体", "画像校验智能体", "需求分析智能体"]
         }
 
     def get_experts(self) -> list:

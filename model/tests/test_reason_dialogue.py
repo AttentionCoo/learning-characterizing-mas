@@ -83,10 +83,10 @@ def test_parse_messages_strips_markdown_fence():
 def test_parse_messages_cleans_round_suffix_in_to():
     orch = _make_orchestrator([], [])
     raw = json.dumps([
-        {"kind": "agree", "to": "画像对话智能体（第0轮）", "content": "认同画像思路"},
+        {"kind": "agree", "to": "画像访谈智能体（第0轮）", "content": "认同画像思路"},
     ], ensure_ascii=False)
     messages = orch._parse_messages("需求分析智能体", raw, 1)
-    assert messages[0]["to"] == "画像对话智能体"
+    assert messages[0]["to"] == "画像访谈智能体"
 
 
 def test_update_blackboard_replaces_latest_finding():
