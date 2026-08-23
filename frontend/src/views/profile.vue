@@ -147,7 +147,7 @@ const dimensionList = computed(() => {
       dim.weeklyHours = value.weeklyHours || 0
       // 证据链元数据（阶段一）：来源/状态/置信度/原话证据
       dim.source = value.source || ''
-      dim.status = value.status || value.source || ''
+      dim.status = value.ev_status || value.source || ''
       dim.confidence = typeof value.confidence === 'number' ? value.confidence : null
       dim.evidence = cleanText(value.evidence)
       // 情绪状态观测时间（当前状态语义）
