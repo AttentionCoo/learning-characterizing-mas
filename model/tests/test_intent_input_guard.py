@@ -60,6 +60,46 @@ async def test_preset_function_allows_matching_input():
     assert "difficulty_score" not in result
 
 
+@pytest.mark.parametrize("case_text", [
+    "我还喜欢看动漫",
+    "我还喜欢玩游戏",
+    "我平时喜欢看动漫视频和追番",
+    "补充一下：我喜欢看动漫",
+])
+@pytest.mark.asyncio
+async def test_profile_followup_preference_passes_deterministic_gate(case_text):
+    """画像多轮对话中补充兴趣/偏好（喜欢看动漫、玩游戏等）不应被关键词预检误拒。"""
+    node = _node_with_result({
+        "type": "profile",
+        "difficulty_score": 0.2,
+        "is_stroke_related": False,
+        "is_function_related": True,
+        "reason": "学生在画像对话中补充兴趣偏好",
+    })
+
+    result = await node.run(_state("profile_build", "profile", case_text))
+
+    assert result["intent_type"] == "profile"
+    assert result["input_rejection_message"] == ""
+
+
+@pytest.mark.asyncio
+async def test_profile_followup_unrelated_still_rejected_by_llm_guard():
+    """偏好类输入通过关键词预检后，若 LLM 判定与画像无关仍应拦截。"""
+    node = _node_with_result({
+        "type": "profile",
+        "difficulty_score": 0.2,
+        "is_stroke_related": False,
+        "is_function_related": False,
+        "reason": "用户在看电影推荐，与学习画像无关",
+    })
+
+    result = await node.run(_state("profile_build", "profile", "帮我推荐一部好看的动漫"))
+
+    assert result["intent_type"] == "non_stroke"
+    assert "学习画像构建" in result["input_rejection_message"]
+
+
 @pytest.mark.asyncio
 async def test_stroke_content_function_rejects_other_domain_input():
     node = _node_with_result({
