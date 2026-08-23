@@ -144,7 +144,6 @@ debate:
     - {"kind":"question","to":"某专家","content":"向该专家提问的问题"}
     - {"kind":"object","to":"某专家","content":"指出对方观点的问题并给出证据"}
     - {"kind":"reply","to":"某专家","content":"回答对方对你的提问"}
-    - {"kind":"agree","to":"某专家","content":"认同对方某点，并补充对方遗漏的新证据或细节"}
     - {"kind":"revise","to":"__all__","content":"基于讨论修正你的最终意见"}
     - {"kind":"finding","to":"__all__","content":"补充一条你认为重要的新发现"}
 

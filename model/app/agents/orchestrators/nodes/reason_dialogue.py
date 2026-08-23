@@ -18,7 +18,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 logger = logging.getLogger(__name__)
 
 # 消息类型白名单（与前端 agent_msg 事件 kind 对齐）
-MSG_KINDS = ("question", "reply", "revise", "agree", "object", "finding")
+MSG_KINDS = ("question", "reply", "revise", "object", "finding")
 
 
 class DialogueOrchestrator:
@@ -157,11 +157,11 @@ class DialogueOrchestrator:
             "dialogue_prompt_template",
             "你正在与其他脑卒中教育专家进行会诊讨论（第{round}轮）。\n\n"
             "【当前会诊背景】\n{dialogue_context}\n\n"
-            "请输出 0~2 条结构化消息（JSON 数组），表达你对其他专家观点的回应。可选类型：\n"
+            "【硬性规则】不得输出纯认同，每条消息必须带来信息增量（新证据/冲突/缺失/决策）。\n"
+            "请输出 0~2 条结构化消息（JSON 数组）。可选类型：\n"
             '- {"kind":"question","to":"某专家","content":"向该专家提问的问题"}\n'
             '- {"kind":"object","to":"某专家","content":"指出对方观点的问题并给出证据"}\n'
             '- {"kind":"reply","to":"某专家","content":"回答对方对你的提问"}\n'
-            '- {"kind":"agree","to":"某专家","content":"表示认同并补充"}\n'
             '- {"kind":"revise","to":"__all__","content":"基于讨论修正你的最终意见"}\n'
             '- {"kind":"finding","to":"__all__","content":"补充一条你认为重要的新发现"}\n'
             "如果无话可说，输出 []。只输出 JSON 数组，不要任何解释。",

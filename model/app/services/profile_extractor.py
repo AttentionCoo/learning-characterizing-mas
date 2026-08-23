@@ -70,7 +70,7 @@ def _meta_field(source: str = "inferred", confidence: float = 0.5, evidence: str
     evidence = (evidence or "").strip()
     return {
         "source": source,
-        "status": _derive_status(source, evidence),
+        "ev_status": _derive_status(source, evidence),
         "confidence": confidence,
         "evidence": evidence,
         "updated_at": date.today().isoformat(),
@@ -162,7 +162,7 @@ def _normalize_dimensions(dimensions: dict) -> dict:
             raw_conf = 0.5
         meta["confidence"] = round(max(0.0, min(1.0, raw_conf)), 2)
         meta["evidence"] = str(value.get("evidence", "") or "").strip()
-        meta["status"] = _derive_status(meta["source"], meta["evidence"])
+        meta["ev_status"] = _derive_status(meta["source"], meta["evidence"])
         # 情绪状态属于"当前状态"，额外记录观测时间
         if key == "emotionState":
             meta["observed_at"] = date.today().isoformat()

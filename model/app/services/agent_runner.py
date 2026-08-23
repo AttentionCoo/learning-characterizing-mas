@@ -7,6 +7,7 @@ from typing import List
 from app.runtime import resources
 from app.services.profile_extractor import extract_profile_dimensions
 from app.services.profile_candidates import generate_profile_candidates
+from app.services.profile_render import render_profile_report
 from app.utils.error_codes import build_error_event
 from app.utils.task_manager import AsyncTaskManager
 
@@ -116,6 +117,30 @@ async def run_agent_background(
             "name": generated_name or "",
         }
 
+        # ── 画像构建模式：提取证据链维度并确定性渲染，替换 LLM 自由报告 ──
+        # 报告由 profile_dimensions 渲染，杜绝下游 LLM 二次推断（beginner/none 等）污染画像。
+        if report_mode == "profile_build" and result_text:
+            try:
+                logger.info("[background] 检测到画像构建模式，自动提取学习画像维度...")
+                # 只从用户陈述提取事实，助手报告的"建议/推荐"绝不作为画像事实来源
+                conversation_for_extract = f"用户陈述：{case_text}"
+                extract_result = await asyncio.wait_for(
+                    extract_profile_dimensions(resources.get("llm_turbo"), conversation_for_extract),
+                    timeout=30,
+                )
+                if extract_result:
+                    done_event["profile_dimensions"] = extract_result
+                    rendered = render_profile_report(extract_result)
+                    result_text = rendered
+                    # replace 事件覆盖此前流式的 LLM 报告，使前端最终展示证据渲染后的画像
+                    task_mgr.add_event(task_id, {"type": "replace", "content": rendered})
+                else:
+                    logger.warning("[background] 画像维度提取失败或为空")
+            except asyncio.TimeoutError:
+                logger.error("[background] 画像提取超时(30s)")
+            except Exception as e:
+                logger.error(f"[background] 自动提取画像异常: {e}", exc_info=True)
+
         if update_all_info and result_text and resources.get("context_summary") and executor:
             try:
                 summary_result = await loop.run_in_executor(
@@ -129,24 +154,6 @@ async def run_agent_background(
                 done_event["all_info"] = summary_result.get("updated_all_info", original_all_info)
             except Exception:
                 done_event["all_info"] = original_all_info
-
-        if report_mode == "profile_build" and result_text:
-            try:
-                logger.info("[background] 检测到画像构建模式，自动提取学习画像维度...")
-                # 只从用户陈述提取事实，助手报告的"建议/推荐"绝不作为画像事实来源
-                conversation_for_extract = f"用户陈述：{case_text}"
-                extract_result = await asyncio.wait_for(
-                    extract_profile_dimensions(resources.get("llm_turbo"), conversation_for_extract),
-                    timeout=30,
-                )
-                if extract_result:
-                    done_event["profile_dimensions"] = extract_result
-                else:
-                    logger.warning("[background] 画像维度提取失败或为空")
-            except asyncio.TimeoutError:
-                logger.error("[background] 画像提取超时(30s)")
-            except Exception as e:
-                logger.error(f"[background] 自动提取画像异常: {e}", exc_info=True)
 
         # ── Profile Update Candidate 闭环 ──
         # 任意会话类型结束后，从对话提取"有证据支撑的画像更新候选"，

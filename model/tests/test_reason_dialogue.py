@@ -61,7 +61,7 @@ def test_parse_messages_validates_kind_and_structure():
     assert messages[0]["kind"] == "question"
     assert messages[0]["round"] == 1
     assert messages[1]["kind"] == "revise"
-    assert all(m["kind"] in ("question", "reply", "revise", "agree", "object", "finding") for m in messages)
+    assert all(m["kind"] in ("question", "reply", "revise", "object", "finding") for m in messages)
 
 
 def test_parse_messages_handles_empty_and_garbage():
@@ -69,7 +69,9 @@ def test_parse_messages_handles_empty_and_garbage():
     assert orch._parse_messages("A", "", 1) == []
     assert orch._parse_messages("A", "不是JSON", 1) == []
     assert orch._parse_messages("A", "[]", 1) == []
-    assert orch._parse_messages("A", '{"kind":"agree","to":"B","content":"认同"}', 1)[0]["kind"] == "agree"
+    # agree 已从白名单移除：纯认同消息应被过滤掉
+    assert orch._parse_messages("A", '{"kind":"agree","to":"B","content":"认同"}', 1) == []
+    assert orch._parse_messages("A", '{"kind":"object","to":"B","content":"有误"}', 1)[0]["kind"] == "object"
 
 
 def test_parse_messages_strips_markdown_fence():
@@ -83,7 +85,7 @@ def test_parse_messages_strips_markdown_fence():
 def test_parse_messages_cleans_round_suffix_in_to():
     orch = _make_orchestrator([], [])
     raw = json.dumps([
-        {"kind": "agree", "to": "画像访谈智能体（第0轮）", "content": "认同画像思路"},
+        {"kind": "object", "to": "画像访谈智能体（第0轮）", "content": "指出其观点证据不足"},
     ], ensure_ascii=False)
     messages = orch._parse_messages("需求分析智能体", raw, 1)
     assert messages[0]["to"] == "画像访谈智能体"

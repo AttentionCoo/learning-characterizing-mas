@@ -145,11 +145,11 @@ def test_status_derivation_five_states():
 
     result = _normalize_dimensions(raw)
 
-    assert result["learningPace"]["status"] == "confirmed"
-    assert result["errorPattern"]["status"] == "observed"
-    assert result["cognitiveStyle"]["status"] == "inferred"
-    assert result["learningGoal"]["status"] == "suspected"
-    assert result["clinicalExperience"]["status"] == "unknown"
+    assert result["learningPace"]["ev_status"] == "confirmed"
+    assert result["errorPattern"]["ev_status"] == "observed"
+    assert result["cognitiveStyle"]["ev_status"] == "inferred"
+    assert result["learningGoal"]["ev_status"] == "suspected"
+    assert result["clinicalExperience"]["ev_status"] == "unknown"
 
 
 def test_restraint_clears_inferred_enumerables_and_numbers():
@@ -268,6 +268,21 @@ def test_topic_ev_status_and_restraint():
     # 无事实证据的推断：知识状态清回 unknown，证据状态 suspected
     assert topics["pca"]["status"] == "unknown"
     assert topics["pca"]["ev_status"] == "suspected"
+
+
+def test_emotion_status_not_overwritten_by_evidence_status():
+    """情绪枚举 status（motivated/anxious）与证据状态 ev_status 不撞名。"""
+    raw = {
+        "emotionState": {
+            "status": "motivated", "description": "学习动力强",
+            "source": "inferred", "confidence": 0.5, "evidence": "",
+        }
+    }
+
+    result = _normalize_dimensions(raw)
+
+    assert result["emotionState"]["status"] == "motivated"
+    assert result["emotionState"]["ev_status"] == "suspected"
 
 
 @pytest.mark.asyncio
