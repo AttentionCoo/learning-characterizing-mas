@@ -51,6 +51,13 @@ class ProfileMergePolicyTest {
     }
 
     @Test
+    void observedEvidenceNotDowngradedByHighConfidenceInference() {
+        Map<String, Object> existing = dim(ProfileMergePolicy.SOURCE_CASE_PERFORMANCE, 0.6, "2026-08-20");
+        Map<String, Object> incoming = dim(ProfileMergePolicy.SOURCE_INFERRED, 0.9, "2026-08-21");
+        assertFalse(ProfileMergePolicy.shouldApply(existing, incoming));
+    }
+
+    @Test
     void newerObservationWinsWhenConfidenceTies() {
         Map<String, Object> existing = dim(ProfileMergePolicy.SOURCE_INFERRED, 0.6, "2026-08-01");
         Map<String, Object> incoming = dim(ProfileMergePolicy.SOURCE_INFERRED, 0.6, "2026-08-20");

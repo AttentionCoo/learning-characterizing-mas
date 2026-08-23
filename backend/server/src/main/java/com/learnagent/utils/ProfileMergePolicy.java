@@ -50,6 +50,11 @@ public final class ProfileMergePolicy {
                 && !SOURCE_CASE_PERFORMANCE.equals(existingSource)) {
             return true;
         }
+        // 已有测验/观察证据，不被无事实依据的推断降级
+        if (SOURCE_CASE_PERFORMANCE.equals(existingSource)
+                && !SOURCE_CASE_PERFORMANCE.equals(incomingSource)) {
+            return false;
+        }
         // 置信度更高者胜出
         if (incomingConf > existingConf) {
             return true;
