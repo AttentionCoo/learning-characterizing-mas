@@ -61,6 +61,7 @@ public class AIStreamingServiceImpl implements AIStreamingService {
     private final ConversationPersistenceService conversationPersistenceService;
     private final ObjectMapper objectMapper;
     private final StudentProfileMapper studentProfileMapper;
+    private final ProfileUpdateService profileUpdateService;
 
     private static final long CACHE_TTL = 1;
     private static final String HISTORY_KEY_PREFIX = "chat:history:";
@@ -446,7 +447,7 @@ public class AIStreamingServiceImpl implements AIStreamingService {
                 .doOnNext(line -> log.info("[streamChat] 收到原始行: talkId={}, len={}, preview={}",
                         finalTalkId, line.length(), line.length() > 200 ? line.substring(0, 200) + "…" : line))
 
-                .flatMap(line -> parseModelLine(line, finalTalkId, generatedTitle, updatedAllInfo, fullAnswer), 1)
+                .flatMap(line -> parseModelLine(userId, line, finalTalkId, generatedTitle, updatedAllInfo, fullAnswer), 1)
 
                 .concatWith(Mono.fromCallable(() -> {
                     // 仅做标题解析（轻量同步），done 事件构造后立即发往前端
@@ -540,7 +541,8 @@ public class AIStreamingServiceImpl implements AIStreamingService {
      * </ul>
      * E1xxx 记录为 WARN（模型侧问题），E2xxx 记录为 ERROR（本层问题）。
      */
-    private Flux<String> parseModelLine(String line,
+    private Flux<String> parseModelLine(Long userId,
+                                        String line,
                                         Long talkId,
                                         String[] generatedTitle,
                                         String[] updatedAllInfo,
@@ -564,7 +566,7 @@ public class AIStreamingServiceImpl implements AIStreamingService {
             JsonNode json = objectMapper.readTree(line);
             String type = json.path("type").asText("");
 
-            // done 事件：提取 name/all_info/profile_dimensions 后结束流
+            // done 事件：提取 name/all_info/profile_dimensions/profile_update_candidates 后结束流
             if ("done".equalsIgnoreCase(type)) {
                 String name = json.path("name").asText("");
                 if (StrUtil.isNotBlank(name)) {
@@ -577,15 +579,36 @@ public class AIStreamingServiceImpl implements AIStreamingService {
                     updatedAllInfo[0] = allInfo;
                 }
 
+                Map<String, Object> doneResp = null;
+
                 // 提取 profile_dimensions 并透传给前端（用于自动保存学习画像）
                 JsonNode profileDimensionsNode = json.path("profile_dimensions");
                 if (!profileDimensionsNode.isMissingNode() && !profileDimensionsNode.isNull()) {
                     log.info("✅ 检测到画像维度数据，透传给前端, talkId={}", talkId);
-                    Map<String, Object> doneResp = baseResponse(talkId, generatedTitle[0], "done");
+                    doneResp = baseResponse(talkId, generatedTitle[0], "done");
                     doneResp.put("profile_dimensions", objectMapper.convertValue(
                             profileDimensionsNode,
                             new TypeReference<Map<String, Object>>() {}
                     ));
+                }
+
+                // Profile Update Candidate 闭环：服务端按证据策略校验写入
+                // （模型层只产出带 evidence 的候选，写不写由 ProfileMergePolicy 决定）
+                JsonNode candidatesNode = json.path("profile_update_candidates");
+                if (!candidatesNode.isMissingNode() && candidatesNode.isArray() && candidatesNode.size() > 0) {
+                    List<Map<String, Object>> candidates = objectMapper.convertValue(
+                            candidatesNode,
+                            new TypeReference<List<Map<String, Object>>>() {}
+                    );
+                    profileUpdateService.applyCandidates(userId, candidates);
+                    log.info("✅ 应用画像更新候选 {} 条, talkId={}", candidates.size(), talkId);
+                    if (doneResp == null) {
+                        doneResp = baseResponse(talkId, generatedTitle[0], "done");
+                    }
+                    doneResp.put("applied_profile_updates", candidates.size());
+                }
+
+                if (doneResp != null) {
                     return Flux.just(objectMapper.writeValueAsString(doneResp));
                 }
 

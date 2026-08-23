@@ -9,9 +9,11 @@ import com.learnagent.dto.ChatMessageDTO;
 import com.learnagent.param.ProfileConversationParam;
 import com.learnagent.param.QuestionParam;
 import com.learnagent.service.AIStreamingService;
+import com.learnagent.service.impl.ProfileUpdateService;
 import com.learnagent.mapper.StudentProfileMapper;
 import com.learnagent.utils.ThreadLocalUtil;
 import com.learnagent.utils.ConversationType;
+import com.learnagent.utils.ProfileMergePolicy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -38,6 +40,7 @@ import java.util.Map;
 public class ProfileController {
 
     private final AIStreamingService streamingService;
+    private final ProfileUpdateService profileUpdateService;
     private final ObjectMapper objectMapper;
     private final SSEEventCache eventCache;
     private final StudentProfileMapper studentProfileMapper;
@@ -99,28 +102,16 @@ public class ProfileController {
     @PutMapping("/dimensions")
     public Result updateDimensions(@RequestBody Map<String, Object> dimensions) {
         Long userId = ThreadLocalUtil.getCurrentUser().getId();
-        StudentProfile profile = studentProfileMapper.selectOne(
-                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<StudentProfile>()
-                        .eq(StudentProfile::getUserId, userId)
-        );
         try {
-            String dimensionsJson = objectMapper.writeValueAsString(dimensions);
-            if (profile == null) {
-                profile = new StudentProfile();
-                profile.setUserId(userId);
-                profile.setDimensions(dimensionsJson);
-                profile.setVersion(1);
-                profile.setCreateTime(LocalDateTime.now());
-                profile.setUpdateTime(LocalDateTime.now());
-                studentProfileMapper.insert(profile);
-            } else {
-                Map<String, Object> existing = objectMapper.readValue(profile.getDimensions(), Map.class);
-                existing.putAll(dimensions);
-                profile.setDimensions(objectMapper.writeValueAsString(existing));
-                profile.setVersion(profile.getVersion() + 1);
-                profile.setUpdateTime(LocalDateTime.now());
-                studentProfileMapper.updateById(profile);
+            // 用户手动编辑 = 用户确认的事实，统一打上 confirmed 证据链元数据
+            for (Map.Entry<String, Object> entry : dimensions.entrySet()) {
+                if (entry.getValue() instanceof Map) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> value = (Map<String, Object>) entry.getValue();
+                    entry.setValue(ProfileMergePolicy.asUserConfirmed(value));
+                }
             }
+            updateDimensionsInternal(userId, dimensions);
             return Result.success();
         } catch (Exception e) {
             log.error("更新画像维度失败", e);
@@ -344,31 +335,48 @@ public class ProfileController {
         }).subscribeOn(Schedulers.boundedElastic()).subscribe();
     }
 
-    private void updateDimensionsInternal(Long userId, Map<String, Object> dimensions) {
-        StudentProfile profile = studentProfileMapper.selectOne(
-                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<StudentProfile>()
-                        .eq(StudentProfile::getUserId, userId)
-        );
-        try {
-            String dimensionsJson = objectMapper.writeValueAsString(dimensions);
-            if (profile == null) {
-                profile = new StudentProfile();
-                profile.setUserId(userId);
-                profile.setDimensions(dimensionsJson);
-                profile.setVersion(1);
-                profile.setCreateTime(LocalDateTime.now());
-                profile.setUpdateTime(LocalDateTime.now());
-                studentProfileMapper.insert(profile);
-            } else {
-                Map<String, Object> existing = objectMapper.readValue(profile.getDimensions(), Map.class);
-                existing.putAll(dimensions);
-                profile.setDimensions(objectMapper.writeValueAsString(existing));
-                profile.setVersion(profile.getVersion() + 1);
-                profile.setUpdateTime(LocalDateTime.now());
-                studentProfileMapper.updateById(profile);
-            }
-        } catch (Exception e) {
-            log.error("[profile_update] 维度持久化失败: userId={}", userId, e);
+    /**
+     * knowledgeBase 特殊合并：维度级字段按证据策略覆盖，但 topics 子主题逐项合并——
+     * 新观测到"MCA weak"不应抹掉既有的"Willis环 ok"。
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> mergeKnowledgeBase(Map<String, Object> existing,
+                                                   Map<String, Object> incoming) {
+        Map<String, Object> merged = new HashMap<>(existing);
+        // 维度级字段（level/description/masteredTopics/weakTopics 等）按策略覆盖
+        if (ProfileMergePolicy.shouldApply(existing, incoming)) {
+            Map<String, Object> incomingCopy = new HashMap<>(incoming);
+            incomingCopy.remove("topics");
+            merged.putAll(incomingCopy);
         }
+        // 子主题逐项合并
+        Object incomingTopics = incoming.get("topics");
+        if (incomingTopics instanceof Map) {
+            Map<String, Object> mergedTopics = new HashMap<>();
+            Object existingTopics = existing.get("topics");
+            if (existingTopics instanceof Map) {
+                mergedTopics.putAll((Map<String, Object>) existingTopics);
+            }
+            for (Map.Entry<String, Object> entry :
+                    ((Map<String, Object>) incomingTopics).entrySet()) {
+                Object topicIn = entry.getValue();
+                Object topicEx = mergedTopics.get(entry.getKey());
+                if (topicIn instanceof Map && topicEx instanceof Map) {
+                    if (ProfileMergePolicy.shouldApply(
+                            (Map<String, Object>) topicEx,
+                            (Map<String, Object>) topicIn)) {
+                        mergedTopics.put(entry.getKey(), topicIn);
+                    }
+                } else {
+                    mergedTopics.put(entry.getKey(), topicIn);
+                }
+            }
+            merged.put("topics", mergedTopics);
+        }
+        return merged;
+    }
+
+    private void updateDimensionsInternal(Long userId, Map<String, Object> dimensions) {
+        profileUpdateService.mergeAndSave(userId, dimensions);
     }
 }

@@ -647,6 +647,13 @@ public class AssessmentController {
             }
             if (changed) {
                 errorPattern.put("weakTopics", weakTopics);
+                // 评估结果回流属于"测验表现"证据；已有用户确认来源时保持用户为准
+                if (!"user_statement".equals(errorPattern.get("source"))) {
+                    errorPattern.put("source", "case_performance");
+                    errorPattern.put("confidence", 0.6);
+                    errorPattern.put("evidence", "学习评估报告识别出的薄弱点");
+                    errorPattern.put("updated_at", java.time.LocalDate.now().toString());
+                }
                 profile.setDimensions(objectMapper.writeValueAsString(dims));
                 profile.setVersion((profile.getVersion() != null ? profile.getVersion() : 0) + 1);
                 profile.setUpdateTime(LocalDateTime.now());

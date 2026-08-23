@@ -29,7 +29,8 @@ class AIStreamingServiceImplTest {
                 mock(IChatMessageService.class),
                 mock(ConversationPersistenceService.class),
                 objectMapper,
-                mock(StudentProfileMapper.class)
+                mock(StudentProfileMapper.class),
+                mock(ProfileUpdateService.class)
         );
         StringBuilder fullAnswer = new StringBuilder();
         String[] title = {null};
@@ -62,6 +63,7 @@ class AIStreamingServiceImplTest {
     ) throws Exception {
         Method method = AIStreamingServiceImpl.class.getDeclaredMethod(
                 "parseModelLine",
+                Long.class,
                 String.class,
                 Long.class,
                 String[].class,
@@ -69,6 +71,6 @@ class AIStreamingServiceImplTest {
                 StringBuilder.class
         );
         method.setAccessible(true);
-        return (Flux<String>) method.invoke(service, line, 1L, title, allInfo, fullAnswer);
+        return (Flux<String>) method.invoke(service, 1L, line, 1L, title, allInfo, fullAnswer);
     }
 }
