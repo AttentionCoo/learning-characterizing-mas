@@ -104,11 +104,12 @@ function levelLabel(val) {
   return levelLabels[val] || val || ''
 }
 
-/** 证据链来源 → 徽标文案与样式 */
-function sourceBadge(source) {
-  if (source === 'user_statement') return { label: '✅ 已确认', cls: 'source-confirmed' }
-  if (source === 'case_performance') return { label: '📝 测验证据', cls: 'source-performance' }
-  if (source === 'inferred') return { label: '🧠 推断', cls: 'source-inferred' }
+/** 证据状态五态 → 徽标文案与样式 */
+function statusBadge(status) {
+  if (status === 'confirmed') return { label: '✅ 已确认', cls: 'source-confirmed' }
+  if (status === 'observed') return { label: '📝 观测证据', cls: 'source-performance' }
+  if (status === 'inferred') return { label: '🧠 推断', cls: 'source-inferred' }
+  if (status === 'suspected') return { label: '⚠️ 存疑', cls: 'source-suspected' }
   return { label: '❓ 未知', cls: 'source-unknown' }
 }
 
@@ -144,8 +145,9 @@ const dimensionList = computed(() => {
       dim.longTerm = cleanText(value.longTerm)
       dim.currentCourse = cleanText(value.currentCourse)
       dim.weeklyHours = value.weeklyHours || 0
-      // 证据链元数据（阶段一）：来源/置信度/原话证据
+      // 证据链元数据（阶段一）：来源/状态/置信度/原话证据
       dim.source = value.source || ''
+      dim.status = value.status || value.source || ''
       dim.confidence = typeof value.confidence === 'number' ? value.confidence : null
       dim.evidence = cleanText(value.evidence)
       // 情绪状态观测时间（当前状态语义）
@@ -204,7 +206,7 @@ function copyProfile() {
     lines.push(`### ${num}、${dim.label} ${dim.icon}`)
     const parts = []
     if (dim.levelText) parts.push(`水平：${dim.levelText}`)
-    if (dim.source) parts.push(`来源：${sourceBadge(dim.source).label}`)
+    if (dim.source) parts.push(`来源：${dim.status ? statusBadge(dim.status).label : dim.source}`)
     if (dim.confidence != null) parts.push(`置信度：${dim.confidence}`)
     if (dim.description) parts.push(`描述：${dim.description}`)
     if (dim.evidence) parts.push(`证据：「${dim.evidence}」`)
@@ -626,7 +628,7 @@ function isDICOMDataUrl(dataUrl) {
               <span v-if="dim.levelText" class="dim-level-badge" :style="{ background: dim.levelColor + '18', color: dim.levelColor }">
                 {{ dim.levelText }}
               </span>
-              <span v-if="dim.source" class="dim-source-badge" :class="sourceBadge(dim.source).cls">{{ sourceBadge(dim.source).label }}</span>
+              <span v-if="dim.status" class="dim-source-badge" :class="statusBadge(dim.status).cls">{{ statusBadge(dim.status).label }}</span>
               <button class="dim-edit-btn" @click.stop="startEdit(dim)" title="编辑">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
@@ -1274,6 +1276,7 @@ function isDICOMDataUrl(dataUrl) {
   &.source-confirmed { background: rgba(16, 185, 129, 0.1); color: #10b981; }
   &.source-performance { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
   &.source-inferred { background: rgba(245, 158, 11, 0.12); color: #d97706; }
+  &.source-suspected { background: rgba(234, 88, 12, 0.12); color: #ea580c; }
   &.source-unknown { background: rgba(148, 163, 184, 0.15); color: #64748b; }
 }
 
