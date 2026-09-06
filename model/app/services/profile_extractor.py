@@ -53,6 +53,18 @@ def _derive_status(source: str, evidence: str) -> str:
     return "inferred" if evidence else "suspected"
 
 
+def _topic_mastery(status: str, ev_status: str):
+    """Learner Model 掌握度：只有测验/表现（observed）证据才产生数值 mastery；
+    用户自述（confirmed）只记录定性状态，mastery 保持未知（待客观评估）。"""
+    if ev_status != "observed":
+        return None
+    if status == "ok":
+        return 0.8
+    if status == "weak":
+        return 0.3
+    return None
+
+
 def _topic_meta():
     return {
         "status": "unknown",          # 知识掌握状态 unknown/weak/ok
@@ -60,6 +72,10 @@ def _topic_meta():
         "source": "unknown",
         "confidence": 0.2,
         "evidence": "",
+        # Learner Model 脚手架：掌握度/证据次数/最近评估时间
+        "mastery": None,
+        "evidence_count": 0,
+        "last_assessed": None,
         "updated_at": date.today().isoformat(),
     }
 
@@ -103,6 +119,12 @@ def _normalize_topics(topics: dict) -> dict:
         # 克制：非事实证据的知识掌握状态清为 unknown
         if meta["source"] not in ("user_statement", "case_performance"):
             meta["status"] = "unknown"
+        # Learner Model：mastery/evidence_count/last_assessed
+        meta["mastery"] = _topic_mastery(meta["status"], meta["ev_status"])
+        meta["evidence_count"] = 1 if (meta["evidence"] and meta["ev_status"] == "observed") else 0
+        meta["last_assessed"] = (
+            date.today().isoformat() if meta["ev_status"] == "observed" else None
+        )
         normalized[key] = {**value, **meta}
     return normalized
 

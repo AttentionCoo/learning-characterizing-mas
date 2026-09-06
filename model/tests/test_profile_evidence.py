@@ -122,6 +122,39 @@ def test_normalize_topic_invalid_status_falls_back_to_unknown():
     assert result["knowledgeBase"]["topics"]["aca"]["status"] == "unknown"
 
 
+def test_topic_mastery_only_from_observed_evidence():
+    """Learner Model：用户自述(confirmed)只记定性状态，mastery 保持未知；
+    测验表现(observed)才产生数值 mastery。"""
+    raw = {
+        "knowledgeBase": {
+            "topics": {
+                # 用户自述薄弱 → weak 但 mastery 未知
+                "mca": {"status": "weak", "source": "user_statement",
+                        "confidence": 0.9, "evidence": "MCA容易搞混"},
+                # 测验表现薄弱 → weak + mastery 0.3 + 证据计数
+                "pca": {"status": "weak", "source": "case_performance",
+                        "confidence": 0.7, "evidence": "定位题 2/5"},
+                # 测验表现掌握 → ok + mastery 0.8
+                "ica_system": {"status": "ok", "source": "case_performance",
+                               "confidence": 0.8, "evidence": "供血区判断 5/5"},
+            },
+        }
+    }
+
+    result = _normalize_dimensions(raw)
+    topics = result["knowledgeBase"]["topics"]
+
+    assert topics["mca"]["mastery"] is None
+    assert topics["mca"]["evidence_count"] == 0
+    assert topics["mca"]["last_assessed"] is None
+
+    assert topics["pca"]["mastery"] == 0.3
+    assert topics["pca"]["evidence_count"] == 1
+    assert topics["pca"]["last_assessed"] is not None
+
+    assert topics["ica_system"]["mastery"] == 0.8
+
+
 def test_status_derivation_five_states():
     raw = {
         "learningPace": {

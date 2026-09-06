@@ -26,6 +26,15 @@ _STATUS_ICON = {
     "unknown": "❓",
 }
 
+# 缺失字段 → 最有信息增益的追问（Diagnostic Interview：优先问能同时补全多个维度的问题）
+_MISSING_QUESTIONS = {
+    "knowledgeBase": "如果不看资料，你能否说出大脑中动脉主要供应哪些区域？（可同时判断知识水平与解剖薄弱点）",
+    "clinicalExperience": "你有无临床实习/见习经历？（判断临床经验维度）",
+    "learningPace": "你每周大概能投入多少小时、单次学多久？（判断学习节奏）",
+    "errorPattern": "你最近做题或看书时，最容易在哪些知识点出错或混淆？（判断易错模式）",
+    "cognitiveStyle": "除了视频，你还偏好阅读、画图还是动手练习？（补充认知风格）",
+}
+
 
 def _collect_facts(key: str, dim: Dict) -> List[str]:
     """收集该维度中有值的用户事实字段（仅 confirmed/observed 维度的非空字段）。"""
@@ -113,6 +122,17 @@ def render_profile_report(dimensions: Dict) -> str:
     if pending:
         lines.append("### ❓ 待评估（暂无证据）")
         lines.append("、".join(pending))
+        lines.append("")
+
+    # 自适应诊断式追问：优先问信息增益最高、能一次补全多个维度的缺失项
+    questions = [
+        f"- {_MISSING_QUESTIONS[k]}"
+        for k in _DIM_LABELS
+        if k in pending and k in _MISSING_QUESTIONS
+    ]
+    if questions:
+        lines.append("### 💬 建议补充（优先回答最有价值的问题）")
+        lines.extend(questions[:3])
         lines.append("")
 
     lines.append("> 本画像只记录有证据支撑的事实；待评估项会在你补充信息或完成测验后更新。")
