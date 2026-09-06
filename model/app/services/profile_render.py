@@ -112,7 +112,7 @@ def render_profile_report(dimensions: Dict) -> str:
             icon = _STATUS_ICON.get(ev_status, "✅")
             confirmed.append(f"- **{label}**：{'；'.join(facts)} {icon}")
         elif _is_pending(key, dim):
-            pending.append(label)
+            pending.append(key)  # 记录维度 key，供后续追问映射使用
 
     if confirmed:
         lines.append("### ✅ 已确认（有证据）")
@@ -121,14 +121,14 @@ def render_profile_report(dimensions: Dict) -> str:
 
     if pending:
         lines.append("### ❓ 待评估（暂无证据）")
-        lines.append("、".join(pending))
+        lines.append("、".join(_DIM_LABELS.get(k, k) for k in pending))
         lines.append("")
 
     # 自适应诊断式追问：优先问信息增益最高、能一次补全多个维度的缺失项
     questions = [
         f"- {_MISSING_QUESTIONS[k]}"
-        for k in _DIM_LABELS
-        if k in pending and k in _MISSING_QUESTIONS
+        for k in pending
+        if k in _MISSING_QUESTIONS
     ]
     if questions:
         lines.append("### 💬 建议补充（优先回答最有价值的问题）")

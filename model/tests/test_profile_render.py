@@ -48,3 +48,18 @@ def test_render_does_not_emit_inferred_enum_as_fact():
 
     assert "知识基础" in text or "待评估" in text
     assert "beginner" not in text
+
+
+def test_render_includes_adaptive_interview_questions():
+    """缺失字段应触发自适应诊断式追问（信息增益优先）。"""
+    dims = {
+        "learningGoal": {"currentCourse": "神经病学", "ev_status": "confirmed"},
+        "knowledgeBase": {"level": "", "weakTopics": ["脑血管解剖"], "ev_status": "confirmed"},
+        "clinicalExperience": {"level": "", "ev_status": "unknown"},
+        "learningPace": {"weeklyHours": 0, "speed": "", "ev_status": "unknown"},
+    }
+
+    text = render_profile_report(dims)
+
+    assert "建议补充" in text
+    assert "大脑中动脉" in text or "实习" in text or "每周" in text
