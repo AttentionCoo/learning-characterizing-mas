@@ -89,6 +89,7 @@ class LearningAgent:
                     llm=self.llm_turbo,
                     retrieve_node=self.retrieve_node,
                     reason_node=self.reason_node,
+                    report_node=self.report_node,
                 )
                 logger.info(
                     "[agent] 监督者已启用 (SUPERVISOR_TUTOR_ENABLED=true, intents=%s)",

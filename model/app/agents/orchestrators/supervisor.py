@@ -28,17 +28,22 @@ logger = logging.getLogger(__name__)
 
 SUPERVISOR_TUTOR_ENABLED = os.getenv("SUPERVISOR_TUTOR_ENABLED", "true").lower() not in ("false", "0", "no")
 SUPERVISOR_MAX_TOOL_ROUNDS = int(os.getenv("SUPERVISOR_MAX_TOOL_ROUNDS", "6"))
-# 走监督者动态派发的意图白名单（默认仅 tutor；可逗号分隔扩展：tutor,profile,resource,assessment）
+# 走监督者动态派发的意图白名单（默认全量多步任务走监督者主路由）
 SUPERVISOR_INTENTS = tuple(
-    i.strip() for i in os.getenv("SUPERVISOR_INTENTS", "tutor").split(",") if i.strip()
+    i.strip() for i in os.getenv(
+        "SUPERVISOR_INTENTS",
+        "tutor,profile,resource,assessment,learning_path",
+    ).split(",") if i.strip()
 )
 
 _COMMON_PRINCIPLES = """你可以调用以下工具（只能调用这些工具，不能虚构其他能力）：
 1. evidence_search(query)：检索权威脑卒中指南证据，回答需要循证依据的问题前应调用
 2. consult_experts(question, reason, roles)：召集指定专家并行讨论并仲裁，reason 为选人理由（必填），返回各专家发言与综合提案
-3. get_student_profile()：获取当前学生的学习画像，个性化建议前应调用
+3. dispatch_agent(name, task)：精确点将某一位专家单独处理子任务（name 从专家白名单选），返回该专家发言
+4. finalize_report(proposal, evidence)：基于综合提案与证据生成最终结构化报告（资源/评估/路径等需要结构化产出的场景必须调用）
+5. get_student_profile()：获取当前学生的学习画像，个性化建议前应调用
 
-专家白名单（consult_experts 的 roles 只能从中选择）：
+专家白名单（consult_experts/dispatch_agent 的 roles/name 只能从中选择）：
 {expert_menu}
 
 工作原则：
@@ -82,11 +87,13 @@ class TutorSupervisor:
         retrieve_node=None,
         reason_node=None,
         analysis_node=None,
+        report_node=None,
         max_tool_rounds: int = SUPERVISOR_MAX_TOOL_ROUNDS,
     ):
         self.llm = llm
         self.retrieve_node = retrieve_node
         self.reason_node = reason_node
+        self.report_node = report_node
         self.max_tool_rounds = max_tool_rounds
         self._agent = None
         # 专家白名单：从 expert_config.yaml 加载，供监督者点将与提示词菜单使用
@@ -215,6 +222,55 @@ class TutorSupervisor:
             """获取当前学生的学习画像（专业、年级、知识水平、目标等）。"""
             return profile_text or "暂无学习画像信息"
 
+        # ── 专家注册表：可寻址的 specialist agents ──
+        from app.agents.registry import AgentRegistry
+        from app.agents.tools import build_expert_tools
+
+        def _tool_factory():
+            return build_expert_tools(state, None, None)
+
+        try:
+            expert_configs = [
+                e for e in (self.expert_menu or [])
+                if isinstance(e, dict)
+            ]
+            # 重新构造含 tools/priority 等完整字段的专家配置（menu 只有 role/brief）
+            from app.config.config_loader import get_expert_manager
+            full_configs = get_expert_manager().get_experts()
+            registry = AgentRegistry(self.llm, full_configs, _tool_factory)
+        except Exception as e:
+            logger.warning(f"[supervisor] 专家注册表构建失败: {e}")
+            registry = None
+
+        @tool
+        async def dispatch_agent(name: str, task: str) -> str:
+            """精确点将某一位专家单独处理子任务。name 从专家白名单选择；task 为要处理的任务。返回该专家发言。"""
+            if not registry:
+                return "专家注册表不可用"
+            agent = registry.get(name)
+            if not agent:
+                return f"专家「{name}」不在白名单内"
+            return await agent.run(task)
+
+        @tool
+        async def finalize_report(proposal: str, evidence: str) -> str:
+            """基于综合提案与证据生成最终结构化报告（资源/评估/路径等需要结构化产出时必须调用）。"""
+            if not self.report_node:
+                return "报告生成不可用"
+            try:
+                mini_state = dict(state)
+                mini_state["proposal"] = proposal
+                mini_state["evidence"] = evidence
+                updates = await self.report_node.run(mini_state) or {}
+                report = updates.get("report", "") or ""
+                if report:
+                    workspace["proposal"] = proposal
+                    return report[:6000]
+                return "报告生成结果为空"
+            except Exception as e:
+                logger.warning(f"[supervisor] finalize_report 失败: {e}")
+                return f"报告生成失败：{e}"
+
         system_prompt = _build_system_prompt(
             state.get("intent_type", "tutor"),
             self.max_tool_rounds,
@@ -223,7 +279,7 @@ class TutorSupervisor:
         # langgraph-prebuilt 1.x 用 prompt 参数注入系统提示（0.x 时代叫 state_modifier）
         return create_react_agent(
             model=self.llm,
-            tools=[evidence_search, consult_experts, get_student_profile],
+            tools=[evidence_search, consult_experts, dispatch_agent, finalize_report, get_student_profile],
             prompt=system_prompt,
         ), workspace
 

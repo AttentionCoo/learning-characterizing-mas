@@ -143,9 +143,10 @@ def test_build_agent_registers_three_tools(monkeypatch):
     agent, workspace = supervisor._build_agent(_make_state())
     assert agent is not None
     assert "last_roles" in workspace
-    assert len(captured["tools"]) == 3
+    assert len(captured["tools"]) == 5
     names = sorted(t.name for t in captured["tools"])
-    assert names == ["consult_experts", "evidence_search", "get_student_profile"]
+    assert names == ["consult_experts", "dispatch_agent", "evidence_search",
+                     "finalize_report", "get_student_profile"]
     assert "监督者" in captured["prompt"]
     assert "教学辅导" in captured["prompt"]
     assert "专家白名单" in captured["prompt"]
