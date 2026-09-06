@@ -24,6 +24,9 @@ experts:
       - "profile"
       - "assessment"
     min_difficulty: 0.2
+    tools:
+      - "lookup_evidence"
+      - "get_student_profile"
 
   # 智能体2.5：画像校验智能体（Validation）—— 逐条证据校验
   - role: "画像校验智能体"
@@ -36,6 +39,8 @@ experts:
       - "assessment"
       - "learning_path"
     min_difficulty: 0.3
+    tools:
+      - "lookup_evidence"
 
   # 智能体3：需求分析智能体
   - role: "需求分析智能体"
@@ -47,6 +52,9 @@ experts:
       - "tutor"
       - "learning_path"
     min_difficulty: 0.3
+    tools:
+      - "lookup_evidence"
+      - "get_student_profile"
 
   # 智能体4：文档撰写智能体
   - role: "文档撰写智能体"
@@ -101,6 +109,9 @@ experts:
       - "assessment"
       - "learning_path"
     min_difficulty: 0.6
+    tools:
+      - "lookup_evidence"
+      - "retrieve_shared_memory"
 
   # 智能体9：医学影像分析智能体
   - role: "医学影像分析智能体"
@@ -113,6 +124,8 @@ experts:
       - "assessment"
       - "learning_path"
     min_difficulty: 0.3
+    tools:
+      - "lookup_evidence"
 
 synthesis:
   prompt_template: |

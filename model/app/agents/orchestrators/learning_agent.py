@@ -294,6 +294,19 @@ class LearningAgent:
                         }
                         continue
 
+                    if evt_type == "agent_tool":
+                        # 专家 Agent 的工具调用（有界 ReAct 循环内），转成 thinking 轨迹供前端审计
+                        if show_thinking:
+                            yield {
+                                "type": "thinking",
+                                "thinking": {
+                                    "step": data.get("node", "reason"),
+                                    "title": f"工具调用：{data.get('tool', '')}",
+                                    "content": str(data.get("args", ""))[:200],
+                                },
+                            }
+                        continue
+
                     logger.debug("[stream] 未识别的 custom 事件类型: %s", evt_type)
                     continue
 

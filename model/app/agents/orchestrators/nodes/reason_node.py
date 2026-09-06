@@ -114,7 +114,7 @@ class ReasonNode(BaseNode):
             instruction = expert.get("instruction")
             expert_roles.append(role)
             weight = agent_weights.get(role, 1.0)
-            tasks.append(self._ask_expert(role, instruction, case_info, weight))
+            tasks.append(self._ask_expert(role, instruction, case_info, weight, state=state, emit=_emit))
             task_roles.append(role)
 
         logger.info(f"[reason] 已创建 {len(tasks)} 个专家推理任务")
@@ -463,8 +463,9 @@ class ReasonNode(BaseNode):
             opinions.append(separator.format(role=f"{role}{weight_label}", opinion=advice))
         return "\n".join(opinions)
 
-    async def _ask_expert(self, role: str, instruction: str, case_info: str, weight: float = 1.0) -> str:
-        """让专家给出建议（支持权重衰减）"""
+    async def _ask_expert(self, role: str, instruction: str, case_info: str, weight: float = 1.0,
+                          state=None, emit=None) -> str:
+        """让专家给出建议（支持权重衰减）；配置了 tools 的专家走有界 ReAct 循环。"""
         expert_config = self.expert_manager.get_expert_by_role(role)
         system_prompt = expert_config.get("system_prompt", f"你是专业的{role}") if expert_config else f"你是专业的{role}"
 
@@ -473,6 +474,13 @@ class ReasonNode(BaseNode):
         if weight < 1.0:
             prompt += f"\n\n【注意】你在上一轮推理中部分建议被驳回，当前发言权重为{weight:.1f}，请更加谨慎地依据证据给出建议。"
 
+        tools_declared = (expert_config or {}).get("tools") or []
+        if tools_declared:
+            return await self._ask_expert_with_tools(role, system_prompt, prompt, tools_declared, state, emit)
+        return await self._ask_expert_single(role, system_prompt, prompt)
+
+    async def _ask_expert_single(self, role: str, system_prompt: str, prompt: str) -> str:
+        """单次调用专家（无工具）"""
         try:
             res = await self.llm.ainvoke([
                 SystemMessage(content=system_prompt),
@@ -482,3 +490,31 @@ class ReasonNode(BaseNode):
         except Exception as e:
             logger.error(f"{role} 推理失败: {e}")
             return f"未能获取{role}建议。"
+
+    async def _ask_expert_with_tools(self, role: str, system_prompt: str, prompt: str,
+                                     tools_declared, state, emit) -> str:
+        """带工具的专家：以 create_react_agent 跑有界 ReAct 循环（recursion_limit 上限）。"""
+        try:
+            from langgraph.prebuilt import create_react_agent
+            from app.agents.tools import build_expert_tools
+
+            all_tools = build_expert_tools(state or {}, self.shared_memory_system, emit)
+            tools = [all_tools[t] for t in tools_declared if t in all_tools]
+            if not tools:
+                return await self._ask_expert_single(role, system_prompt, prompt)
+
+            agent = create_react_agent(self.llm, tools=tools, prompt=system_prompt)
+            result = await agent.ainvoke(
+                {"messages": [HumanMessage(content=prompt)]},
+                config={"recursion_limit": 8},
+            )
+            messages = result.get("messages", []) or []
+            # 取最后一条有实质内容的 AI 消息作为最终发言
+            for msg in reversed(messages):
+                content = getattr(msg, "content", "")
+                if isinstance(content, str) and content.strip():
+                    return content.strip()
+            return f"未能获取{role}建议。"
+        except Exception as e:
+            logger.error(f"[reason] {role} 带工具推理失败，回退单次调用: {e}")
+            return await self._ask_expert_single(role, system_prompt, prompt)
