@@ -28,10 +28,12 @@ logger = logging.getLogger(__name__)
 
 SUPERVISOR_TUTOR_ENABLED = os.getenv("SUPERVISOR_TUTOR_ENABLED", "true").lower() not in ("false", "0", "no")
 SUPERVISOR_MAX_TOOL_ROUNDS = int(os.getenv("SUPERVISOR_MAX_TOOL_ROUNDS", "6"))
+# 走监督者动态派发的意图白名单（默认仅 tutor；可逗号分隔扩展：tutor,profile,resource,assessment）
+SUPERVISOR_INTENTS = tuple(
+    i.strip() for i in os.getenv("SUPERVISOR_INTENTS", "tutor").split(",") if i.strip()
+)
 
-_SUPERVISOR_SYSTEM_PROMPT = """你是脑卒中医学教育辅导的监督者（supervisor）智能体。你负责回答脑卒中（中风）相关的学习问题。
-
-你可以调用以下工具（只能调用这些工具，不能虚构其他能力）：
+_COMMON_PRINCIPLES = """你可以调用以下工具（只能调用这些工具，不能虚构其他能力）：
 1. evidence_search(query)：检索权威脑卒中指南证据，回答需要循证依据的问题前应调用
 2. consult_experts(question, reason, roles)：召集指定专家并行讨论并仲裁，reason 为选人理由（必填），返回各专家发言与综合提案
 3. get_student_profile()：获取当前学生的学习画像，个性化建议前应调用
@@ -45,15 +47,31 @@ _SUPERVISOR_SYSTEM_PROMPT = """你是脑卒中医学教育辅导的监督者（s
   用一句话说明选人理由（该理由会展示给学生作为可审计依据）
 - 引用指南证据时标注来源；证据不足时先检索再回答
 - 回答用中文、结构清晰；工具调用不超过 {max_rounds} 轮，信息足够后直接给出最终答案
-- 最终输出是给学生的完整回答，不要再输出工具调用指令
-- 最终回答请按以下结构组织（可依问题类型微调，但必须包含）：
+- 最终输出是给学生的完整回答，不要再输出工具调用指令"""
+
+_INTENT_GUIDANCE = {
+    "tutor": """- 最终回答请按以下结构组织（可依问题类型微调，但必须包含）：
   1. **解答**：循序渐进地解答学生问题
   2. **关键要点**：列出核心概念与知识点
   3. **易错提示**：指出常见误区和易错点
   4. **拓展思考**：引导学生深入思考的延伸问题
   5. **下一步建议**：建议接下来学习的内容或练习
   6. **学习激励**：最后用一小段积极正向的话鼓励学生坚持学习
-  （若已召集专家会诊，请整合专家发言、会诊收敛结论与仲裁裁决后按上述结构输出）"""
+  （若已召集专家会诊，请整合专家发言、会诊收敛结论与仲裁裁决后按上述结构输出）""",
+    "profile": """- 当前为画像构建/更新场景：你的职责是"访谈式追问"，找出画像缺失的证据并提问，
+  不要自己下画像结论；画像事实由画像抽取/校验专家产出，你只负责提出最有价值、最少必要的追问。
+- 最终回答是"下一步该补充什么信息"的追问，而非画像总结。""",
+    "resource": """- 当前为学习资源生成场景：先分析学习需求，必要时 consult_experts 召集需求/文档/题目
+  专家，最终给出资源生成方案与要点。""",
+    "assessment": """- 当前为学习评估场景：结合学生画像与学习表现给出评估，必要时 consult_experts 召集
+  评估/题目专家，最终给出评估结论与改进建议。""",
+}
+
+
+def _build_system_prompt(intent_type: str, max_rounds: int, expert_menu_text: str) -> str:
+    common = _COMMON_PRINCIPLES.format(max_rounds=max_rounds, expert_menu=expert_menu_text)
+    guidance = _INTENT_GUIDANCE.get(intent_type, _INTENT_GUIDANCE["tutor"])
+    return f"你是脑卒中医学教育{intent_type}场景的监督者（supervisor）智能体。你负责动态调度专家完成任务。\n\n{common}\n{guidance}"
 
 
 class TutorSupervisor:
@@ -197,9 +215,10 @@ class TutorSupervisor:
             """获取当前学生的学习画像（专业、年级、知识水平、目标等）。"""
             return profile_text or "暂无学习画像信息"
 
-        system_prompt = _SUPERVISOR_SYSTEM_PROMPT.format(
-            max_rounds=self.max_tool_rounds,
-            expert_menu=self._expert_menu_text(),
+        system_prompt = _build_system_prompt(
+            state.get("intent_type", "tutor"),
+            self.max_tool_rounds,
+            self._expert_menu_text(),
         )
         # langgraph-prebuilt 1.x 用 prompt 参数注入系统提示（0.x 时代叫 state_modifier）
         return create_react_agent(

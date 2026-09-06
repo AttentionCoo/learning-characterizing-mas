@@ -82,6 +82,18 @@ def test_parse_messages_strips_markdown_fence():
     assert messages[0]["kind"] == "finding"
 
 
+def test_parse_messages_preserves_evidence_field():
+    """证据三段式：object/revise/finding 消息携带 evidence 字段。"""
+    orch = _make_orchestrator([], [])
+    raw = json.dumps([
+        {"kind": "object", "to": "某专家", "content": "该结论证据不足",
+         "evidence": "用户原话只说了偏好视频，未证明是视觉型"},
+    ], ensure_ascii=False)
+    messages = orch._parse_messages("A", raw, 1)
+
+    assert messages[0]["evidence"] == "用户原话只说了偏好视频，未证明是视觉型"
+
+
 def test_parse_messages_cleans_round_suffix_in_to():
     orch = _make_orchestrator([], [])
     raw = json.dumps([

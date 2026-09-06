@@ -155,12 +155,12 @@ debate:
 
     请输出 0~2 条结构化消息（JSON 数组），可选类型：
     - {"kind":"question","to":"某专家","content":"向该专家提问的问题"}
-    - {"kind":"object","to":"某专家","content":"指出对方观点的问题并给出证据"}
+    - {"kind":"object","to":"某专家","content":"指出对方观点的问题","evidence":"引用被质疑的原文或你的反证依据"}
     - {"kind":"reply","to":"某专家","content":"回答对方对你的提问"}
-    - {"kind":"revise","to":"__all__","content":"基于讨论修正你的最终意见"}
-    - {"kind":"finding","to":"__all__","content":"补充一条你认为重要的新发现"}
+    - {"kind":"revise","to":"__all__","content":"基于讨论修正你的最终意见","evidence":"修正依据"}
+    - {"kind":"finding","to":"__all__","content":"补充一条你认为重要的新发现","evidence":"支撑证据或'无'"}
 
-    如果确实没有新的信息增量可贡献，输出 []。只输出 JSON 数组，不要任何解释。
+    object/revise/finding 必须带 evidence（引用原文或明确写"无"）；question/reply 可不带。
   debate_prompt_template: |
     你目前参与第{round}轮辩论。以下是其他智能体的观点和之前的辩论记录：
 

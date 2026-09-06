@@ -242,6 +242,7 @@ class DialogueOrchestrator:
             kind = str(item.get("kind", "")).strip()
             to = str(item.get("to", "__all__")).strip() or "__all__"
             content = str(item.get("content", "")).strip()
+            evidence = str(item.get("evidence", "")).strip()
             if kind not in MSG_KINDS or not content:
                 continue
             # 清洗 to 字段：LLM 可能把黑板条目标签（如「（第0轮）」）带进收件人
@@ -252,6 +253,8 @@ class DialogueOrchestrator:
                 "round": round_num,
                 "kind": kind,
                 "content": content[:800],
+                # 证据三段式：Evidence（引用原文/无）+ 冲突/决策隐含在 kind 与 content 中
+                "evidence": evidence[:300] if evidence else "",
             })
         return messages[:2]
 

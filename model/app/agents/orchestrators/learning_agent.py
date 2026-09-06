@@ -12,7 +12,7 @@ from app.agents.orchestrators.nodes.validate_node import ValidateNode
 from app.agents.orchestrators.nodes.report_node import ReportNode
 from app.agents.orchestrators.nodes.planner_node import PlannerNode
 from app.agents.orchestrators.nodes.executor_node import ExecutorNode
-from app.agents.orchestrators.supervisor import TutorSupervisor, SUPERVISOR_TUTOR_ENABLED
+from app.agents.orchestrators.supervisor import TutorSupervisor, SUPERVISOR_TUTOR_ENABLED, SUPERVISOR_INTENTS
 from app.agents.utils.reasoning_trace import build_node_trace
 from app.agents.utils.json_parser import JsonParser
 from app.utils.error_codes import build_error_event, format_error_log
@@ -83,16 +83,19 @@ class LearningAgent:
         self.planner_node = PlannerNode(self.llm_turbo)
         self.executor_node = ExecutorNode(self.retrieve_node, self.analysis_node, self.reason_node)
         self.supervisor_node = None
-        if SUPERVISOR_TUTOR_ENABLED:
+        if SUPERVISOR_TUTOR_ENABLED and SUPERVISOR_INTENTS:
             try:
                 self.supervisor_node = TutorSupervisor(
                     llm=self.llm_turbo,
                     retrieve_node=self.retrieve_node,
                     reason_node=self.reason_node,
                 )
-                logger.info("[agent] Tutor 监督者已启用 (SUPERVISOR_TUTOR_ENABLED=true)")
+                logger.info(
+                    "[agent] 监督者已启用 (SUPERVISOR_TUTOR_ENABLED=true, intents=%s)",
+                    ",".join(SUPERVISOR_INTENTS),
+                )
             except Exception as e:
-                logger.warning(f"[agent] 监督者初始化失败，tutor 回退 planner 链路: {e}")
+                logger.warning(f"[agent] 监督者初始化失败，回退 planner 链路: {e}")
 
         self._event_log_counts = {}
 
@@ -271,7 +274,7 @@ class LearningAgent:
                         continue
 
                     if evt_type == "agent_msg":
-                        # M2 结构化消息：专家间定向对话（谁 → 谁：内容）
+                        # M2 结构化消息：专家间定向对话（谁 → 谁：内容），带证据三段式 evidence
                         yield {
                             "type": "agent_msg",
                             "node": data.get("node", "reason"),
@@ -280,6 +283,7 @@ class LearningAgent:
                             "round": data.get("round", 0),
                             "kind": data.get("kind", ""),
                             "content": data.get("content", ""),
+                            "evidence": data.get("evidence", ""),
                         }
                         continue
 
@@ -360,6 +364,7 @@ class LearningAgent:
                                     "round": msg.get("round", 0),
                                     "kind": msg.get("kind", ""),
                                     "content": msg.get("content", ""),
+                                    "evidence": msg.get("evidence", ""),
                                 }
                             supervisor_blackboard = output.get("blackboard") or []
                             supervisor_convergence = output.get("convergence") or ""

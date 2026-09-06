@@ -10,6 +10,7 @@ from app.agents.orchestrators.nodes.reason_node import ReasonNode
 from app.agents.orchestrators.nodes.report_node import ReportNode
 from app.agents.orchestrators.nodes.validate_node import ValidateNode
 from app.agents.orchestrators.nodes.vision_node import VisionAnalysisNode
+from app.agents.orchestrators.supervisor import SUPERVISOR_INTENTS
 from app.config.config_loader import get_validation_manager
 
 logger = logging.getLogger(__name__)
@@ -184,8 +185,8 @@ class LearningGraphBuilder:
             return "generate_report"
         if t == "knowledge":
             return "knowledge"
-        # tutor 试点：监督者优先，未启用时走 planner 主链路
-        if t == "tutor" and self.supervisor_node:
+        # 监督者动态派发：白名单内的意图走 supervisor，未启用时走 planner 主链路
+        if t in SUPERVISOR_INTENTS and self.supervisor_node:
             return "supervisor"
         valid_types = {"profile", "resource", "tutor", "assessment", "learning_path", "consultation"}
         if t in valid_types:
