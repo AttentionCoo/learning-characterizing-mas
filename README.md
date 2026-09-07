@@ -11,12 +11,12 @@ LearnAgent 是一个以多智能体编排为 AI 内核的完整应用系统，�
 | 视角 | 定位 |
 |:---|:---|
 | 项目性质 | 应用系统（脑卒中医学教育学习产品），非框架或平台 |
-| AI 架构 | 多智能体系统（multi-agent system）：10 位领域专家 + 证据仲裁 + 监督者（Supervisor） |
-| 智能核心 | 编排主导（orchestration-centric）：LangGraph 状态图 + 规划-执行-校验（RePlan）循环 + 专家间对话/黑板协作 |
-| agent 形态 | 角色型领域专家 + 有界自主的监督者试点，非通用自主 agent 框架 |
-| 自主程度 | 有界自主：RePlan 迭代上限、工具白名单、意图门控与医学红线保留在编排层外层 |
+| AI 架构 | 混合式多智能体系统（bounded multi-agent system）：**层级监督者动态派发** + 10 位可寻址专家 Agent + 证据仲裁 |
+| 智能核心 | **监督者主路由**：Supervisor（LLM + 5 工具）决定下一步调哪个专家/工具；Planner-执行-校验（RePlan）降级为确定性回退 |
+| agent 形态 | 带工具的 Specialist Agent（专家注册表，可精确点将）+ 有界自主的监督者，非通用自主 agent 框架 |
+| 自主程度 | 有界自主：recursion_limit、工具白名单、意图门控与医学红线保留在监督者外层 |
 
-一句话概括：**编排为骨架、专家 agent 为能力单元**——编排层决定"怎么走"（规划 → 执行 → 校验 → 重规划），agent 层决定"谁来干"（10 位专家通过结构化消息会诊、共享黑板协作），外层再封装完整的业务产品（Vue 前端 / Spring Boot 后端 / FastAPI 模型服务），并以「画像 → 学习 → 评估 → 优化」闭环贯穿全部模块。画像遵循**证据纪律**：只记录有证据支撑的事实，推断与教学建议永不写入长期画像。
+一句话概括：**监督者为脑、专家为手**——监督者 LLM 动态决定"下一步调谁"（检索 / 多专家会诊 / 精确点将单挑 / 结构化报告），10 位专家是注册表里可寻址、带工具、有会话记忆的 Specialist Agent，外层再封装完整业务产品（Vue / Spring Boot / FastAPI），并以「画像 → 学习 → 评估 → 优化」闭环贯穿。画像遵循**证据纪律**：只记录有证据支撑的事实，推断与教学建议永不写入长期画像。
 
 ## 当前功能
 
@@ -26,7 +26,7 @@ LearnAgent 是一个以多智能体编排为 AI 内核的完整应用系统，�
 | 学习画像 | 对话构建 8 维证据链画像：每个维度携带 `source/confidence/evidence/updated_at` 与五态 `ev_status`（已确认/观测/推断/存疑/未知），知识基础细化为脑血管解剖 9 子主题（Willis环/ICA/MCA/ACA/PCA/椎基底/脑干/小脑/静脉）；**只记录有证据的事实，无证据字段一律"待评估"**；画像由证据渲染器确定性生成，杜绝模型二次推断污染；支持一键复制为 Markdown |
 | 资源生成 | 统一生成入口支持课程讲解文档、思维导图、练习题、拓展阅读、临床案例、资源设计方案 6 种互斥类型 |
 | 学习路径 | 生成路径、查询详情、更新步骤和任务进度、资源推荐、动态调整 |
-| 智能辅导 | 多轮 SSE 问答、图片和代码片段上下文；tutor 意图由监督者 LLM（三工具白名单）试点调度；最终回答按「解答/关键要点/易错提示/拓展思考/下一步建议/学习激励」六章节结构化输出 |
+| 智能辅导 | 多轮 SSE 问答、图片和代码片段上下文；**监督者（5 工具）全局调度**多智能体；最终回答按「解答/关键要点/易错提示/拓展思考/下一步建议/学习激励」六章节结构化输出 |
 | 学习评估 | 综合、知识、技能、进度等评估模式，五维雷达展示，行为记录与路径优化；评估薄弱点自动回流画像 |
 | 代码辅助 | Python 执行；代码补全、错误诊断、优化建议、代码讲解四种互斥模式 |
 | 医学多模态 | Qwen VL 影像分析、病例流式分析、多图对比、DICOM 元数据与预览、检验报告和处方 OCR |
@@ -52,7 +52,7 @@ flowchart LR
 |:---|:---|:---|
 | 接入层 | HTTP/SSE 路由与鉴权 | FastAPI 路由（stream/medical/code/profile/evaluation/admin）、`verify_token`（HS256+HS512 共享 JWT） |
 | 治理层 | 并发与流式协议 | `InferenceSlot` 推理信号量（默认 10）、自实现 `EventSourceResponse`（心跳 + 帧编码） |
-| 编排层 | 规划-执行-监督-会诊 | `PlannerNode` / `ExecutorNode` / `TutorSupervisor` / `DialogueOrchestrator`（专家对话+黑板） / LangGraph 状态图（RePlan 循环） |
+| 编排层 | 监督-调度-会诊 | `TutorSupervisor`（全局监督者，5 工具动态派发）/ `AgentRegistry`（专家注册表）/ `PlannerNode` / `ExecutorNode`（回退）/ `DialogueOrchestrator`（专家对话+黑板）/ LangGraph 状态图 |
 | 能力层 | 领域能力 | 10 位专家（访谈/抽取/校验/需求/文档/题目/审核/激励/仲裁/影像，YAML 配置 + 规则/LM 选人）、Hybrid RAG（Chroma + 自实现 BM25 + 医学评分重排）、共享记忆、医学多模态（Qwen VL/OCR/DICOM） |
 | 运行时 | 资源与外部依赖 | `runtime.resources`、ThreadPoolExecutor、AsyncTaskManager、DashScope Qwen、ChromaDB |
 
@@ -61,20 +61,25 @@ flowchart LR
 ```mermaid
 flowchart LR
     Input["结构化业务请求"] --> Intent["IntentNode\n功能与领域校验"]
-    Intent -->|"多步任务\n画像/资源/路径/评估"| Planner["PlannerNode\n结构化计划(pydantic白名单)"]
-    Planner --> Executor["ExecutorNode\n按计划执行 analyze/retrieve/expert_reason"]
-    Executor --> Validate["ValidateNode\n规则与反思(RePlanner)"]
-    Validate -->|"通过"| Report["ReportNode\n模式化报告"]
+    Intent -->|"多步任务\n画像/资源/路径/评估/tutor"| Super["Supervisor\n监督者动态派发\n(5 工具)"]
+    Super -->|"evidence_search"| Ret["检索\nHybrid RAG + 记忆"]
+    Super -->|"dispatch_agent(name,task)"| Single["单挑某专家\nSpecialist Agent"]
+    Super -->|"consult_experts"| Debate["多专家会诊\n辩论 + 证据仲裁"]
+    Super -->|"finalize_report"| Report["ReportNode\n结构化报告"]
+    Intent -.->|"监督者关闭/异常"| Planner["PlannerNode\n回退链路"]
+    Planner --> Executor["ExecutorNode\nanalyze/retrieve/expert_reason"] --> Validate["ValidateNode"]
+    Validate -->|"通过"| Report
     Validate -->|"需重新规划"| Planner
-    Intent -->|"有图片"| Vision["VisionNode\n影像门控"] --> Planner
-    Intent -.->|"tutor 试点"| Supervisor["Supervisor\n三工具白名单调度"] --> Report
+    Intent -->|"有图片"| Vision["VisionNode\n影像门控"]
 ```
 
-- **Planner 主链路**：多步任务（画像/资源/路径/评估）先由 `PlannerNode` 用轻量模型生成结构化执行计划（步骤类型白名单：analyze/retrieve/expert_reason/finalize，最多 6 步），`ExecutorNode` 按计划复用既有能力逐步执行；校验失败时反馈回到规划器**重新规划**（RePlan 循环），规划失败自动回退默认计划（等价于升级前固定管线）。
+- **监督者主路由（Supervisor Pattern）**：多步任务（画像/资源/路径/评估/tutor）默认全部由监督者 LLM（qwen-turbo）动态调度——5 个工具 `evidence_search`（循证检索）/ `consult_experts`（多专家会诊+仲裁）/ `dispatch_agent`（精确点将单挑）/ `finalize_report`（结构化报告生成）/ `get_student_profile`（画像查询），监督者自主决定下一步；Planner-执行-校验（RePlan）保留为确定性回退链路（监督者关闭或不可用时兜底）。意图门控与医学红线保留在监督者外层。
+- **专家注册表（AgentRegistry）**：10 位专家实例化为可寻址的 Specialist Agent（`agents/registry.py`，各自带 system_prompt + 工具 + 请求内会话记忆），监督者可按名精确点将（`dispatch_agent`），或召集多位会诊（`consult_experts`）。
+- **Planner 回退链路**：当监督者被 `SUPERVISOR_TUTOR_ENABLED=false` 关闭时，多步任务回退固定管线——`PlannerNode` 用轻量模型生成结构化执行计划（步骤类型白名单：analyze/retrieve/expert_reason/finalize，最多 6 步），`ExecutorNode` 按计划执行；校验失败反馈回规划器**重新规划**（RePlan 循环），规划失败自动回退默认计划。
 - **推理链全量流式打印**：外层运行器基于 `astream(stream_mode=["custom","updates","messages"])` 三通道——节点进入（node_start）、执行步骤进度、专家名单与逐位专家完整发言（完成即推）、专家间结构化对话、会诊黑板、辩论记录与仲裁裁决、综合提案与风险批判、质量校验反馈（含驳回原因）全部实时流式到达前端推理轨迹；最终报告逐字流式输出。
 - **专家会诊（M2 结构化消息 + M3 黑板，Evidence-based）**：专家完成初稿后互见彼此观点，通过 `DialogueOrchestrator` 输出结构化消息（question/reply/revise/object/finding，**已取消"认同"类型**，硬规则要求每条消息产出信息增量——新证据/冲突/缺失信息/决策）定向提问互答（多轮、异议驱动提前收敛），并在黑板共享工作区写入/修订发现；教学总监从黑板提炼收敛结论，仲裁智能体改为 **Claim/Evidence Arbitration**：逐条判定每条主张的证据充分性（学生原话→ACCEPT / 测验表现→ACCEPT / 间接推断→ACCEPT AS INFERRED / 无证据→REJECT），明确"多方一致 ≠ 有证据"。对话消息经 `agent_msg` 事件、黑板快照经 `blackboard` 事件流式送达前端。
-- **Supervisor 试点**：tutor 意图由监督者 LLM（qwen-turbo）在工具白名单内自主调度——`evidence_search`（循证检索）、`consult_experts`（多专家辩论仲裁）、`get_student_profile`（画像查询），迭代轮数受上限约束；意图门控与医学红线保留在监督者外层。可用 `SUPERVISOR_TUTOR_ENABLED=false` 切回 Planner 链路。
-- **监督者自主点将**：`consult_experts(question, reason, roles)` 允许监督者从专家白名单（`expert_config.yaml` 动态生成菜单）自主选择 2~5 位专家并说明选人理由（reason 必填），工具内白名单过滤，留空回退意图+难度规则编排；点将名单、选人理由与各专家完整发言经 `experts` 事件流式送达前端推理轨迹。
+- **监督者自主调度（工具白名单）**：`SUPERVISOR_INTENTS` 白名单（默认 tutor,profile,resource,assessment,learning_path）内意图走监督者，迭代轮数受上限约束；监督者自主决定调用 `evidence_search` / `consult_experts` / `dispatch_agent` / `finalize_report` / `get_student_profile`。可用 `SUPERVISOR_TUTOR_ENABLED=false` 切回 Planner 回退链路。
+- **监督者自主点将**：`consult_experts(question, reason, roles)` 允许监督者从专家白名单（`expert_config.yaml` 动态生成菜单）自主选择 2~5 位专家并说明选人理由（reason 必填），工具内白名单过滤，留空回退意图+难度规则编排；`dispatch_agent(name, task)` 则可精确点将单挑某位专家。点将名单、选人理由与各专家完整发言经 `experts` 事件流式送达前端推理轨迹。
 - 模型层从 `model/app/config/expert_config.yaml` 加载 10 位专家：画像访谈（Interview，找缺失证据提问）、画像抽取（Extraction，提取 Claim+Evidence）、画像校验（Validation，逐条证据校验）、需求分析、文档撰写、题目生成、质量审核、学习激励（Learning Coach，不参与画像建模）、仲裁和医学影像分析智能体。
 - **画像证据纪律（Evidence Discipline）**：画像维度携带证据链（`source/confidence/evidence/updated_at` + 五态 `ev_status`）；枚举/数值字段（level/type/errorType/weeklyHours 等）只在有用户原话或测验表现证据时保留，否则清空为"待评估"；**只从用户陈述提取事实**，助手报告的"建议/推荐"绝不作为画像事实来源。
 - **画像报告 = 证据渲染器**：`profile_build` 的最终回答由 `profile_dimensions` 确定性渲染（已确认 ✅ / 待评估 ❓），不再由 LLM 自由生成，杜绝 Report Generator 二次推断污染 Profile。
@@ -178,7 +183,8 @@ docker compose ps
 
 | 变量 | 默认 | 用途 |
 |:---|:---|:---|
-| `SUPERVISOR_TUTOR_ENABLED` | `true` | tutor 意图是否走监督者试点（`false` 切回 Planner 主链路） |
+| `SUPERVISOR_TUTOR_ENABLED` | `true` | 监督者开关（`false` 所有意图回退 Planner 主链路） |
+| `SUPERVISOR_INTENTS` | `tutor,profile,resource,assessment,learning_path` | 走监督者动态派发的意图白名单（逗号分隔） |
 | `SUPERVISOR_MAX_TOOL_ROUNDS` | `6` | 监督者单轮问答的最大工具调用轮数 |
 | `MAX_CONCURRENT_TASKS` | `10` | 模型推理并发上限，超出后新请求等待并返回 503 |
 | `INFERENCE_SLOT_TIMEOUT` | `5` | 推理槽位获取超时（秒） |
@@ -288,7 +294,7 @@ learning-multi-agent-system/
 - `DocumentController.java` 为空，当前没有 `/api/documents/**` REST 接口；文献由模型层从本地 PDF 知识库加载。
 - 模型层只有统一推理入口 `/model/get_result` 校验内部 JWT；其他专用路由依赖网络隔离，不应映射公网端口。
 - 推理链中途事件（执行步骤/专家发言/专家对话/黑板/提案/校验反馈）经 `stream_mode="custom"` 实时推送；监督者（Supervisor）内部推理文本不外泄，其最终答案在节点完成时整体替换输出。
-- 监督者（Supervisor）当前仅试点 tutor 意图，其他意图走 Planner 主链路；可通过 `SUPERVISOR_TUTOR_ENABLED=false` 关闭。
+- 监督者（Supervisor）为全局主路由（默认覆盖 tutor/profile/resource/assessment/learning_path），可通过 `SUPERVISOR_INTENTS` 缩减或 `SUPERVISOR_TUTOR_ENABLED=false` 整体关闭回退 Planner 链路。
 - 专家会诊（结构化消息 + 黑板）默认启用（`debate.dialogue_enabled=true`），可在 `expert_config.yaml` 关闭回退旧广播辩论；`agree` 认同消息类型已取消，专家发言必须产出信息增量。
 - 画像写入遵循写边界：只有用户陈述、测验表现、校验通过的证据与仲裁结果可写入画像；Proposal / 教学建议 / 报告 / 激励文本 / LLM 推断均不写回画像（画像报告由证据渲染器确定性生成）。
 - 会话列表/历史查询等面向用户的对话历史接口已移除（前端不再展示历史对话，每次进入默认新对话）；画像自动更新等内部机制依赖的消息持久化仍保留。
