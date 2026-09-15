@@ -119,6 +119,17 @@ public class ProfileController {
         }
     }
 
+    /**
+     * 清空当前用户的学习画像（维度置空、摘要清空、版本递增）。
+     * 画像行保留以便审计，前端清空后回到"尚未构建画像"状态。
+     */
+    @DeleteMapping
+    public Result clearProfile() {
+        Long userId = ThreadLocalUtil.getCurrentUser().getId();
+        profileUpdateService.clearProfile(userId);
+        return Result.success();
+    }
+
     private Flux<ServerSentEvent<String>> buildSSEStream(Long userId, QuestionParam questionParam,
                                                           String upstreamToken, String lastEventId,
                                                           String reportMode) {

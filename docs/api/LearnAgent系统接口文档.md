@@ -148,6 +148,7 @@ data: {"type":"token","content":"增量内容"}
 | POST | `/api/profile/conversation` | 是 | 画像对话并在结束后异步更新画像 |
 | GET | `/api/profile` | 否 | 获取当前用户最新画像 |
 | PUT | `/api/profile/dimensions` | 否 | 合并更新画像维度 |
+| DELETE | `/api/profile` | 否 | **清空当前用户画像**（维度置空、摘要清空、版本递增，画像行保留以便审计） |
 | GET | `/api/profile/conversation/{talkId}` | 否 | 获取指定画像对话历史 |
 | GET | `/api/profile/conversations` | 否 | 获取画像对话列表 |
 | DELETE | `/api/profile/conversation/{talkId}` | 否 | 删除画像对话 |

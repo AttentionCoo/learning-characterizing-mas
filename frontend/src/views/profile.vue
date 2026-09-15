@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted, onUpdated, nextTick, computed, reactive } from 'vue'
 import { renderMarkdown } from '@/utils/markdown'
-import { getProfileAPI, profileStreamAPI, updateProfileDimensionsAPI } from '@/api/profile'
+import { getProfileAPI, profileStreamAPI, updateProfileDimensionsAPI, clearProfileAPI } from '@/api/profile'
 import AppAvatar from '@/components/AppAvatar.vue'
 import ImageUploader from '@/components/ImageUploader.vue'
 import ReasoningTrace from '@/components/ReasoningTrace.vue'
@@ -195,6 +195,38 @@ async function fetchProfile() {
 const copied = ref(false)
 let copyTimer = null
 const profileUpdateNote = ref('')
+// 清空画像：两步确认（避免误触），3 秒内未确认自动复位
+const clearing = ref(false)
+const confirmClear = ref(false)
+let clearTimer = null
+
+function requestClearProfile() {
+  if (clearing.value) return
+  if (!confirmClear.value) {
+    confirmClear.value = true
+    clearTimeout(clearTimer)
+    clearTimer = setTimeout(() => { confirmClear.value = false }, 3000)
+    return
+  }
+  clearTimeout(clearTimer)
+  confirmClear.value = false
+  clearProfile()
+}
+
+async function clearProfile() {
+  clearing.value = true
+  try {
+    await clearProfileAPI()
+    profile.value = null
+    editingDim.value = null
+    profileUpdateNote.value = '画像已清空，可在左侧对话中重新构建'
+  } catch (e) {
+    console.error('清空画像失败', e)
+    profileUpdateNote.value = '清空画像失败，请稍后重试'
+  } finally {
+    clearing.value = false
+  }
+}
 
 /** 一键复制学习画像为 Markdown 文本 */
 function copyProfile() {
@@ -584,6 +616,22 @@ function isDICOMDataUrl(dataUrl) {
               <polyline points="20 6 9 17 4 12"/>
             </svg>
             <span>{{ copied ? '已复制' : '复制画像' }}</span>
+          </button>
+          <button
+            v-if="hasProfile"
+            class="profile-clear-btn"
+            :class="{ confirming: confirmClear }"
+            :disabled="clearing"
+            :title="confirmClear ? '再次点击确认清空画像' : '清空学习画像'"
+            @click="requestClearProfile"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+              <path d="M10 11v6M14 11v6"/>
+              <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+            </svg>
+            <span>{{ clearing ? '清空中...' : confirmClear ? '确认清空？' : '清空画像' }}</span>
           </button>
           <button
             class="profile-collapse-btn"
@@ -1122,6 +1170,40 @@ function isDICOMDataUrl(dataUrl) {
     border-color: #10b981;
     background: rgba(16, 185, 129, 0.1);
     color: #10b981;
+  }
+}
+
+.profile-clear-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-medium);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+
+  &:hover:not(:disabled) {
+    border-color: #ef4444;
+    background: rgba(239, 68, 68, 0.08);
+    color: #ef4444;
+  }
+
+  &.confirming {
+    border-color: #ef4444;
+    background: rgba(239, 68, 68, 0.12);
+    color: #dc2626;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 }
 

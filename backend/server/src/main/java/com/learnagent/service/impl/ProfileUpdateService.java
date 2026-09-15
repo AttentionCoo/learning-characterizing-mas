@@ -92,6 +92,29 @@ public class ProfileUpdateService {
     }
 
     /**
+     * 清空用户学习画像：维度置空、摘要清空、版本递增（保留画像行以便审计版本）。
+     */
+    public void clearProfile(Long userId) {
+        StudentProfile profile = studentProfileMapper.selectOne(
+                new LambdaQueryWrapper<StudentProfile>()
+                        .eq(StudentProfile::getUserId, userId)
+        );
+        if (profile == null) {
+            return;
+        }
+        try {
+            profile.setDimensions("{}");
+            profile.setRawSummary(null);
+            profile.setVersion((profile.getVersion() != null ? profile.getVersion() : 0) + 1);
+            profile.setUpdateTime(LocalDateTime.now());
+            studentProfileMapper.updateById(profile);
+            log.info("[profile_clear] 画像已清空: userId={}", userId);
+        } catch (Exception e) {
+            log.error("[profile_clear] 画像清空失败: userId={}", userId, e);
+        }
+    }
+
+    /**
      * 应用会话产生的画像更新候选（Profile Update Candidate）。
      * 候选经模型层证据过滤，此处再经状态感知合并，最终决定是否写入。
      */
