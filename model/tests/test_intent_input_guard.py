@@ -318,7 +318,10 @@ async def test_valid_wrapped_assessment_input_is_allowed():
 
 @pytest.mark.parametrize(
     ("report_mode", "intent_type"),
-    _REPORT_MODE_TO_INTENT.items(),
+    [
+        (m, i) for m, i in _REPORT_MODE_TO_INTENT.items()
+        if m != "profile_build"  # 画像为多轮对话，跳过确定性预检交由带上下文的 LLM 守卫
+    ],
 )
 @pytest.mark.asyncio
 async def test_every_preset_function_rejects_plain_unrelated_input(
@@ -336,6 +339,46 @@ async def test_every_preset_function_rejects_plain_unrelated_input(
     result = await node.run(_state(report_mode, intent_type, "今天天气怎么样"))
 
     assert result["intent_type"] == "non_stroke"
+
+
+@pytest.mark.parametrize("case_text", [
+    "脑卒中",
+    "40个小时，8个小时",
+    "有",
+    "MCA和PCA容易搞混",
+])
+@pytest.mark.asyncio
+async def test_profile_followup_fragments_pass_guard(case_text):
+    """画像多轮对话中对追问的简短回答（片段）不应被确定性预检误拒。"""
+    node = _node_with_result({
+        "type": "profile",
+        "difficulty_score": 0.2,
+        "is_stroke_related": False,
+        "is_function_related": True,
+        "reason": "结合上下文属于画像补充信息",
+    })
+
+    result = await node.run(_state("profile_build", "profile", case_text))
+
+    assert result["intent_type"] == "profile"
+    assert result["input_rejection_message"] == ""
+
+
+@pytest.mark.asyncio
+async def test_profile_unrelated_still_rejected_by_llm_guard():
+    """画像模式跳过确定性预检后，LLM 守卫仍应拦截真正无关的输入。"""
+    node = _node_with_result({
+        "type": "profile",
+        "difficulty_score": 0.2,
+        "is_stroke_related": False,
+        "is_function_related": False,
+        "reason": "在问天气，与学习画像无关",
+    })
+
+    result = await node.run(_state("profile_build", "profile", "今天天气怎么样"))
+
+    assert result["intent_type"] == "non_stroke"
+    assert "学习画像构建" in result["input_rejection_message"]
 
 
 _VALID_MODE_INPUTS = {
