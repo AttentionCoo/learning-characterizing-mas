@@ -139,6 +139,26 @@ export function sseStreamRequest(url, params, { onChunk, onThinking, timeout = 3
           onThinking(trace)
           return
         }
+        if (type === 'expert_speech' && onThinking) {
+          // 单个专家发言完成即到达。phase 与 experts 一致，由 useReasoningTrace
+          // 逐条聚合进同一个「参与专家」区块——实时长出，而不是散成多个步骤。
+          const trace = {
+            phase: 'experts',
+            step: data.node || 'reason',
+            title: '',
+            content: '',
+            sources: [],
+            expertSpeech: {
+              role: data.role || '',
+              content: data.content || '',
+              index: data.index ?? null,
+              total: data.total ?? null,
+            },
+          }
+          console.info('[AI 专家发言]', `${data.role || ''}（第 ${data.index}/${data.total} 位）`)
+          onThinking(trace)
+          return
+        }
         if (type === 'agent_msg' && onThinking) {
           const trace = {
             phase: 'agent_msg',

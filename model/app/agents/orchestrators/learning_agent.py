@@ -3,6 +3,7 @@ import asyncio
 from typing import AsyncGenerator, Dict
 from langchain_core.messages import SystemMessage, HumanMessage
 from app.agents.core.schema import LearningState
+from app.agents.event_sink import set_event_sink, reset_event_sink
 from app.agents.orchestrators.clinical_graph import LearningGraphBuilder
 from app.agents.orchestrators.nodes.intent_node import IntentNode, REPORT_MODE_TO_INTENT
 from app.agents.orchestrators.nodes.analysis_node import AnalysisNode
@@ -18,6 +19,27 @@ from app.agents.utils.json_parser import JsonParser
 from app.utils.error_codes import build_error_event, format_error_log
 
 logger = logging.getLogger(__name__)
+
+# 队列哨兵：图驱动任务结束 / 图驱动任务抛错
+_GRAPH_END = object()
+_GRAPH_ERROR = object()
+
+
+async def _drain_events(queue: "asyncio.Queue"):
+    """从事件队列实时抽取 (mode, chunk)，直到收到结束哨兵。
+
+    图在独立任务中驱动、事件经队列抽取，这样嵌套在监督者工具内运行的 ReasonNode
+    也能边跑边把事件送出来；用「哨兵」而非 `queue.empty()` 判断结束，避免消费快于
+    生产时提前退出。
+    """
+    while True:
+        mode, chunk = await queue.get()
+        if mode is _GRAPH_END:
+            return
+        if mode is _GRAPH_ERROR:
+            raise chunk
+        yield mode, chunk
+
 
 _NODE_LABELS: Dict[str, str] = {
     "intent": "正在判断问题类型...",
@@ -189,6 +211,13 @@ class LearningAgent:
             "convergence": "",
         }
         streamed_nodes: set = set()
+        # 实时事件计数：用于判断监督者输出里的补发是否仍有必要。
+        # 实时通道打通后，专家发言/会诊对话/黑板会在产生当下送达，补发只作兜底，
+        # 否则同一批内容会出现两次。
+        live_events = {"experts": 0, "expert_speech": 0, "agent_msg": 0, "blackboard": 0}
+        # 在 try 之前初始化：finally 中的清理必须能在任何失败路径下安全执行
+        sink_token = None
+        graph_task = None
 
         try:
             import uuid
@@ -199,11 +228,32 @@ class LearningAgent:
             }
 
             # 三通道流式：custom=节点中途事件 / updates=节点完成输出 / messages=LLM token 流
-            async for mode, chunk in self.graph.astream(
-                initial_state,
-                config=config,
-                stream_mode=["custom", "updates", "messages"],
-            ):
+            #
+            # 图放在独立任务里驱动、事件经队列实时抽取：ReasonNode 在监督者路径下是被
+            # consult_experts 工具手工调用的，LangGraph 的 stream writer 不可用，
+            # 只有「队列 + 请求级 sink」才能让专家发言/会诊对话/黑板/仲裁边产生边送达，
+            # 而不是等工具返回后整块补发。
+            event_queue: asyncio.Queue = asyncio.Queue()
+
+            def _event_sink(payload: dict):
+                event_queue.put_nowait(("custom", payload))
+
+            async def _drive_graph():
+                try:
+                    async for item in self.graph.astream(
+                        initial_state,
+                        config=config,
+                        stream_mode=["custom", "updates", "messages"],
+                    ):
+                        await event_queue.put(item)
+                except Exception as exc:  # noqa: BLE001 - 交给消费端按原异常路径处理
+                    await event_queue.put((_GRAPH_ERROR, exc))
+                finally:
+                    await event_queue.put((_GRAPH_END, None))
+
+            sink_token = set_event_sink(_event_sink)
+            graph_task = asyncio.create_task(_drive_graph())
+            async for mode, chunk in _drain_events(event_queue):
                 # ── custom：推理链中途事件（逐步骤/逐专家/辩论/提案/校验反馈实时打印）──
                 if mode == "custom":
                     data = chunk
@@ -225,6 +275,7 @@ class LearningAgent:
 
                     if evt_type == "experts_selected":
                         # 专家名单先行到达（发言随后逐条到达）；selection_reason 为点将/编排依据
+                        live_events["experts"] += 1
                         yield {
                             "type": "experts",
                             "node": data.get("node", "reason"),
@@ -237,16 +288,16 @@ class LearningAgent:
                         continue
 
                     if evt_type == "expert_done":
-                        # 每位专家完成即流式推送其完整发言
+                        # 每位专家完成即实时送达。用独立事件类型而非 thinking，
+                        # 前端好把它逐条聚合进「参与专家」区块，而不是散成多个步骤。
+                        live_events["expert_speech"] += 1
                         yield {
-                            "type": "thinking",
-                            "thinking": {
-                                "step": data.get("node", "reason"),
-                                "title": "专家发言 {}/{}：{}".format(
-                                    data.get("index"), data.get("total"), data.get("role")
-                                ),
-                                "content": data.get("content", ""),
-                            },
+                            "type": "expert_speech",
+                            "node": data.get("node", "reason"),
+                            "role": data.get("role", ""),
+                            "content": data.get("content", ""),
+                            "index": data.get("index"),
+                            "total": data.get("total"),
                         }
                         continue
 
@@ -278,6 +329,7 @@ class LearningAgent:
 
                     if evt_type == "agent_msg":
                         # M2 结构化消息：专家间定向对话（谁 → 谁：内容），带证据三段式 evidence
+                        live_events["agent_msg"] += 1
                         yield {
                             "type": "agent_msg",
                             "node": data.get("node", "reason"),
@@ -292,6 +344,7 @@ class LearningAgent:
 
                     if evt_type == "blackboard":
                         # M3 黑板共享工作区：最终发现 + 收敛结论 + 仲裁
+                        live_events["blackboard"] += 1
                         yield {
                             "type": "blackboard",
                             "node": data.get("node", "reason"),
@@ -341,10 +394,14 @@ class LearningAgent:
                             selection_reason = (
                                 output.get("supervisor_reason") or "；".join(reasons)
                             )
-                            if roles:
+                            # 以下三处补发均为**兜底**：实时通道打通后，专家名单/发言、
+                            # 会诊对话、黑板会在产生当下送达（见 live_events 计数），
+                            # 若仍补发会出现整份重复。仅当实时事件一个都没到（例如
+                            # ReasonNode 未被调用或 sink 不可用）才走补发。
+                            if roles and not live_events["experts"]:
                                 logger.info(
-                                    "[event] ✅ 推送 supervisor 点将结果到前端 (roles=%s, advices=%s, reason=%s)",
-                                    roles, len(advices), selection_reason[:40],
+                                    "[event] supervisor 点将结果补发（实时通道未产出生效，roles=%s, advices=%s）",
+                                    roles, len(advices),
                                 )
                                 yield {
                                     "type": "experts",
@@ -355,23 +412,27 @@ class LearningAgent:
                                     "arbitration": "",
                                     "selection_reason": selection_reason,
                                 }
-                            # supervisor 路径下 reason_node 嵌套运行，其 custom 事件不冒泡；
-                            # 这里从 supervisor 输出补发 agent_msg/blackboard 对话事件
                             supervisor_msgs = output.get("agent_messages") or []
-                            for msg in supervisor_msgs:
-                                yield {
-                                    "type": "agent_msg",
-                                    "node": "supervisor",
-                                    "from": msg.get("from", ""),
-                                    "to": msg.get("to", ""),
-                                    "round": msg.get("round", 0),
-                                    "kind": msg.get("kind", ""),
-                                    "content": msg.get("content", ""),
-                                    "evidence": msg.get("evidence", ""),
-                                }
+                            if supervisor_msgs and not live_events["agent_msg"]:
+                                logger.info(
+                                    "[event] supervisor 会诊对话补发（%d 条）", len(supervisor_msgs)
+                                )
+                                for msg in supervisor_msgs:
+                                    yield {
+                                        "type": "agent_msg",
+                                        "node": "supervisor",
+                                        "from": msg.get("from", ""),
+                                        "to": msg.get("to", ""),
+                                        "round": msg.get("round", 0),
+                                        "kind": msg.get("kind", ""),
+                                        "content": msg.get("content", ""),
+                                        "evidence": msg.get("evidence", ""),
+                                    }
                             supervisor_blackboard = output.get("blackboard") or []
                             supervisor_convergence = output.get("convergence") or ""
-                            if supervisor_blackboard or supervisor_convergence:
+                            if not live_events["blackboard"] and (
+                                supervisor_blackboard or supervisor_convergence
+                            ):
                                 yield {
                                     "type": "blackboard",
                                     "node": "supervisor",
@@ -428,6 +489,11 @@ class LearningAgent:
         except Exception as e:
             logger.error(f"学习推理管线异常 | {format_error_log(e)}")
             yield build_error_event(e, talk_id=None)
+        finally:
+            # 恢复请求级 sink 并收掉图驱动任务，避免 ContextVar 泄漏到同一上下文的后续请求
+            reset_event_sink(sink_token)
+            if graph_task is not None and not graph_task.done():
+                graph_task.cancel()
 
     def _build_node_done_event(self, name: str, output: dict) -> Dict:
         summary = self._node_summary(name, output)

@@ -2,6 +2,7 @@ import logging
 import asyncio
 from typing import Dict, List, Tuple
 from app.agents.core.schema import LearningState
+from app.agents.event_sink import get_event_sink
 from app.agents.orchestrators.nodes.base import BaseNode
 from app.agents.orchestrators.nodes.reason_debate import DebateOrchestrator
 from app.agents.orchestrators.nodes.reason_dialogue import DialogueOrchestrator
@@ -144,6 +145,16 @@ class ReasonNode(BaseNode):
             writer = None
 
         def _emit(payload: dict):
+            # 优先走请求级 sink：监督者路径下 ReasonNode 是被 consult_experts 工具手工调用的，
+            # 此时 LangGraph 的 stream writer 不可用（custom 事件不冒泡），只有经 sink 才能
+            # 在专家发言/会诊对话/黑板/仲裁产生的当下实时外传，而不是等工具返回后一次性补发。
+            sink = get_event_sink()
+            if sink is not None:
+                try:
+                    sink(payload)
+                    return
+                except Exception as e:
+                    logger.debug(f"[reason] 实时事件外传失败，回退 stream writer: {e}")
             if writer is None:
                 return
             try:
