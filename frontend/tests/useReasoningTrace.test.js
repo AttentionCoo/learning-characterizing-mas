@@ -229,3 +229,43 @@ test('未知 channel 的流式事件被忽略，不产生空条目', () => {
   appendReasoningEvent(streamEvent('text_delta', 'unknown-channel', { delta: 'x' }), 'chat')
   assert.equal(reasoningEntries.value.length, 0)
 })
+
+test('辩论发言逐 token 写入同一条辩论区块，且不同发言不串字', () => {
+  const { reasoningEntries, appendReasoningEvent } = useReasoningTrace()
+  appendReasoningEvent(streamEvent('text_start', 'debate:1:需求分析智能体'), 'chat')
+  appendReasoningEvent(streamEvent('text_start', 'debate:1:医学影像分析智能体'), 'chat')
+  appendReasoningEvent(streamEvent('text_delta', 'debate:1:需求分析智能体', { delta: '我主张' }), 'chat')
+  appendReasoningEvent(streamEvent('text_delta', 'debate:1:医学影像分析智能体', { delta: '我反对' }), 'chat')
+  appendReasoningEvent(streamEvent('text_delta', 'debate:1:需求分析智能体', { delta: '先讲机制' }), 'chat')
+
+  assert.equal(reasoningEntries.value.length, 1)
+  const debate = reasoningEntries.value[0].debate
+  assert.equal(debate.rounds, 1)
+  assert.equal(debate.history.length, 2)
+  assert.equal(debate.history.find((h) => h.role === '需求分析智能体').content, '我主张先讲机制')
+  assert.equal(debate.history.find((h) => h.role === '医学影像分析智能体').content, '我反对')
+  assert.equal(reasoningEntries.value[0].streaming, true)
+
+  appendReasoningEvent(streamEvent('text_end', 'debate:1:需求分析智能体', { content: '我主张先讲机制' }), 'chat')
+  assert.equal(reasoningEntries.value[0].streaming, true, '另一位仍在生成，区块应保持生成中')
+  appendReasoningEvent(streamEvent('text_end', 'debate:1:医学影像分析智能体', { content: '我反对' }), 'chat')
+  assert.equal(reasoningEntries.value[0].streaming, false)
+})
+
+test('权威 debate 事件就地覆盖流式辩论条目，不产生第二块', () => {
+  const { reasoningEntries, appendReasoningEvent } = useReasoningTrace()
+  appendReasoningEvent(streamEvent('text_start', 'debate:1:A'), 'chat')
+  appendReasoningEvent(streamEvent('text_delta', 'debate:1:A', { delta: '草稿' }), 'chat')
+  appendReasoningEvent(streamEvent('text_end', 'debate:1:A', { content: '草稿' }), 'chat')
+  appendReasoningEvent({
+    phase: 'debate', step: 'reason',
+    debate: { rounds: 2, history: [{ round: 1, role: 'A', content: '权威全文' }], arbitration: '裁决', skipped: false },
+  }, 'chat')
+
+  assert.equal(reasoningEntries.value.length, 1)
+  const entry = reasoningEntries.value[0]
+  assert.equal(entry.debate.rounds, 2)
+  assert.equal(entry.debate.history[0].content, '权威全文')
+  assert.equal(entry.debate.arbitration, '裁决')
+  assert.equal(entry.streaming, false)
+})

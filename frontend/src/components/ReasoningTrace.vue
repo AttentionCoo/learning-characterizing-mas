@@ -345,6 +345,7 @@ function blockIcon(kind) {
                 <span class="blk-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path v-for="(d, i) in ICONS.scale" :key="i" :d="d" /></svg></span>
                 <span class="blk-label">多专家辩论</span>
                 <span class="blk-count">{{ entry.debate.rounds }} 条发言</span>
+                <span v-if="entry.streaming" class="blk-tag">生成中</span>
               </div>
               <div class="stream">
                 <div
@@ -358,7 +359,7 @@ function blockIcon(kind) {
                       <span class="msg-from">{{ item.role }}</span>
                       <span v-if="item.round" class="msg-round">R{{ item.round }}</span>
                     </div>
-                    <p class="msg-text">{{ item.content }}</p>
+                    <p class="msg-text">{{ item.content }}<span v-if="item.streaming" class="stream-caret" aria-hidden="true"></span></p>
                   </div>
                 </div>
               </div>

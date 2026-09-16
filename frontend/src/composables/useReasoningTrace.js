@@ -48,7 +48,46 @@ export function useReasoningTrace() {
     }
 
     const kind = { synthesis: 'synthesis', convergence: 'convergence', arbitration: 'arbitration' }[channel]
-    if (!kind) return null
+    if (!kind) {
+      // 辩论发言：debate:<轮>:<角色>。每位发言一条独立 channel（并行辩论时
+      // 各写各的 history 条目，不会互相串字），权威 debate 事件到达后整体覆盖。
+      const debateMatch = /^debate:(\d+):(.+)$/.exec(channel)
+      if (!debateMatch) return null
+      const round = Number(debateMatch[1])
+      const role = debateMatch[2]
+      let entry = findTailEntry(list, scope, (e) => e.phase === 'debate')
+      if (!entry) {
+        entry = {
+          key: `${scope}:debate:${eventSequence++}`,
+          scope,
+          step: 'reason',
+          phase: 'debate',
+          title: '多专家辩论与仲裁',
+          content: '',
+          sources: [],
+          experts: null,
+          messages: null,
+          blackboard: null,
+          debate: { rounds: round, history: [], arbitration: '', skipped: false, skipReason: '' },
+        }
+        list.push(entry)
+      }
+      if (!Array.isArray(entry.debate.history)) entry.debate.history = []
+      let item = entry.debate.history.find((h) => h.round === round && h.role === role)
+      if (!item) {
+        item = { round, role, content: '' }
+        entry.debate.history.push(item)
+      }
+      if (round > (entry.debate.rounds || 0)) entry.debate.rounds = round
+      const syncStreaming = () => {
+        entry.streaming = entry.debate.history.some((h) => h.streaming)
+      }
+      return {
+        begin() { item.streaming = true; syncStreaming() },
+        append(delta) { item.content = (item.content || '') + delta },
+        finish(full) { if (full) item.content = full; item.streaming = false; syncStreaming() },
+      }
+    }
     let entry = findTailEntry(list, scope, (e) => e.phase === 'verdict' && e.verdictKind === kind)
     if (!entry) {
       entry = {
@@ -191,6 +230,24 @@ export function useReasoningTrace() {
           })
         }
         entry.title = event.title || entry.title
+        return
+      }
+    }
+
+    // 辩论结果（权威）：若流式辩论条目已存在，就地覆盖，避免整块重复出现
+    if (event.phase === 'debate' && event.debate) {
+      const entry = findTailEntry(list, scope, (e) => e.phase === 'debate' && !!e.debate)
+      if (entry) {
+        if (event.debate.rounds) entry.debate.rounds = event.debate.rounds
+        if (Array.isArray(event.debate.history) && event.debate.history.length) {
+          entry.debate.history = event.debate.history
+        }
+        if (event.debate.arbitration) entry.debate.arbitration = event.debate.arbitration
+        if (event.debate.skipped) {
+          entry.debate.skipped = true
+          entry.debate.skipReason = event.debate.skipReason || ''
+        }
+        entry.streaming = false
         return
       }
     }
