@@ -56,7 +56,7 @@ async def test_ask_expert_with_tools_uses_react_agent(monkeypatch):
 
     node = SimpleNamespace(llm="fake", shared_memory_system=None)
 
-    async def fake_single(role, sp, prompt):
+    async def fake_single(role, sp, prompt, emit=None):
         return "single"
 
     node._ask_expert_single = fake_single
@@ -74,7 +74,7 @@ async def test_ask_expert_with_tools_falls_back_when_no_tool_available(monkeypat
     node = SimpleNamespace(llm="fake", shared_memory_system=None)
     calls = []
 
-    async def fake_single(role, sp, prompt):
+    async def fake_single(role, sp, prompt, emit=None):
         calls.append(role)
         return "single"
 

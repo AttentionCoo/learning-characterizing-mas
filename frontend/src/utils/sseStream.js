@@ -139,6 +139,25 @@ export function sseStreamRequest(url, params, { onChunk, onThinking, timeout = 3
           onThinking(trace)
           return
         }
+        if ((type === 'text_start' || type === 'text_delta' || type === 'text_end') && onThinking) {
+          // 逐 token 文本流式：channel 决定这份文本落到哪个区块
+          // （expert:<角色> / synthesis / convergence / arbitration）
+          onThinking({
+            phase: 'stream',
+            step: data.node || 'reason',
+            title: data.label || '',
+            content: '',
+            sources: [],
+            textStream: {
+              stage: type,
+              channel: data.channel || '',
+              label: data.label || '',
+              delta: data.delta || '',
+              content: data.content || '',
+            },
+          })
+          return
+        }
         if (type === 'expert_speech' && onThinking) {
           // 单个专家发言完成即到达。phase 与 experts 一致，由 useReasoningTrace
           // 逐条聚合进同一个「参与专家」区块——实时长出，而不是散成多个步骤。

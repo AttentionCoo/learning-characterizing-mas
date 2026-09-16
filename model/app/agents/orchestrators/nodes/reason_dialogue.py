@@ -15,6 +15,8 @@ from typing import Dict, List
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from app.agents.text_stream import stream_llm_text
+
 logger = logging.getLogger(__name__)
 
 # 消息类型白名单（与前端 agent_msg 事件 kind 对齐）
@@ -50,6 +52,7 @@ class DialogueOrchestrator:
         existing_history: List[Dict],
         existing_messages: List[Dict],
         existing_blackboard: List[Dict],
+        emit=None,
     ) -> Dict:
         """执行 初稿互见 → 多轮结构化对话（M2）→ 黑板收敛（M3）→ 仲裁。"""
         debate_history = list(existing_history)
@@ -120,10 +123,10 @@ class DialogueOrchestrator:
                 break
 
         # M3 收敛：教学总监从黑板最终发现 + 消息历史生成收敛摘要（写入黑板 summary）
-        convergence = await self._run_convergence(blackboard, agent_messages, case_info, evidence)
+        convergence = await self._run_convergence(blackboard, agent_messages, case_info, evidence, emit)
 
         arbitration_result = await self._run_arbitration(
-            agent_messages, blackboard, debate_history, evidence
+            agent_messages, blackboard, debate_history, evidence, emit
         )
 
         return {
@@ -285,6 +288,7 @@ class DialogueOrchestrator:
         agent_messages: List[Dict],
         case_info: str,
         evidence: str,
+        emit=None,
     ) -> str:
         """教学总监视角收敛：从黑板最终发现 + 对话消息提炼共识点。"""
         findings = [e for e in blackboard if e.get("kind") == "finding"]
@@ -311,11 +315,13 @@ class DialogueOrchestrator:
             f"【对话消息摘要】\n{msg_summary if msg_summary else '（无）'}"
         )
         try:
-            res = await self.llm_synthesis.ainvoke([
-                SystemMessage(content="你是严谨的教学总监，擅长在多专家会诊后收敛共识。"),
-                HumanMessage(content=prompt),
-            ])
-            content = getattr(res, "content", "") or ""
+            content = await stream_llm_text(
+                self.llm_synthesis,
+                [SystemMessage(content="你是严谨的教学总监，擅长在多专家会诊后收敛共识。"),
+                 HumanMessage(content=prompt)],
+                emit=emit, channel="convergence", label="教学总监收敛结论", node="reason",
+            )
+            content = (content or "").strip()
             logger.info(f"[dialogue] 收敛结论: {content[:120]}")
             return content[:2000]
         except Exception as e:
@@ -328,6 +334,7 @@ class DialogueOrchestrator:
         blackboard: List[Dict],
         debate_history: List[Dict],
         evidence: str,
+        emit=None,
     ) -> str:
         """仲裁智能体依据对话记录 + 黑板裁决。"""
         arbitrator_config = self.expert_manager.get_expert_by_role(self.arbitrator_role)
@@ -365,11 +372,11 @@ class DialogueOrchestrator:
         )
 
         try:
-            res = await self.llm_synthesis.ainvoke([
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=prompt),
-            ])
-            content = getattr(res, "content", "")
+            content = await stream_llm_text(
+                self.llm_synthesis,
+                [SystemMessage(content=system_prompt), HumanMessage(content=prompt)],
+                emit=emit, channel="arbitration", label="仲裁裁决", node="reason",
+            )
             logger.info("[dialogue] ══════════ 仲裁裁决 ══════════")
             logger.info(f"[dialogue][仲裁·裁决] {self.arbitrator_role}:\n{content}")
             return content

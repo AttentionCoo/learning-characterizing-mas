@@ -147,3 +147,85 @@ test('不同 scope 的专家发言不聚合', () => {
   }, 'chat2')
   assert.equal(reasoningEntries.value.length, 2)
 })
+
+// ── 逐 token 文本流式（text_start/delta/end）──
+
+function streamEvent(stage, channel, payload = {}) {
+  return {
+    phase: 'stream', step: 'reason',
+    textStream: { stage, channel, label: payload.label || '', delta: payload.delta || '', content: payload.content || '' },
+  }
+}
+
+test('专家发言逐 token 写入「参与专家」区块', () => {
+  const { reasoningEntries, appendReasoningEvent } = useReasoningTrace()
+  appendReasoningEvent(streamEvent('text_start', 'expert:需求分析智能体', { label: '需求分析智能体' }), 'chat')
+  appendReasoningEvent(streamEvent('text_delta', 'expert:需求分析智能体', { delta: '先讲' }), 'chat')
+  appendReasoningEvent(streamEvent('text_delta', 'expert:需求分析智能体', { delta: '解剖' }), 'chat')
+
+  assert.equal(reasoningEntries.value.length, 1)
+  const advice = reasoningEntries.value[0].experts.advices[0]
+  assert.equal(advice.role, '需求分析智能体')
+  assert.equal(advice.content, '先讲解剖')
+  assert.equal(advice.streaming, true, '流式中应带标记，供光标显示')
+
+  appendReasoningEvent(streamEvent('text_end', 'expert:需求分析智能体', { content: '先讲解剖（完整）' }), 'chat')
+  assert.equal(advice.content, '先讲解剖（完整）', 'text_end 以权威全文收口')
+  assert.equal(advice.streaming, false)
+})
+
+test('多位专家的 token 互不串台（并发流式）', () => {
+  const { reasoningEntries, appendReasoningEvent } = useReasoningTrace()
+  appendReasoningEvent(streamEvent('text_start', 'expert:A'), 'chat')
+  appendReasoningEvent(streamEvent('text_start', 'expert:B'), 'chat')
+  appendReasoningEvent(streamEvent('text_delta', 'expert:A', { delta: 'a1' }), 'chat')
+  appendReasoningEvent(streamEvent('text_delta', 'expert:B', { delta: 'b1' }), 'chat')
+  appendReasoningEvent(streamEvent('text_delta', 'expert:A', { delta: 'a2' }), 'chat')
+
+  const advices = reasoningEntries.value[0].experts.advices
+  assert.equal(advices.find((x) => x.role === 'A').content, 'a1a2')
+  assert.equal(advices.find((x) => x.role === 'B').content, 'b1')
+})
+
+test('专家发言流式后到达的权威发言覆盖而非重复追加', () => {
+  const { reasoningEntries, appendReasoningEvent } = useReasoningTrace()
+  appendReasoningEvent(streamEvent('text_start', 'expert:A'), 'chat')
+  appendReasoningEvent(streamEvent('text_delta', 'expert:A', { delta: '草稿' }), 'chat')
+  appendReasoningEvent(streamEvent('text_end', 'expert:A', { content: '草稿' }), 'chat')
+  appendReasoningEvent({
+    phase: 'experts', step: 'reason',
+    expertSpeech: { role: 'A', content: '权威全文', index: 1, total: 1 },
+  }, 'chat')
+
+  const advices = reasoningEntries.value[0].experts.advices
+  assert.equal(advices.length, 1, '不得出现两条同角色发言')
+  assert.equal(advices[0].content, '权威全文')
+})
+
+test('综合 / 收敛 / 仲裁各自流式成独立区块且不互相覆盖', () => {
+  const { reasoningEntries, appendReasoningEvent } = useReasoningTrace()
+  appendReasoningEvent(streamEvent('text_start', 'synthesis', { label: '综合提案与风险批判' }), 'chat')
+  appendReasoningEvent(streamEvent('text_delta', 'synthesis', { delta: '提案…' }), 'chat')
+  appendReasoningEvent(streamEvent('text_start', 'convergence', { label: '教学总监收敛结论' }), 'chat')
+  appendReasoningEvent(streamEvent('text_delta', 'convergence', { delta: '共识…' }), 'chat')
+  appendReasoningEvent(streamEvent('text_start', 'arbitration', { label: '仲裁裁决' }), 'chat')
+  appendReasoningEvent(streamEvent('text_delta', 'arbitration', { delta: '裁决…' }), 'chat')
+
+  assert.equal(reasoningEntries.value.length, 3)
+  const [syn, conv, arb] = reasoningEntries.value
+  assert.equal(syn.verdictKind, 'synthesis')
+  assert.equal(syn.verdictText, '提案…')
+  assert.equal(conv.verdictKind, 'convergence')
+  assert.equal(conv.verdictText, '共识…')
+  assert.equal(arb.verdictKind, 'arbitration')
+  assert.equal(arb.verdictText, '裁决…')
+  assert.equal(arb.verdictLabel, '仲裁裁决')
+  assert.equal(arb.phase, 'verdict')
+})
+
+test('未知 channel 的流式事件被忽略，不产生空条目', () => {
+  const { reasoningEntries, appendReasoningEvent } = useReasoningTrace()
+  appendReasoningEvent(streamEvent('text_start', 'unknown-channel'), 'chat')
+  appendReasoningEvent(streamEvent('text_delta', 'unknown-channel', { delta: 'x' }), 'chat')
+  assert.equal(reasoningEntries.value.length, 0)
+})

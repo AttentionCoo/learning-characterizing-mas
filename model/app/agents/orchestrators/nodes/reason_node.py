@@ -3,6 +3,7 @@ import asyncio
 from typing import Dict, List, Tuple
 from app.agents.core.schema import LearningState
 from app.agents.event_sink import get_event_sink
+from app.agents.text_stream import stream_llm_text, stream_react_agent_text
 from app.agents.orchestrators.nodes.base import BaseNode
 from app.agents.orchestrators.nodes.reason_debate import DebateOrchestrator
 from app.agents.orchestrators.nodes.reason_dialogue import DialogueOrchestrator
@@ -250,7 +251,7 @@ class ReasonNode(BaseNode):
             logger.info(f"[reason] 启动对话-黑板编排 (M2 结构化消息 + M3 黑板)")
             dialogue_results = await self.dialogue.run(
                 expert_roles, results, case_info, state.get('evidence', ''),
-                debate_history, agent_messages, blackboard,
+                debate_history, agent_messages, blackboard, emit=_emit,
             )
             debate_history = dialogue_results["debate_history"]
             arbitration_result = dialogue_results["arbitration_result"]
@@ -286,7 +287,8 @@ class ReasonNode(BaseNode):
         elif self.debate_enabled and len(expert_roles) > 1 and run_debate:
             logger.info(f"[reason] 启动辩论-仲裁模式（回退）")
             debate_results = await self.debate.run(
-                expert_roles, results, case_info, state.get('evidence', ''), debate_history
+                expert_roles, results, case_info, state.get('evidence', ''), debate_history,
+                emit=_emit,
             )
             debate_history = debate_results["debate_history"]
             arbitration_result = debate_results["arbitration_result"]
@@ -345,8 +347,10 @@ class ReasonNode(BaseNode):
         logger.info(f"[reason] 开始调用LLM进行意见综合 (模型: {getattr(self.llm_synthesis, 'model_name', 'unknown')})")
 
         try:
-            synthesis_res = await self.llm_synthesis.ainvoke([HumanMessage(content=synthesis_prompt)])
-            content = getattr(synthesis_res, "content", str(synthesis_res))
+            content = await stream_llm_text(
+                self.llm_synthesis, [HumanMessage(content=synthesis_prompt)],
+                emit=_emit, channel="synthesis", label="综合提案与风险批判", node="reason",
+            )
             logger.info(f"[reason] 意见综合完成，结果长度: {len(content)}")
         except Exception as e:
             logger.error(f"[reason] 意见综合失败: {type(e).__name__} - {str(e)}")
@@ -562,16 +566,19 @@ class ReasonNode(BaseNode):
         tools_declared = (expert_config or {}).get("tools") or []
         if tools_declared:
             return await self._ask_expert_with_tools(role, system_prompt, prompt, tools_declared, state, emit)
-        return await self._ask_expert_single(role, system_prompt, prompt)
+        return await self._ask_expert_single(role, system_prompt, prompt, emit)
 
-    async def _ask_expert_single(self, role: str, system_prompt: str, prompt: str) -> str:
-        """单次调用专家（无工具）"""
+    async def _ask_expert_single(self, role: str, system_prompt: str, prompt: str, emit=None) -> str:
+        """单次调用专家（无工具）。逐 token 流式，前端可看到该专家边想边打字。"""
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=prompt),
+        ]
         try:
-            res = await self.llm.ainvoke([
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=prompt)
-            ])
-            return getattr(res, "content", "")
+            return await stream_llm_text(
+                self.llm, messages,
+                emit=emit, channel=f"expert:{role}", label=role, node="reason",
+            )
         except Exception as e:
             logger.error(f"{role} 推理失败: {e}")
             return f"未能获取{role}建议。"
@@ -586,20 +593,19 @@ class ReasonNode(BaseNode):
             all_tools = build_expert_tools(state or {}, self.shared_memory_system, emit)
             tools = [all_tools[t] for t in tools_declared if t in all_tools]
             if not tools:
-                return await self._ask_expert_single(role, system_prompt, prompt)
+                return await self._ask_expert_single(role, system_prompt, prompt, emit)
 
             agent = create_react_agent(self.llm, tools=tools, prompt=system_prompt)
-            result = await agent.ainvoke(
+            # 逐 token 流式：只推最终发言，跳过工具调用参数生成阶段的分片
+            speech = await stream_react_agent_text(
+                agent,
                 {"messages": [HumanMessage(content=prompt)]},
+                emit=emit, channel=f"expert:{role}", label=role, node="reason",
                 config={"recursion_limit": 8},
             )
-            messages = result.get("messages", []) or []
-            # 取最后一条有实质内容的 AI 消息作为最终发言
-            for msg in reversed(messages):
-                content = getattr(msg, "content", "")
-                if isinstance(content, str) and content.strip():
-                    return content.strip()
+            if speech:
+                return speech
             return f"未能获取{role}建议。"
         except Exception as e:
             logger.error(f"[reason] {role} 带工具推理失败，回退单次调用: {e}")
-            return await self._ask_expert_single(role, system_prompt, prompt)
+            return await self._ask_expert_single(role, system_prompt, prompt, emit)

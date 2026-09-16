@@ -9,6 +9,8 @@ from typing import Dict, List
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from app.agents.text_stream import stream_llm_text
+
 logger = logging.getLogger(__name__)
 
 
@@ -37,6 +39,7 @@ class DebateOrchestrator:
         case_info: str,
         evidence: str,
         existing_history: List[Dict],
+        emit=None,
     ) -> Dict:
         """执行多轮辩论-仲裁流程。"""
         debate_history = list(existing_history)
@@ -60,7 +63,7 @@ class DebateOrchestrator:
             debate_tasks = []
             debate_task_roles = []
             for role in debate_roles:
-                debate_tasks.append(self._ask_debater(role, debate_context, round_num))
+                debate_tasks.append(self._ask_debater(role, debate_context, round_num, emit))
                 debate_task_roles.append(role)
 
             debate_round_results = await asyncio.gather(*debate_tasks)
@@ -78,7 +81,7 @@ class DebateOrchestrator:
                 f"[debate] 辩论第 {round_num} 轮完成，{len(debate_round_results)} 位专家发言"
             )
 
-        arbitration_result = await self._run_arbitration(debate_history, evidence)
+        arbitration_result = await self._run_arbitration(debate_history, evidence, emit)
 
         return {
             "debate_history": debate_history,
@@ -108,7 +111,7 @@ class DebateOrchestrator:
 
         return "\n".join(context_parts)
 
-    async def _ask_debater(self, role: str, debate_context: str, round_num: int) -> str:
+    async def _ask_debater(self, role: str, debate_context: str, round_num: int, emit=None) -> str:
         """让专家参与辩论。"""
         expert_config = self.expert_manager.get_expert_by_role(role)
         system_prompt = (
@@ -125,16 +128,16 @@ class DebateOrchestrator:
         prompt = debate_template.format(round=round_num, debate_context=debate_context)
 
         try:
-            res = await self.llm.ainvoke([
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=prompt),
-            ])
-            return getattr(res, "content", "")
+            content = await stream_llm_text(
+                self.llm, [SystemMessage(content=system_prompt), HumanMessage(content=prompt)],
+                emit=emit, channel=f"debate:{round_num}:{role}", label=role, node="reason",
+            )
+            return content
         except Exception as e:
             logger.error(f"[debate] {role} 辩论发言失败: {e}")
             return f"未能获取{role}辩论意见。"
 
-    async def _run_arbitration(self, debate_history: List[Dict], evidence: str) -> str:
+    async def _run_arbitration(self, debate_history: List[Dict], evidence: str, emit=None) -> str:
         """仲裁智能体裁决。"""
         arbitrator_config = self.expert_manager.get_expert_by_role(self.arbitrator_role)
         system_prompt = (
@@ -159,11 +162,10 @@ class DebateOrchestrator:
         )
 
         try:
-            res = await self.llm_synthesis.ainvoke([
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=prompt),
-            ])
-            content = getattr(res, "content", "")
+            content = await stream_llm_text(
+                self.llm_synthesis, [SystemMessage(content=system_prompt), HumanMessage(content=prompt)],
+                emit=emit, channel="arbitration", label="仲裁裁决", node="reason",
+            )
             logger.info("[debate] ══════════ 仲裁裁决 ══════════")
             logger.info(f"[debate][仲裁·裁决] {self.arbitrator_role}:\n{content}")
             return content

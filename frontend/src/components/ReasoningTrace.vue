@@ -91,6 +91,7 @@ const PHASE_META = {
   blackboard: { label: '黑板', tone: 'amber' },
   debate: { label: '辩论', tone: 'rose' },
   done: { label: '完成', tone: 'green' },
+  verdict: { label: '结论', tone: 'amber' },
 }
 function phaseLabel(phase) {
   return PHASE_META[phase]?.label || '处理中'
@@ -151,9 +152,20 @@ function stepIcon(phase) {
   if (phase === 'agent_msg') return 'chat'
   if (phase === 'blackboard') return 'board'
   if (phase === 'debate') return 'scale'
+  if (phase === 'verdict') return 'compass'
   if (phase === 'done') return 'check'
   if (phase === 'start') return 'spark'
   return 'list'
+}
+
+/* ── 流式长文本区块（综合 / 收敛 / 仲裁）── */
+const VERDICT_META = {
+  synthesis: { label: '综合提案与风险批判', icon: 'spark', blk: '' },
+  convergence: { label: '教学总监收敛结论', icon: 'compass', blk: 'blk-board' },
+  arbitration: { label: '仲裁裁决', icon: 'scale', blk: 'blk-debate' },
+}
+function verdictMeta(kind) {
+  return VERDICT_META[kind] || { label: '结论', icon: 'info', blk: '' }
 }
 function blockIcon(kind) {
   return { evidence: 'evidence', experts: 'users', dialogue: 'chat', blackboard: 'board', debate: 'scale' }[kind] || 'list'
@@ -364,6 +376,21 @@ function blockIcon(kind) {
               <span class="skip-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path v-for="(d, i) in ICONS.info" :key="i" :d="d" /></svg></span>
               <span class="skip-title">未触发辩论</span>
               <span class="skip-reason">{{ entry.debate.skipReason || '专家意见一致' }}</span>
+            </div>
+
+            <!-- 流式长文本区块：综合提案 / 收敛结论 / 仲裁裁决，边生成边逐字打印 -->
+            <div v-if="entry.phase === 'verdict'" class="blk" :class="verdictMeta(entry.verdictKind).blk">
+              <div class="blk-head">
+                <span class="blk-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path v-for="(d, i) in ICONS[verdictMeta(entry.verdictKind).icon]" :key="i" :d="d" /></svg></span>
+                <span class="blk-label">{{ entry.verdictLabel || verdictMeta(entry.verdictKind).label }}</span>
+                <span v-if="entry.streaming" class="blk-tag">生成中</span>
+              </div>
+              <div class="verdict" :class="entry.verdictKind === 'arbitration' ? 'verdict-arbitrate' : 'verdict-converge'">
+                <span class="verdict-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path v-for="(d, i) in ICONS[verdictMeta(entry.verdictKind).icon]" :key="i" :d="d" /></svg></span>
+                <div class="verdict-body">
+                  <p class="verdict-text">{{ entry.verdictText }}<span v-if="entry.streaming" class="stream-caret" aria-hidden="true"></span></p>
+                </div>
+              </div>
             </div>
 
             <!-- 循证依据 -->
@@ -1049,6 +1076,22 @@ function blockIcon(kind) {
 .more:hover { text-decoration: underline; }
 
 :global(html[data-theme='dark']) .more { color: #5eead4; }
+
+/* 逐字打印光标：贴在被流式写入的文本末尾 */
+.stream-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: var(--color-primary);
+  animation: caret-blink 1s steps(2, start) infinite;
+}
+
+@keyframes caret-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
 
 @keyframes dot-breathe {
   0%, 100% { opacity: 1; }

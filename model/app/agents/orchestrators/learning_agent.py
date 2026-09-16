@@ -214,7 +214,10 @@ class LearningAgent:
         # 实时事件计数：用于判断监督者输出里的补发是否仍有必要。
         # 实时通道打通后，专家发言/会诊对话/黑板会在产生当下送达，补发只作兜底，
         # 否则同一批内容会出现两次。
-        live_events = {"experts": 0, "expert_speech": 0, "agent_msg": 0, "blackboard": 0}
+        live_events = {
+            "experts": 0, "expert_speech": 0, "agent_msg": 0, "blackboard": 0,
+            "synthesis": 0, "arbitration": 0, "convergence": 0,
+        }
         # 在 try 之前初始化：finally 中的清理必须能在任何失败路径下安全执行
         sink_token = None
         graph_task = None
@@ -273,6 +276,24 @@ class LearningAgent:
                             yield data
                         continue
 
+                    if evt_type in ("text_start", "text_delta", "text_end"):
+                        # 逐 token 文本流式：长文本边生成边打印。
+                        # text_end 时记账，供后续权威事件（proposal/blackboard/debate）
+                        # 去重——同一段文本不能既流式又整块再出现一次。
+                        if evt_type == "text_end":
+                            chan = data.get("channel", "")
+                            if chan in live_events:
+                                live_events[chan] += 1
+                        yield {
+                            "type": evt_type,
+                            "node": data.get("node", "reason"),
+                            "channel": data.get("channel", ""),
+                            "label": data.get("label", ""),
+                            "delta": data.get("delta", ""),
+                            "content": data.get("content", ""),
+                        }
+                        continue
+
                     if evt_type == "experts_selected":
                         # 专家名单先行到达（发言随后逐条到达）；selection_reason 为点将/编排依据
                         live_events["experts"] += 1
@@ -307,14 +328,18 @@ class LearningAgent:
                             "node": data.get("node", "reason"),
                             "rounds": data.get("rounds", 0),
                             "history": data.get("history", []),
-                            "arbitration": data.get("arbitration", ""),
+                            # 仲裁已流式送达时置空，避免同一段裁决出现两遍
+                            "arbitration": "" if live_events["arbitration"] else data.get("arbitration", ""),
                             "skipped": bool(data.get("skipped", False)),
                             "skip_reason": data.get("skip_reason", ""),
                         }
                         continue
 
                     if evt_type == "proposal":
-                        # 综合提案与风险批判全文
+                        # 综合提案与风险批判全文。若综合已逐 token 流式送达，
+                        # 这里再整块发一次会导致同一段文本出现两遍。
+                        if live_events["synthesis"]:
+                            continue
                         yield {
                             "type": "thinking",
                             "thinking": {
@@ -349,8 +374,9 @@ class LearningAgent:
                             "type": "blackboard",
                             "node": data.get("node", "reason"),
                             "entries": data.get("entries", []),
-                            "convergence": data.get("convergence", ""),
-                            "arbitration": data.get("arbitration", ""),
+                            # 收敛/仲裁若已逐 token 流式送达则置空，避免重复出现
+                            "convergence": "" if live_events["convergence"] else data.get("convergence", ""),
+                            "arbitration": "" if live_events["arbitration"] else data.get("arbitration", ""),
                         }
                         continue
 
