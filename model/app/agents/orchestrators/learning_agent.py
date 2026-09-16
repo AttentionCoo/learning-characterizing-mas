@@ -75,7 +75,7 @@ class LearningAgent:
         self.intent_node = IntentNode(self.llm_turbo)
         self.analysis_node = AnalysisNode(self.llm_critic)
         self.retrieve_node = RetrieveNode(learning_assistant, shared_memory_system=shared_memory_system)
-        self.reason_node = ReasonNode(self.llm_critic, llm_synthesis=self.llm_proposer, shared_memory_system=shared_memory_system)
+        self.reason_node = ReasonNode(self.llm_critic, llm_synthesis=self.llm_proposer, shared_memory_system=shared_memory_system, llm_judge=self.llm_turbo)
         self.validate_node = ValidateNode(self.llm_critic, shared_memory_system=shared_memory_system)
         self.report_node = ReportNode(self.llm_proposer, report_manager)
 
@@ -257,6 +257,8 @@ class LearningAgent:
                             "rounds": data.get("rounds", 0),
                             "history": data.get("history", []),
                             "arbitration": data.get("arbitration", ""),
+                            "skipped": bool(data.get("skipped", False)),
+                            "skip_reason": data.get("skip_reason", ""),
                         }
                         continue
 

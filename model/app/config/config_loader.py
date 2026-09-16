@@ -259,6 +259,30 @@ class ExpertConfigManager:
         debate = self._data.get("debate", {})
         return debate.get("arbitrator_role", "仲裁智能体")
 
+    def is_conflict_gate_enabled(self) -> bool:
+        """是否启用分歧门控：仅当专家意见存在实质分歧时才启动辩论+仲裁。
+
+        默认 False（保守）——未显式配置时保持原有"逢 N>1 必辩论"行为，
+        避免配置缺失导致仲裁被静默跳过。
+        """
+        debate = self._data.get("debate", {})
+        return bool(debate.get("conflict_gate_enabled", False))
+
+    def get_always_debate_intents(self) -> list:
+        """无条件走辩论+仲裁的意图白名单。
+
+        这些意图的争议没有外部真理源可查（如画像：关于学生的事实只能由学生本人权威），
+        必须无条件经证据程序裁决，不参与分歧门控。
+        """
+        debate = self._data.get("debate", {})
+        intents = debate.get("always_debate_intents", [])
+        return list(intents) if isinstance(intents, (list, tuple)) else []
+
+    def get_conflict_prompt_template(self) -> str:
+        """分歧检测提示词模板"""
+        debate = self._data.get("debate", {})
+        return debate.get("conflict_prompt_template", "") or ""
+
     def get_dynamic_orchestration_config(self) -> Dict[str, Any]:
         """获取动态编排配置"""
         return self._data.get("dynamic_orchestration", {})

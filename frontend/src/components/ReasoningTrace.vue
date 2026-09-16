@@ -149,6 +149,11 @@ function roleColor(role) {
               </div>
             </div>
 
+            <div v-else-if="entry.debate && entry.debate.skipped" class="debate-skipped">
+              <span class="debate-skipped-title">未触发辩论</span>
+              <span class="debate-skipped-reason">{{ entry.debate.skipReason || '专家意见一致' }}</span>
+            </div>
+
             <div v-if="entry.experts && (entry.experts.active?.length || entry.experts.advices?.length)" class="experts-block">
               <div class="experts-heading">
                 参与专家（{{ entry.experts.active?.length || 0 }} 位）
@@ -530,6 +535,24 @@ blockquote {
 .debate-item.arbitration blockquote {
   border-left-color: #f59e0b;
   background: #fffbeb;
+}
+
+/* 分歧门控跳过辩论：显式说明，避免"没有辩论"被误读为链路故障 */
+.debate-skipped {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border: 1px dashed #d8dfea;
+  border-radius: 8px;
+  background: #f7f9fc;
+  color: #6b7a94;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.debate-skipped-title {
+  margin-right: 6px;
+  color: #41506b;
+  font-weight: 700;
 }
 
 .experts-block {

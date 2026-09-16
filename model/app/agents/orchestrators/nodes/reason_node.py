@@ -1,10 +1,11 @@
 import logging
 import asyncio
-from typing import Dict, List
+from typing import Dict, List, Tuple
 from app.agents.core.schema import LearningState
 from app.agents.orchestrators.nodes.base import BaseNode
 from app.agents.orchestrators.nodes.reason_debate import DebateOrchestrator
 from app.agents.orchestrators.nodes.reason_dialogue import DialogueOrchestrator
+from app.agents.utils.json_parser import JsonParser
 from langchain_core.messages import HumanMessage, SystemMessage
 from app.config.config_loader import get_expert_manager
 
@@ -13,9 +14,11 @@ logger = logging.getLogger(__name__)
 
 class ReasonNode(BaseNode):
 
-    def __init__(self, llm, expert_config=None, llm_synthesis=None, shared_memory_system=None):
+    def __init__(self, llm, expert_config=None, llm_synthesis=None, shared_memory_system=None, llm_judge=None):
         self.llm = llm
         self.llm_synthesis = llm_synthesis or llm
+        # 分歧检测用轻量模型（默认回落 llm，调用方应传 turbo 以省成本）
+        self.llm_judge = llm_judge or llm
         self.shared_memory_system = shared_memory_system
         self.expert_manager = expert_config or get_expert_manager()
         self.experts = self.expert_manager.get_experts()
@@ -25,6 +28,10 @@ class ReasonNode(BaseNode):
         self.debate_max_rounds = self.expert_manager.get_debate_max_rounds()
         self.arbitrator_role = self.expert_manager.get_arbitrator_role()
         self.dynamic_orchestration_enabled = self.expert_manager.is_dynamic_orchestration_enabled()
+        # 分歧门控：非白名单意图先判"专家意见是否实质分歧"，无分歧则不付辩论+仲裁成本
+        self.conflict_gate_enabled = self.expert_manager.is_conflict_gate_enabled()
+        self.always_debate_intents = self.expert_manager.get_always_debate_intents()
+        self.conflict_prompt_template = self.expert_manager.get_conflict_prompt_template()
         # 辩论-仲裁独立编排（reason_debate.DebateOrchestrator）
         self.debate = DebateOrchestrator(
             debate_config=self.debate_config,
@@ -50,10 +57,62 @@ class ReasonNode(BaseNode):
         logger.info(f"[reason] 辩论模式: {'启用' if self.debate_enabled else '禁用'} (最大轮数: {self.debate_max_rounds})")
         logger.info(f"[reason] 对话-黑板模式(M2+M3): {'启用' if self.dialogue_enabled else '禁用'}")
         logger.info(f"[reason] 仲裁智能体: {self.arbitrator_role}")
+        logger.info(
+            f"[reason] 分歧门控: {'启用' if self.conflict_gate_enabled else '禁用'}"
+            + (f" (强制辩论意图: {','.join(self.always_debate_intents)})" if self.always_debate_intents else "")
+        )
         logger.info(f"[reason] 动态编排: {'启用' if self.dynamic_orchestration_enabled else '禁用'}")
         logger.info(f"[reason] 共享记忆: {'启用' if self.shared_memory_system else '禁用'}")
         for expert in self.experts:
             logger.info(f"  - {expert.get('role')} (优先级: {expert.get('priority', 'N/A')}, 最低难度: {expert.get('min_difficulty', 0.0)})")
+
+    async def _decide_debate(
+        self, expert_roles: List[str], results: List[str], state: LearningState
+    ) -> Tuple[bool, str]:
+        """决定本次是否启动辩论+仲裁，返回 (是否辩论, 判定说明)。
+
+        设计原则：
+        1. 白名单意图（always_debate_intents，默认 profile）无条件启动——其争议
+           "原则上不可消解"（关于学生的事实没有外部真理源），仲裁是证据纪律的唯一
+           执行者，跳过即等于让 Claim/Evidence 校验与画像写边界整体失效；
+        2. 其余意图先做分歧检测，仅当专家意见存在【实质分歧】时才付
+           2(N-1)+1 次调用的代价——无分歧时辩论只是复述已一致的结论；
+        3. 任何异常一律 fail-open（照常辩论）：宁可多花调用，不可静默跳过审计。
+        """
+        if len(expert_roles) <= 1:
+            return False, "仅 1 位专家，无辩论对象"
+
+        intent_type = str(state.get("intent_type", "") or "")
+        if intent_type in self.always_debate_intents:
+            return True, f"{intent_type} 属于强制辩论意图（争议不可消解，须经证据程序裁决）"
+        if not self.conflict_gate_enabled:
+            return True, "分歧门控未启用"
+        if not self.conflict_prompt_template:
+            return True, "分歧检测提示词缺失，保守放行"
+
+        opinions = "\n\n".join(
+            f"【{role}】{str(advice or '')[:600]}"
+            for role, advice in zip(expert_roles, results)
+            if advice and not str(advice).startswith("未能获取")
+        )
+        if not opinions.strip():
+            return False, "无有效专家意见，跳过辩论"
+
+        try:
+            prompt = self.conflict_prompt_template.format(expert_opinions=opinions)
+            response = await self.llm_judge.ainvoke([HumanMessage(content=prompt)])
+            parsed = JsonParser.parse(getattr(response, "content", ""))
+            if isinstance(parsed, list) and parsed:
+                parsed = parsed[0]
+            if not isinstance(parsed, dict):
+                return True, "分歧检测返回结构异常，保守放行"
+            reason = str(parsed.get("reason", "") or "").strip()
+            if bool(parsed.get("conflict")):
+                return True, f"分歧检测：存在实质分歧。{reason}"
+            return False, f"分歧检测：专家意见无明显分歧。{reason}"
+        except Exception as e:
+            logger.warning(f"[reason] 分歧检测失败，保守放行辩论: {type(e).__name__}: {e}")
+            return True, "分歧检测异常，保守放行"
 
     async def run(self, state: LearningState) -> Dict:
         logger.info(f"[reason] 开始执行推理节点")
@@ -174,7 +233,9 @@ class ReasonNode(BaseNode):
         blackboard = list(state.get('blackboard', []))
         convergence = ""
 
-        if self.dialogue_enabled and len(expert_roles) > 1:
+        run_debate, gate_note = await self._decide_debate(expert_roles, results, state)
+
+        if self.dialogue_enabled and len(expert_roles) > 1 and run_debate:
             logger.info(f"[reason] 启动对话-黑板编排 (M2 结构化消息 + M3 黑板)")
             dialogue_results = await self.dialogue.run(
                 expert_roles, results, case_info, state.get('evidence', ''),
@@ -211,7 +272,7 @@ class ReasonNode(BaseNode):
                 "convergence": convergence,
                 "arbitration": arbitration_result or "",
             })
-        elif self.debate_enabled and len(expert_roles) > 1:
+        elif self.debate_enabled and len(expert_roles) > 1 and run_debate:
             logger.info(f"[reason] 启动辩论-仲裁模式（回退）")
             debate_results = await self.debate.run(
                 expert_roles, results, case_info, state.get('evidence', ''), debate_history
@@ -229,6 +290,19 @@ class ReasonNode(BaseNode):
             })
         else:
             arbitration_result = None
+            if len(expert_roles) > 1 and not run_debate:
+                # 分歧门控跳过辩论：必须显式告知前端，
+                # 否则 UI 上"没有辩论"会被误读为链路故障或漏跑。
+                logger.info(f"[reason] 跳过辩论-仲裁: {gate_note}")
+                _emit({
+                    "type": "debate",
+                    "node": "reason",
+                    "rounds": 0,
+                    "history": [],
+                    "arbitration": "",
+                    "skipped": True,
+                    "skip_reason": gate_note,
+                })
 
         logger.info("[reason] 进行多专家意见统筹汇总")
 

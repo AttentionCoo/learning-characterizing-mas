@@ -107,9 +107,16 @@ export function sseStreamRequest(url, params, { onChunk, onThinking, timeout = 3
               rounds: data.rounds || 0,
               history: Array.isArray(data.history) ? data.history : [],
               arbitration: data.arbitration || '',
+              skipped: Boolean(data.skipped),
+              skipReason: data.skip_reason || '',
             },
           }
-          console.info('[AI 辩论]', `${trace.debate.rounds} 条辩论记录`)
+          console.info(
+            '[AI 辩论]',
+            trace.debate.skipped
+              ? `未触发（${trace.debate.skipReason || '专家意见一致'}）`
+              : `${trace.debate.rounds} 条辩论记录`,
+          )
           onThinking(trace)
           return
         }
