@@ -29,6 +29,7 @@
 
 ## 专题文档
 
+- [架构选型说明（工作流 vs 多 Agent）](architecture/架构选型说明.md)
 - [共享记忆系统](architecture/共享记忆系统.md)
 - [医学影像识别与拦截系统](architecture/医学影像识别与拦截系统.md)
 
