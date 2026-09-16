@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>架构选型说明：工作流 vs 多 Agent</title>
+<style>
+:root{
+  --ink:#1a2233; --ink-2:#41506b; --ink-3:#6b7a94;
+  --line:#e2e7f0; --line-2:#eef2f8;
+  --bg:#ffffff; --bg-2:#f7f9fc; --bg-3:#eff3f9;
+  --brand:#1d4ed8; --brand-2:#3b6ef5; --brand-bg:#eef3ff;
+  --a:#b45309; --a-bg:#fef7e8; --a-line:#f3d59a;
+  --b:#047857; --b-bg:#eefaf5; --b-line:#a7e0c8;
+  --warn:#b91c1c; --warn-bg:#fef2f2; --warn-line:#f5c2c2;
+  --mono:"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Source Han Sans SC",sans-serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:24px}
+body{
+  margin:0;background:var(--bg-2);color:var(--ink);
+  font-family:var(--sans);font-size:16px;line-height:1.78;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{display:flex;gap:0;max-width:1400px;margin:0 auto;align-items:flex-start}
+
+/* ---------- 侧边目录 ---------- */
+nav.toc{
+  position:sticky;top:0;flex:0 0 268px;height:100vh;overflow-y:auto;
+  padding:30px 18px 40px 26px;border-right:1px solid var(--line);
+  background:var(--bg);
+}
+nav.toc .toc-title{
+  font-size:12px;font-weight:700;letter-spacing:.14em;color:var(--ink-3);
+  text-transform:uppercase;margin:0 0 14px;
+}
+nav.toc a{
+  display:block;color:var(--ink-2);text-decoration:none;font-size:13.5px;
+  padding:5px 10px;border-radius:6px;border-left:2px solid transparent;
+  line-height:1.5;transition:.15s;
+}
+nav.toc a:hover{background:var(--bg-3);color:var(--brand)}
+nav.toc a.lv1{font-weight:650;margin-top:9px;color:var(--ink)}
+nav.toc a.lv2{padding-left:20px;font-size:13px;color:var(--ink-3)}
+nav.toc a.lv2:hover{color:var(--brand)}
+
+/* ---------- 主体 ---------- */
+main{flex:1 1 auto;min-width:0;background:var(--bg);padding:0 0 90px}
+.inner{max-width:960px;margin:0 auto;padding:0 46px}
+
+header.doc{
+  background:linear-gradient(135deg,#16233d 0%,#1d4ed8 130%);
+  color:#fff;padding:52px 46px 44px;margin-bottom:8px;
+}
+header.doc .eyebrow{
+  font-size:12px;letter-spacing:.2em;text-transform:uppercase;
+  color:#a8c0f0;font-weight:700;margin-bottom:14px;
+}
+header.doc h1{
+  margin:0 0 16px;font-size:33px;line-height:1.3;font-weight:750;letter-spacing:-.4px;
+}
+header.doc .sub{
+  font-size:15.5px;color:#cfdcf7;max-width:760px;line-height:1.75;margin:0;
+}
+header.doc .meta{
+  margin-top:26px;padding-top:18px;border-top:1px solid rgba(255,255,255,.18);
+  display:flex;flex-wrap:wrap;gap:10px 26px;font-size:12.5px;color:#b9cbec;
+}
+header.doc .meta b{color:#fff;font-weight:600}
+
+h2{
+  font-size:23px;font-weight:720;margin:52px 0 18px;padding-bottom:11px;
+  border-bottom:2px solid var(--line);letter-spacing:-.2px;
+}
+h2 .num{
+  display:inline-block;min-width:30px;color:var(--brand);font-weight:800;
+}
+h3{font-size:17.5px;font-weight:680;margin:32px 0 12px;color:var(--ink)}
+h3::before{content:"";display:inline-block;width:4px;height:15px;background:var(--brand);border-radius:2px;margin-right:9px;vertical-align:-2px}
+h4{font-size:15px;font-weight:680;margin:22px 0 8px;color:var(--ink-2)}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-left:26px}
+li{margin:6px 0}
+li>ul,li>ol{margin:5px 0}
+strong{font-weight:680;color:#0f172a}
+code{
+  font-family:var(--mono);font-size:13.5px;background:var(--bg-3);
+  padding:2px 6px;border-radius:4px;color:#1e3a8a;border:1px solid var(--line);
+  word-break:break-word;
+}
+a{color:var(--brand)}
+hr{border:0;border-top:1px solid var(--line);margin:40px 0}
+
+/* ---------- 引用/强调块 ---------- */
+blockquote{
+  margin:18px 0;padding:14px 20px;background:var(--brand-bg);
+  border-left:4px solid var(--brand);border-radius:0 8px 8px 0;color:#1e3a5f;
+}
+blockquote p{margin:6px 0}
+blockquote strong{color:#12275c}
+
+.callout{
+  margin:20px 0;padding:16px 20px;border-radius:10px;border:1px solid var(--line);
+  background:var(--bg-2);
+}
+.callout .ct{font-weight:700;font-size:14.5px;margin-bottom:7px;display:flex;align-items:center;gap:8px}
+.callout p:first-of-type{margin-top:0}
+.callout p:last-child{margin-bottom:0}
+.callout.key{background:var(--brand-bg);border-color:#c3d4fb}
+.callout.key .ct{color:var(--brand)}
+.callout.warn{background:var(--warn-bg);border-color:var(--warn-line)}
+.callout.warn .ct{color:var(--warn)}
+.callout.a{background:var(--a-bg);border-color:var(--a-line)}
+.callout.a .ct{color:var(--a)}
+.callout.b{background:var(--b-bg);border-color:var(--b-line)}
+.callout.b .ct{color:var(--b)}
+
+/* ---------- 表格 ---------- */
+.tw{overflow-x:auto;margin:18px 0;border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:14px;background:var(--bg)}
+th,td{padding:10px 14px;text-align:left;border-bottom:1px solid var(--line-2);vertical-align:top}
+th{
+  background:var(--bg-3);font-weight:680;color:var(--ink);
+  font-size:13px;letter-spacing:.02em;white-space:nowrap;
+}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover{background:#fafcff}
+td code{font-size:12.5px}
+.tag-a,.tag-b{font-weight:700;font-size:12.5px;padding:1px 7px;border-radius:5px}
+.tag-a{background:var(--a-bg);color:var(--a)}
+.tag-b{background:var(--b-bg);color:var(--b)}
+
+/* ---------- 代码 ---------- */
+pre{
+  background:#141c2e;color:#dbe6f5;padding:18px 20px;border-radius:10px;
+  overflow-x:auto;font-family:var(--mono);font-size:13px;line-height:1.7;margin:16px 0;
+}
+pre code{background:none;border:0;padding:0;color:inherit;font-size:13px}
+pre .c{color:#7f9cc0}
+pre .k{color:#ffb4a2}
+
+/* ---------- 对比卡 ---------- */
+.vs{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:20px 0}
+.vs .card{border:1px solid var(--line);border-radius:10px;padding:16px 18px;background:var(--bg)}
+.vs .card.a{border-top:3px solid var(--a)}
+.vs .card.b{border-top:3px solid var(--b)}
+.vs .card h5{margin:0 0 4px;font-size:14.5px;font-weight:700}
+.vs .card.a h5{color:var(--a)}
+.vs .card.b h5{color:var(--b)}
+.vs .card .path{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);margin-bottom:10px;word-break:break-all}
+.vs .card p{margin:6px 0;font-size:14px;color:var(--ink-2)}
+
+/* ---------- 结论条 ---------- */
+.final{
+  margin:26px 0;padding:22px 26px;border-radius:12px;
+  background:linear-gradient(135deg,#16233d,#243a66);color:#fff;
+}
+.final .lbl{font-size:11.5px;letter-spacing:.18em;text-transform:uppercase;color:#9db3dd;font-weight:700;margin-bottom:10px}
+.final p{margin:0;font-size:17px;line-height:1.72;font-weight:600}
+.final em{color:#ffd48a;font-style:normal}
+
+details{margin:16px 0;border:1px solid var(--line);border-radius:10px;background:var(--bg-2);overflow:hidden}
+summary{
+  cursor:pointer;padding:13px 18px;font-weight:650;font-size:14.5px;
+  background:var(--bg-3);list-style:none;user-select:none;
+}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"▸ ";color:var(--brand);font-weight:800}
+details[open] summary::before{content:"▾ "}
+details .dbody{padding:4px 18px 16px}
+
+footer.doc{
+  max-width:960px;margin:0 auto;padding:26px 46px 0;border-top:1px solid var(--line);
+  color:var(--ink-3);font-size:13px;
+}
+
+/* ---------- 响应式 ---------- */
+@media(max-width:1080px){
+  nav.toc{display:none}
+  .inner{padding:0 24px}
+  header.doc{padding:40px 24px 34px}
+  header.doc h1{font-size:26px}
+  .vs{grid-template-columns:1fr}
+}
+@media(max-width:620px){
+  body{font-size:15px}
+  .inner{padding:0 16px}
+  th,td{padding:8px 10px;font-size:13px}
+  h2{font-size:20px}
+}
+
+/* ---------- 打印 ---------- */
+@media print{
+  body{background:#fff;font-size:11pt}
+  nav.toc{display:none}
+  .wrap{display:block}
+  main{padding:0}
+  .inner{max-width:none;padding:0}
+  header.doc{background:#fff;color:#000;border-bottom:2px solid #000;padding:0 0 16px}
+  header.doc .eyebrow,header.doc .sub,header.doc .meta{color:#333}
+  header.doc .meta{border-top-color:#ccc}
+  header.doc .meta b{color:#000}
+  h2{page-break-after:avoid;border-bottom-color:#999}
+  h3{page-break-after:avoid}
+  .tw,table,pre,.callout,.vs,.final{page-break-inside:avoid}
+  .final{background:#f0f0f0;color:#000;border:1px solid #999}
+  .final p,.final em{color:#000}
+  details{break-inside:avoid}
+  details .dbody{display:block!important}
+  a{color:#000;text-decoration:none}
+  @page{margin:16mm 14mm}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="toc">
+  <p class="toc-title">目录</p>
+  <a class="lv1" href="#s0">0 · 一条统一法则</a>
+  <a class="lv1" href="#s1">1 · 项目 A：为什么是 workflow</a>
+  <a class="lv2" href="#s1-8">1.8 代码比论证更严的地方</a>
+  <a class="lv2" href="#s2">2 · 故意留给 Agent 的部分</a>
+  <a class="lv1" href="#s3">3 · 项目 B：为什么必须多 Agent</a>
+  <a class="lv2" href="#s3-2">3.2 冲突目标必须分上下文</a>
+  <a class="lv2" href="#s3-3">3.3 写入路径与智能体解耦</a>
+  <a class="lv2" href="#s3-6">3.6 画像写边界三层防线</a>
+  <a class="lv1" href="#s4">4 · 对比与推演</a>
+  <a class="lv2" href="#s4-1">4.1 风险维度决定结构</a>
+  <a class="lv2" href="#s4-2">4.2 为什么只有 B 需要仲裁</a>
+  <a class="lv2" href="#s4-3">4.3 为什么 B 敢放手调度</a>
+  <a class="lv2" href="#s4-4">4.4 闸口位置由不可逆性决定</a>
+  <a class="lv2" href="#s4-5">4.5 共同底座</a>
+  <a class="lv1" href="#s5">5 · 选型判据清单</a>
+  <a class="lv1" href="#s6">6 · 答辩速答</a>
+  <a class="lv1" href="#s7">附 · 事实核对</a>
+</nav>
+
+<main>
+<header class="doc">
+  <div class="eyebrow">Architecture Decision Record</div>
+  <h1>架构选型说明：为什么这两个项目<br>一个"工作流"，一个"多 Agent"</h1>
+  <p class="sub">
+    同一位作者，为什么临床决策项目做成"骨架固定的工作流 + 局部 Agent"，
+    而教育个性化项目做成"监督者主路由 + 专家注册表"？
+    结论：两者不是先进与落后的关系，而是<strong style="color:#fff">风险长在不同维度</strong>导致的两种正确解。
+  </p>
+  <div class="meta">
+    <span><b>项目 A</b> stroke-multi-agent-system（临床决策支持）</span>
+    <span><b>项目 B</b> learning-multi-agent-system（医学教育个性化）</span>
+    <span><b>事实源</b> 代码与配置</span>
+  </div>
+</header>
+
+<div class="inner">
+
+<!-- ============ 0 ============ -->
+<h2 id="s0"><span class="num">0</span>一条统一法则</h2>
+
+<p>两个项目在做<strong>同一件事</strong>：</p>
+
+<blockquote>
+  <p>把「<strong>不可协商的约束</strong>」放到模型够不着的地方，把「<strong>不可穷举的选择</strong>」放到模型手里。</p>
+</blockquote>
+
+<p>区别只在两处：约束长在哪一维、选择空间有多大。</p>
+
+<div class="tw">
+<table>
+<thead><tr><th></th><th>项目 A <code>stroke-multi-agent-system</code></th><th>项目 B <code>learning-multi-agent-system</code></th></tr></thead>
+<tbody>
+<tr><td><b>领域</b></td><td>脑卒中临床决策支持（溶栓）</td><td>脑卒中医学教育个性化学习</td></tr>
+<tr><td><b>编排形态</b></td><td>工作流打底 + 局部 Agent</td><td>监督者路由 + 专家注册表</td></tr>
+<tr><td><b>约束载体</b></td><td><span class="tag-a">图的边</span> 节点顺序、条件路由、强制闸口</td><td><span class="tag-b">角色权柄 + 能力面</span> 谁能断言／写什么</td></tr>
+<tr><td><b>放给模型的选择</b></td><td>工具选择、检索策略</td><td>专家调度、教学内容、访谈策略</td></tr>
+<tr><td><b>一句话</b></td><td>骨架固定，关节自由</td><td>权柄分明，调度可协商</td></tr>
+</tbody>
+</table>
+</div>
+
+<!-- ============ 1 ============ -->
+<h2 id="s1"><span class="num">1</span>项目 A：为什么是 workflow 而不是自主 Agent</h2>
+
+<p><b>代码位置</b>：<code>stroke-multi-agent-system/model/app/agents/orchestrators/clinical_graph.py</code>（455 行）</p>
+
+<div class="callout a">
+  <div class="ct">核心原因</div>
+  <p><strong>医疗场景的失败代价不对称，必须用"结构换确定性"——把"必须发生的事"交给图保证，只把"分支空间大、规则难穷举的事"交给模型自主。</strong></p>
+</div>
+
+<p>具体有 7 条现实理由。</p>
+
+<h3>1.1 硬性安全约束无法靠 Prompt 保证，只能靠图结构</h3>
+<p>溶栓流程有严格的执行依赖：必须先排除出血／血压达标／无禁忌，才能算 rt-PA 剂量。项目里用两层保证：</p>
+<ul>
+  <li><code>tool_use</code> 节点的 <strong>Level 优先级</strong>（评估 → 禁忌 → 剂量），并在提示与工具定义里硬约束 <code>rtpa_dose_calc</code> 不得先于 <code>contraindication_check</code>；</li>
+  <li><code>validate</code> 节点的<strong>规则引擎硬拦截</strong>（如活动性出血直接把答案判 fail），不通过就走 compliance → human_review。</li>
+</ul>
+<p>如果路径由模型自主决定，这些"必须做的前置步骤"只能靠 prompt 祈祷模型遵守——一旦跳步，输出的是<strong>看起来专业但危险的错误</strong>。<mark style="background:#fef7e8">图的边是代码，不会忘。</mark></p>
+
+<p><b>代码实证</b>（<code>tool_use_node.py</code> L47-56）：</p>
+<pre><code>【工具调用优先级(Level)】
+Level 1 - 基础评估(最先):stroke 类型判断、NIHSS、LVO 筛查、时间窗、ASPECTS
+Level 2 - 安全核查(其次):contraindication_check(禁忌症)、cha2ds2_vasc/has_bled、swallow_screen
+Level 3 - 治疗计算(最后):rtpa_dose_calc、rtpa_monitoring_checklist、出血转化风险分层
+3. 按 Level 优先级排序调用,rtpa_dose_calc 不得先于禁忌症检查</code></pre>
+
+<h3>1.2 医疗错误不可逆 → 循环必须"有界"而不是"自主"</h3>
+<p><code>query_rewrite</code> 最多 2 轮、<code>validate</code> 反思最多 3 次、<code>human_review</code> 驳回最多 2 次（<code>HITL_MAX_REJECTS</code>）——全部是常量。这带来两个好处：</p>
+<ul>
+  <li><strong>成本／延迟可静态推导</strong>，急诊场景响应时间可预期（多位专家是 <code>asyncio.gather</code> 并行的）；</li>
+  <li>不会出现自主 Agent 常见的<strong>不收敛／挂起／烧 token</strong>。<code>qwen_agent.py</code> 里专门做了"无效决策默认驳回"就是防这个。</li>
+</ul>
+
+<h3>1.3 模型能力现实：用工程补模型短板</h3>
+<p>当前 4 个角色默认都是 <code>qwen-turbo</code>（<code>models.yaml</code> L27-39）。弱模型做<strong>开放式自主规划</strong>容易跑偏；但配上确定性骨架 + 结构化输出（<code>make_structured_runner</code> 双路径回退）+ <strong>规则兜底</strong>（LLM 没调工具时规则引擎按"偏瘫／失语／发病时长"等临床线索自动补调），可靠性就被拉起来了。这是典型的"用编排换模型能力不足"。</p>
+
+<h3>1.4 全链路流式思考链要求步骤集合可知</h3>
+<p>前端要逐节点打字机渲染、思考链与消息索引对齐，依赖固定事件契约：<code>node_start / node_token / node_done / token / node_stats / ask_doctor / human_review / done / error</code>。<strong>步骤集合必须预先可知</strong>，前端才能稳定渲染、才谈得上"复制全部思考链"。若路径由模型自发生成，每次步骤不同，SSE 契约和 UI 都无法稳定。</p>
+
+<h3>1.5 可测试、可回归</h3>
+<p>离线用例（<code>model/tests/</code> 共 250 个测试函数）能对节点行为做断言，前提是<strong>图是确定的、可复现的</strong>。若路径由模型自主决定，回归测试本身就是非确定的，改一个 prompt 无法判断是否破坏了流程——这个项目验证过"大批文件加注释零行为变化"，靠的就是确定性。</p>
+
+<h3>1.6 责任边界：HITL 必须是强制闸口，不能是"模型自觉"</h3>
+<p><code>checkpoint.py</code>（AsyncSqliteSaver + <code>interrupt()</code> / <code>Command(resume=...)</code>）保证<strong>报告生成前必经医生复核</strong>，且驳回意见会写回 <code>validation_feedback</code> 重推。这是<strong>图上的硬闸口</strong>；在自主 Agent 形态下，"要不要请人确认"本身就成了模型的自由裁量，追责链条会断。</p>
+
+<h3>1.7 可追溯与合规审计</h3>
+<p>每个节点、每次检索（<code>R{轮}-Q{查询}-E{结果}</code> 证据编号）、模型／知识库／提示词版本都快照留痕，报告可回溯。这需要<strong>固定的检查点结构</strong>才成立。</p>
+
+<h3 id="s1-8">1.8 补充：代码比这条论证更严的地方</h3>
+
+<p>审阅 <code>clinical_graph.py</code> 时发现一处<strong>比"骨架固定"更强的保证</strong>，值得单独点出：</p>
+
+<pre><code>graph.add_conditional_edges(
+    "validate",
+    self._route_validation,
+    {
+        "pass":  "compliance",  <span class="c"># 通过校验 → 合规审计</span>
+        "retry": "reason",      <span class="c"># 未通过 → 重新会诊（反思循环）</span>
+        "fail":  "compliance",  <span class="c"># 多次失败 → 强制输出(仍走合规审计)</span>
+    }
+)</code></pre>
+
+<div class="callout warn">
+  <div class="ct">关键</div>
+  <p><strong>即使反思次数耗尽、校验已经"放弃"，输出依然必须穿过 <code>compliance</code> 节点才能到报告。</strong>也就是说：系统可以承认"我没能把它改对"，但<strong>不可以因此绕过安全审计</strong>。安全闸口的边是无条件的，与状态有多差无关。</p>
+</div>
+
+<p>这是"用结构换确定性"最纯粹的形态——<strong>降级路径的终点仍然是闸口，而不是出口</strong>。</p>
+
+<!-- ============ 2 ============ -->
+<h2 id="s2"><span class="num">2</span>项目 A 里故意留给 Agent 的部分</h2>
+
+<p>因为那里分支空间大、规则确实难穷举，交给模型自主反而更好：</p>
+<ul>
+  <li><strong>工具选择</strong>（18 个工具、组合方式多）→ function-calling 自主决定；</li>
+  <li><strong>检索策略</strong>（要不要改写查询、改写成什么）→ Agentic RAG 闭环。</li>
+</ul>
+<p>最终形态是 <strong>"骨架固定 + 关节自由"</strong>：骨架（节点顺序、安全闸口、循环上限、人机边界）写死在 <code>clinical_graph.py</code>，关节（选哪个工具、要不要重查）交给 LLM。</p>
+<p>这也正是 LangGraph 官方对 high-stakes／合规场景的推荐姿势——workflow 编排打底 + 局部 agent 增强。</p>
+
+<!-- ============ 3 ============ -->
+<h2 id="s3"><span class="num">3</span>项目 B：为什么必须是多 Agent</h2>
+
+<p><b>代码位置</b>：本仓库 <code>model/app/agents/orchestrators/supervisor.py</code>、<code>model/app/agents/registry.py</code>、<code>model/app/config/expert_config.yaml</code></p>
+
+<div class="callout b">
+  <div class="ct">核心原因</div>
+  <p><strong>不是为了答案更聪明，而是因为产品需求是「可审计」——关于学生的每条断言必须可回溯证据，生成的教学材料必须过独立审核。这个需求在结构上就是多 Agent 需求：它要求的角色，目标函数天然冲突，塞不进一个 context。</strong></p>
+</div>
+
+<h3>3.1 先排除一个错误答案：不是为了"更聪明"</h3>
+<p><code>AgentRegistry</code> 接收的是<strong>同一个 <code>llm</code> 实例</strong>，10 个专家共用同一个基座模型，差别只有 <code>system_prompt</code> 和 <code>tools</code> 白名单。所以"10 个专家"绝不等于 10 倍智力。如果产品需求只是"把脑卒中问题答好"，<strong>一个强模型 + RAG 就是正确且更便宜的设计</strong>，多 Agent 在这里是负债。</p>
+
+<h3 id="s3-2">3.2 冲突目标必须分上下文（最根本）</h3>
+<div class="tw">
+<table>
+<thead><tr><th>角色</th><th>优化方向</th><th>与谁冲突</th></tr></thead>
+<tbody>
+<tr><td>画像访谈</td><td>recall ↑（多问）</td><td>↔ 画像抽取 precision ↑（少写）</td></tr>
+<tr><td>画像抽取</td><td>precision ↑（不推断）</td><td>↔ 访谈的挖掘欲</td></tr>
+<tr><td>画像校验</td><td>skepticism ↑（多质疑）</td><td>↔ 抽取的产出量</td></tr>
+<tr><td>文档撰写</td><td>产出内容</td><td>↔ 质量审核的否决权</td></tr>
+<tr><td>主张方</td><td>说服</td><td>↔ 仲裁的中立</td></tr>
+</tbody>
+</table>
+</div>
+<p>「尽可能好奇地挖掘」和「绝不推断任何东西」写进同一个 prompt，会平均成既不敢问也不敢写的温吞输出。分开不是拆任务，是<strong>因为目标函数方向相反</strong>。</p>
+
+<h3 id="s3-3">3.3 写入路径与智能体解耦（最硬）</h3>
+<p>专家工具面<strong>全是只读</strong>（<code>model/app/agents/tools.py</code>）：</p>
+
+<div class="tw">
+<table>
+<thead><tr><th>工具</th><th>做什么</th><th>写吗</th></tr></thead>
+<tbody>
+<tr><td><code>lookup_evidence</code></td><td>在已检索证据里查片段</td><td>读</td></tr>
+<tr><td><code>get_student_profile</code></td><td>取画像摘要字符串</td><td>读</td></tr>
+<tr><td><code>retrieve_shared_memory</code></td><td>检索跨会话共享记忆</td><td>读</td></tr>
+</tbody>
+</table>
+</div>
+
+<p><strong>10 个专家谁都没有写画像的工具。</strong>专家输出的是<strong>文本意见</strong>，文本在这个系统里没有通往画像的持久化通道。画像由一条独立管道写入：</p>
+
+<pre><code>专家 → 只输出文本（意见/主张）→ 进入 synthesis / debate / report
+                                   ↓ （此处没有任何持久化通道）
+
+       ┌─ 另一条独立管道 ────────────────────────────┐
+用户输入 → 用户陈述：{case_text}  <span class="c">← agent_runner.py L126/L164</span>
+             ↓  assistant 的报告被明确排除在外
+       generate_profile_candidates()   <span class="c">(LLM 抽取成 JSON 候选)</span>
+             ↓  _normalize_candidates() 白名单 + 无证据即丢弃
+       done_event["profile_update_candidates"]
+             ↓  跨语言边界交给后端
+       ProfileMergePolicy.shouldApply()  <span class="c">(状态感知合并)</span>
+             ↓
+       MySQL 落库</code></pre>
+
+<p>这是<strong>架构位置隔离</strong>，不是权限分配：不是「9 个发了钥匙、1 个没发」（配置里少写一行 <code>tools:</code> 就漏），而是这把钥匙<strong>压根不存在</strong>。对应原则：</p>
+
+<blockquote>
+  <p><strong>能力限制（不提供操作）&gt; 指令限制（prompt 里请求）</strong><br>前者说服不了，后者能被长上下文诱导。</p>
+</blockquote>
+
+<h3>3.4 生成者不能当审核者</h3>
+<p>一个 context 里"写完再自查"必然退化成橡皮图章（自我一致性偏见）。同行评审要分作者和审稿人，是同一个道理。仲裁 prompt 里甚至硬写了「<strong>不要因为多方一致就判定通过——一致性不等于有证据</strong>」——这句指令只有在仲裁者没参与立论时才成立。</p>
+<p>在脑卒中场景下，溶栓时间窗写错是<strong>患者安全级错误</strong>，不能靠模型自觉兜住。</p>
+
+<h3>3.5 可测试 + 失败隔离</h3>
+<p>每个 Agent 是 <code>task in → 结构化 report out</code>，所以 <code>画像抽取</code> 能不跑整条流水线就单测（<code>test_registry.py</code> / <code>test_expert_tools.py</code>）。坏输出落在仲裁点被拦，而不是直接怼到学生脸上。每次工具调用还 emit <code>agent_tool</code> 事件，前端可审计"哪个专家调了哪个工具"。</p>
+
+<h3 id="s3-6">3.6 画像写边界：三层防线</h3>
+<div class="tw">
+<table>
+<thead><tr><th>层</th><th>机制</th><th>性质</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>专家无写入工具；写入走独立管道、只读用户陈述</td><td><strong>架构性</strong></td></tr>
+<tr><td>2</td><td><code>_normalize_candidates</code>：维度／字段／来源白名单 + <strong><code>evidence</code> 为空直接丢弃</strong></td><td>数据校验性</td></tr>
+<tr><td>3</td><td><code>ProfileMergePolicy.shouldApply</code>：<code>user_statement</code> 优先、confirmed 不被降级、observed 不被 inferred 降级、置信度／时间戳决胜</td><td>数据校验性</td></tr>
+</tbody>
+</table>
+</div>
+<p>第一层是"LLM 不乱写画像"的根本保证，后两层是纵深防御。</p>
+
+<!-- ============ 4 ============ -->
+<h2 id="s4"><span class="num">4</span>对比与推演：为什么两个项目各自是现在这个样子</h2>
+
+<h3 id="s4-1">4.1 风险长在哪一维，决定用哪种结构保证</h3>
+<p>这是两个项目形态差异的<strong>第一性原因</strong>。</p>
+
+<div class="tw">
+<table>
+<thead><tr><th></th><th>项目 A</th><th>项目 B</th></tr></thead>
+<tbody>
+<tr><td><b>风险维度</b></td><td><span class="tag-a">时序</span></td><td><span class="tag-b">权柄</span></td></tr>
+<tr><td>具体风险</td><td>漏做前置检查、步骤乱序、跳过安全闸口</td><td>越权断言学生属性、无证据写入画像、生成内容未过审</td></tr>
+<tr><td>保证手段</td><td><strong>图的边</strong>（顺序边、条件路由、强制闸口）</td><td><strong>角色边界 + 能力面 + 证据纪律</strong></td></tr>
+<tr><td>失败表现</td><td>"看起来专业但危险的错误"</td><td>"关于学生的断言不可回溯"</td></tr>
+</tbody>
+</table>
+</div>
+
+<ul>
+  <li>项目 A 的典型事故是<strong>过程性</strong>的：禁忌症没查就算剂量。防这种错要靠<strong>时间上的强制顺序</strong>——只有边能做到。</li>
+  <li>项目 B 的典型事故是<strong>声明性</strong>的：系统断言"该生 MCA 供血区掌握良好"，但学生从没说过。防这种错靠<strong>"谁有权说什么、需要什么证据"</strong>——顺序无关，边管不了。需要的是<strong>权柄结构</strong>。</li>
+</ul>
+
+<blockquote>
+  <p><strong>同一个"用结构换确定性"原则，因为风险维度不同，长出了两种完全不同的结构。</strong></p>
+</blockquote>
+
+<h3 id="s4-2">4.2 为什么只有项目 B 需要"仲裁智能体"</h3>
+<p>关键差别：<strong>有没有外部真理源。</strong></p>
+
+<div class="vs">
+  <div class="card a">
+    <h5>项目 A — 有真理源</h5>
+    <div class="path">临床指南 + 规则引擎</div>
+    <p>多专家意见冲突时，可以<strong>查表裁决</strong>——<code>contraindication_check</code> 说活动性出血，那就是出血，不需要投票。</p>
+    <p>所以 A 的多专家是"独立意见 → 交叉质询 → 主持人共识"，终点是一个<strong>可被规则推翻</strong>的结论。冲突由规则消解，不需要程序。</p>
+  </div>
+  <div class="card b">
+    <h5>项目 B — 没有真理源</h5>
+    <div class="path">唯一权威 = 学生自己的陈述与表现</div>
+    <p>核心不确定性是"<strong>这个学生是什么样</strong>"。这件事没有可查询的权威。</p>
+    <p>两位专家对同一句话可以都"很有道理"却得出相反结论，而这种歧义<strong>原则上不可消解</strong>。</p>
+  </div>
+</div>
+
+<p>所以在 B 里，冲突不能靠查表解决，只能靠一套<strong>证据程序</strong>来裁决：每条主张（Claim）标注证据（Evidence），逐条判 <code>ACCEPT / ACCEPT AS INFERRED / REJECT</code>。</p>
+
+<div class="callout key">
+  <div class="ct">这也解释了一句看起来奇怪的 prompt</div>
+  <p><strong>这就是为什么只有 B 需要独立的仲裁角色，也只有 B 的仲裁 prompt 要专门警告"一致性不等于有证据"——因为没有真理源时，共识是最诱人但最不可靠的裁决者。</strong></p>
+</div>
+
+<div class="tw">
+<table>
+<thead><tr><th></th><th>项目 A</th><th>项目 B</th></tr></thead>
+<tbody>
+<tr><td>冲突的裁决者</td><td>外部规则引擎／指南</td><td>证据仲裁程序</td></tr>
+<tr><td>共识的地位</td><td>参考（可被规则推翻）</td><td><strong>明确不可作为裁决依据</strong></td></tr>
+<tr><td>是否需要仲裁角色</td><td>不需要</td><td>必需</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3 id="s4-3">4.3 为什么项目 B 敢把"叫哪个专家"交给模型</h3>
+<p>这是两个项目最表面的形态差异，也最容易误读为"B 更激进"。实际恰恰相反：</p>
+
+<blockquote>
+  <p><strong>项目 B 敢把专家调度交给模型，前提是它先把安全关键的部分搬出了调度路径。</strong></p>
+</blockquote>
+
+<ul>
+  <li><strong>项目 A</strong>：安全关键节点（<code>tool_use</code> 的 Level 顺序、<code>validate</code> 规则拦截、<code>compliance</code> 审计、<code>human_review</code>）<strong>本身就在调度路径上</strong>。谁先谁后是安全问题，所以调度<strong>必须</strong>留在代码里。</li>
+  <li><strong>项目 B</strong>：监督者（supervisor）只在一个<strong>教学品质</strong>层面的专家池里调度——少叫一次"学习激励智能体"是质量问题，不是安全问题。而 B 的安全关键部分（医学红线、画像写边界、意图门控）<strong>被刻意留在监督者之外</strong>，监督者碰不到。</li>
+</ul>
+
+<p>所以 B 的"自主"是<strong>被圈定过的自主</strong>：</p>
+
+<div class="tw">
+<table>
+<thead><tr><th>约束</th><th>机制</th></tr></thead>
+<tbody>
+<tr><td>只能叫声明过的专家</td><td><code>expert_config.yaml</code> 的 <code>intent_expert_mapping</code>（每个意图一个固定菜单）</td></tr>
+<tr><td>只能做有限轮</td><td><code>SUPERVISOR_MAX_TOOL_ROUNDS</code>、<code>recursion_limit = 2*max_tool_rounds+8</code></td></tr>
+<tr><td>只能用 5 个工具</td><td>工具白名单（<code>evidence_search</code> / <code>consult_experts</code> / <code>dispatch_agent</code> / <code>finalize_report</code> / <code>get_student_profile</code>）</td></tr>
+<tr><td>只对白名单意图生效</td><td><code>SUPERVISOR_INTENTS=tutor,profile,resource,assessment,learning_path</code></td></tr>
+<tr><td>危险议题根本进不来</td><td>医学红线 + 输入守卫在监督者<strong>之外</strong></td></tr>
+</tbody>
+</table>
+</div>
+
+<p>换句话说：<strong>B 不是"把编排交给了模型"，而是"在静态菜单之上加了一层模型选择"。</strong>计划集合仍然可枚举（所以 SSE 契约依然稳定），只是从"固定顺序"变成了"声明式菜单 + 受限选择"。</p>
+
+<p>对比项目 A 的 <code>intent</code> 路由也完全同理——A 也做意图门控：</p>
+
+<div class="tw">
+<table>
+<thead><tr><th>意图</th><th>项目 A 的路径</th><th>项目 B 的路径</th></tr></thead>
+<tbody>
+<tr><td>简单／无关</td><td><code>irrelevant → reject</code>；<code>knowledge → 单节点直答</code></td><td>非白名单意图 → 不走监督者</td></tr>
+<tr><td>复杂</td><td><code>consultation → 完整三层流程</code></td><td>白名单意图 → 监督者调度专家</td></tr>
+</tbody>
+</table>
+</div>
+
+<p><strong>两个项目都"该省则省"：简单问题走单跳，只有值得的请求才付多跳代价。</strong>项目 B 更进一步——tutor 模式默认关闭监督者（<code>SUPERVISOR_TUTOR_ENABLED=false</code>），因为单轮问答多跳只涨延迟不涨准确率。</p>
+
+<h3 id="s4-4">4.4 不可逆性长在哪里，决定闸口设在哪里</h3>
+<p>两个项目都有强制闸口，但位置不同——因为<strong>不可逆的东西不一样</strong>。</p>
+
+<div class="tw">
+<table>
+<thead><tr><th></th><th>项目 A</th><th>项目 B</th></tr></thead>
+<tbody>
+<tr><td>不可逆的是什么</td><td><strong>动作</strong>（rt-PA 剂量打出去就收不回）</td><td><strong>记忆</strong>（错误的画像断言持久化，污染此后所有个性化）</td></tr>
+<tr><td>闸口位置</td><td>出口：报告生成前 <code>interrupt()</code> 强制医生复核</td><td>入口：画像写入前候选白名单 + 证据强制 + 合并策略</td></tr>
+<tr><td>是否强制人工</td><td><strong>是</strong>（HITL 硬闸口，责任链）</td><td>否（可回滚：可重新访谈、清空画像）</td></tr>
+<tr><td>循环预算</td><td>紧（反思 3 次、驳回 2 次）</td><td>相对宽松（教学可试错）</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>这个对照解释了一个容易被忽略的不对称：<strong>项目 B 的单次回答是可逆的（学生可以再问），但项目 B 的记忆写入是不可逆的。</strong>所以 B 不需要"每份教学材料都请人签字"，却必须在"写学生画像"这一件事上极度克制。</p>
+
+<div class="callout key">
+  <div class="ct">一句话</div>
+  <p><strong>项目 A 守的是动作出口，项目 B 守的是记忆入口。</strong></p>
+</div>
+
+<h3 id="s4-5">4.5 共同底座：形态不同，工程纪律相同</h3>
+<p>两个项目在工程底座上高度一致，差别只在编排拓扑：</p>
+
+<div class="tw">
+<table>
+<thead><tr><th>纪律</th><th>项目 A</th><th>项目 B</th></tr></thead>
+<tbody>
+<tr><td>有界循环</td><td><code>max_reflection_count</code>、<code>HITL_MAX_REJECTS</code>、<code>query_rewrite</code> ≤2</td><td><code>max_reflection_count=1</code>、<code>SUPERVISOR_MAX_TOOL_ROUNDS</code>、<code>recursion_limit</code></td></tr>
+<tr><td>意图门控</td><td><code>irrelevant</code> / <code>knowledge</code> / <code>consultation</code></td><td><code>SUPERVISOR_INTENTS</code></td></tr>
+<tr><td>证据强制</td><td><code>R{轮}-Q{查询}-E{结果}</code> 编号 + <code>evidence_judge</code></td><td>5 态 <code>ev_status</code> + 证据引用 + 候选强制 <code>evidence</code></td></tr>
+<tr><td>降级仍有闸口</td><td><code>fail</code> 仍走 <code>compliance</code></td><td>候选无证据即丢弃（不进合并）</td></tr>
+<tr><td>专家并行</td><td><code>asyncio.gather</code></td><td><code>asyncio.gather</code></td></tr>
+<tr><td>结构化输出 + 回退</td><td><code>make_structured_runner</code> 双路径 + 规则兜底</td><td>prompt 契约 + JSON 白名单归一</td></tr>
+<tr><td>流式契约</td><td>固定 SSE 事件集</td><td>固定 SSE 事件集（<code>init/meta/node_start/thinking/...</code>）</td></tr>
+<tr><td>弱模型补偿</td><td>骨架 + 规则引擎补调</td><td>能力面 + 声明式菜单 + 上限</td></tr>
+</tbody>
+</table>
+</div>
+
+<blockquote>
+  <p><strong>两者都不是"把系统交给模型"，而是"用各自领域里最合适的那一维结构，把模型约束在安全范围内"。</strong></p>
+</blockquote>
+
+<!-- ============ 5 ============ -->
+<h2 id="s5"><span class="num">5</span>选型判据（可复用清单）</h2>
+<p>以后遇到新场景，按这张表判断该做 workflow 还是 Agent：</p>
+
+<div class="tw">
+<table>
+<thead><tr><th>判据</th><th>倾向 workflow（边保证）</th><th>倾向多 Agent（权柄保证）</th></tr></thead>
+<tbody>
+<tr><td>正确步骤能否枚举</td><td>能（指南／协议／流程）</td><td>不能（教学设计、访谈策略）</td></tr>
+<tr><td>风险落在哪一维</td><td><strong>时序</strong>（漏步／乱序）</td><td><strong>权柄</strong>（越权断言／写错）</td></tr>
+<tr><td>失败是否可逆</td><td>动作不可逆 → 强制人工闸口</td><td>记忆不可逆 → 写入路径隔离</td></tr>
+<tr><td>有无外部真理源</td><td>有 → 规则／查表裁决</td><td>无 → 需要证据仲裁程序</td></tr>
+<tr><td>是否需要人签字</td><td>强制（责任链）</td><td>可选（可回滚）</td></tr>
+<tr><td>分支自由度</td><td>小（工具选择、检索策略）</td><td>大（策略、内容、调度）</td></tr>
+<tr><td>模型能力</td><td>弱 → 骨架补</td><td>弱 → 契约 + 能力面补</td></tr>
+<tr><td>前端是否要求步骤可知</td><td>是</td><td>是（用<strong>声明式菜单</strong>满足，而非开放规划）</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="callout warn">
+  <div class="ct">注意最后一行</div>
+  <p>两个项目都要求"步骤集合预先可知"（为了 SSE 契约与思考链渲染）。项目 B 用<strong>声明式专家菜单</strong>满足了这一点，所以 B 的监督者<strong>不是开放式规划器</strong>。这是 B 与"自主 Agent"的根本分界。</p>
+</div>
+
+<!-- ============ 6 ============ -->
+<h2 id="s6"><span class="num">6</span>答辩速答</h2>
+
+<h4>问：为什么临床项目用工作流，教育项目用多 Agent？</h4>
+<blockquote>
+  <p>因为两个项目的风险长在不同维度。临床项目的风险长在<strong>时序</strong>——漏做禁忌筛查、乱序、跳过安全闸口，这类错误只有<strong>图的边</strong>能防，所以骨架写死在 <code>clinical_graph.py</code>，连反思耗尽的降级路径都强制穿过 <code>compliance</code> 审计。教育项目的风险长在<strong>权柄</strong>——系统可能断言一条学生从没说过的事实，这跟步骤顺序无关，要靠<strong>角色边界和证据纪律</strong>来防，所以是监督者 + 专家注册表 + 证据仲裁。<strong>同一个"用结构换确定性"原则，因为风险维度不同，长出了两种结构。</strong></p>
+</blockquote>
+
+<h4>问：那为什么教育项目敢让模型自己调度专家？</h4>
+<blockquote>
+  <p>因为它先把安全关键的部分<strong>搬出了调度路径</strong>。监督者只在一个静态声明（<code>intent_expert_mapping</code>）的教学品质专家池里选，少叫一个专家是质量问题不是安全问题；医学红线、画像写边界、输入守卫都在监督者<strong>之外</strong>，它碰不到。而临床项目的安全节点（工具 Level 顺序、validate、compliance、HITL）<strong>本身就在调度路径上</strong>，所以调度必须留在代码里——<strong>不是 B 更激进，是 B 先把危险挪走了才敢放手。</strong></p>
+</blockquote>
+
+<h4>问：多 Agent 是不是效果更好？</h4>
+<blockquote>
+  <p>不是。10 个专家共用同一个基座模型，差别只有 prompt 和工具白名单，所以这套架构<strong>不能也不该拿"效果更好"当卖点</strong>。它成立的唯一前提是需求里有<strong>互相冲突的角色目标</strong>和<strong>强制审计要求</strong>——生成者不能当审核者，主张方不能当仲裁者。如果需求只是"把问题答好"，一个强模型加 RAG 是正确且更便宜的设计。</p>
+</blockquote>
+
+<div class="final">
+  <div class="lbl">一句话版本</div>
+  <p>临床项目用<em>图的边</em>守住"该做的一步不能少"；教育项目用<em>角色的边界</em>守住"不该说的话不能说"。<br>两者都是把模型管起来，只是绑的方式不同。</p>
+</div>
+
+<!-- ============ 附 ============ -->
+<h2 id="s7"><span class="num">附</span>本文事实核对情况</h2>
+
+<details open>
+  <summary>已核对事实清单（9 项）</summary>
+  <div class="dbody">
+    <div class="tw">
+    <table>
+    <thead><tr><th>事实</th><th>来源</th><th>状态</th></tr></thead>
+    <tbody>
+    <tr><td>项目 A 工具数 18</td><td><code>model/app/agents/tools/*.py</code> 去重计数</td><td>已核</td></tr>
+    <tr><td>Level 1/2/3 优先级、<code>rtpa_dose_calc</code> 不得先于禁忌症</td><td><code>tool_use_node.py</code> L47-56</td><td>已核</td></tr>
+    <tr><td><code>validate</code> 的 <code>fail</code> 仍路由到 <code>compliance</code></td><td><code>clinical_graph.py</code> L230-238</td><td>已核</td></tr>
+    <tr><td><code>HITL_MAX_REJECTS</code> 默认 2、<code>checkpointer</code> 内存回退</td><td><code>clinical_graph.py</code> L127-131</td><td>已核</td></tr>
+    <tr><td>4 个角色默认 <code>qwen-turbo</code></td><td><code>models.yaml</code> L27-39、<code>model_router.py</code></td><td>已核</td></tr>
+    <tr><td>项目 A 测试函数 250 个</td><td><code>model/tests/*.py</code> 计数</td><td>已核</td></tr>
+    <tr><td>规则引擎兜底补调 <code>contraindication_check</code></td><td><code>tool_use_node.py</code> L376</td><td>已核</td></tr>
+    <tr><td>项目 B 专家工具面全只读</td><td><code>model/app/agents/tools.py</code></td><td>已核</td></tr>
+    <tr><td>项目 B 监督者 5 工具 + 递归上限</td><td><code>supervisor.py</code></td><td>已核</td></tr>
+    <tr><td>画像写入独立管道、只读用户陈述</td><td><code>agent_runner.py</code> L126/L164、<code>profile_candidates.py</code></td><td>已核</td></tr>
+    </tbody>
+    </table>
+    </div>
+  </div>
+</details>
+
+</div><!-- /inner -->
+
+<footer class="doc">
+  <p>本文与 <code>docs/architecture/架构选型说明.md</code> 内容一致，HTML 版为自包含单文件（无外部依赖，可离线打开或打印为 PDF）。</p>
+  <p>项目 A：<code>D:\CompetitionProject\stroke-multi-agent-system</code>　·　项目 B：<code>D:\CompetitionProject\learning-multi-agent-system</code></p>
+</footer>
+
+</main>
+</div>
+</body>
+</html>
