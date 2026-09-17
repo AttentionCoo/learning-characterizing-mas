@@ -52,7 +52,9 @@ _COMMON_PRINCIPLES = """你可以调用以下工具（只能调用这些工具�
   用一句话说明选人理由（该理由会展示给学生作为可审计依据）
 - 引用指南证据时标注来源；证据不足时先检索再回答
 - 回答用中文、结构清晰；工具调用不超过 {max_rounds} 轮，信息足够后直接给出最终答案
-- 最终输出是给学生的完整回答，不要再输出工具调用指令"""
+- 你的最终消息是交给撰写环节的"要点草稿"：简要列出结论、关键要点与学生需注意处即可，
+  **不要写成完整回答**——学生可见的完整回答由后续独立的流式撰写步骤产出，你只需保证材料充分
+- 不要再输出工具调用指令"""
 
 _INTENT_GUIDANCE = {
     "tutor": """- 最终回答请按以下结构组织（可依问题类型微调，但必须包含）：
@@ -71,6 +73,25 @@ _INTENT_GUIDANCE = {
     "assessment": """- 当前为学习评估场景：结合学生画像与学习表现给出评估，必要时 consult_experts 召集
   评估/题目专家，最终给出评估结论与改进建议。""",
 }
+
+
+# 最终回答撰写阶段的系统提示：与监督者的内部调度推理彻底分离——
+# 内部调度文本不外泄，学生可见的回答由这一步单独流式生成（逐 token 打印）。
+_ANSWER_SYSTEM = (
+    "你是脑卒中医学教育的学习辅导老师。请把收集到的材料整合成给学生的最终回答，"
+    "直接输出回答正文（Markdown）。不要复述调度过程，不要提及智能体、工具、提示词或内部流程，"
+    "不确定的内容不要编造。"
+)
+
+
+def _build_answer_prompt(intent_type: str, question: str, material: str) -> str:
+    guidance = _INTENT_GUIDANCE.get(intent_type, "")
+    return (
+        f"【学生问题】\n{question}\n\n"
+        f"【回答要求】\n{guidance or '- 直接、结构清晰地回答学生的问题。'}\n\n"
+        f"【可用材料】\n{material or '（无额外材料，请依据你的医学教育知识作答）'}\n\n"
+        "请输出最终回答："
+    )
 
 
 def _build_system_prompt(intent_type: str, max_rounds: int, expert_menu_text: str) -> str:
@@ -296,6 +317,64 @@ class TutorSupervisor:
                 pass
         return ""
 
+    def _answer_material(self, state: LearningState, workspace: Dict, draft: str) -> str:
+        """汇总撰写最终回答所需的材料（画像 / 证据 / 专家意见 / 收敛 / 仲裁 / 草稿）。"""
+        parts: List[str] = []
+        profile = self._format_profile(state)
+        if profile:
+            parts.append(f"【学习画像】\n{profile[:1200]}")
+        evidence = (workspace.get("evidence") or state.get("evidence") or "").strip()
+        if evidence:
+            parts.append(f"【循证材料】\n{evidence[:3000]}")
+        advices = workspace.get("expert_advices") or []
+        if advices:
+            joined = "\n\n".join(
+                f"【{a.get('role', '')}】{(a.get('content') or '')[:1500]}" for a in advices
+            )
+            parts.append(f"【专家意见】\n{joined}")
+        if workspace.get("convergence"):
+            parts.append(f"【会诊收敛结论】\n{str(workspace['convergence'])[:1200]}")
+        if workspace.get("arbitration_result"):
+            parts.append(f"【仲裁裁决】\n{str(workspace['arbitration_result'])[:1500]}")
+        if workspace.get("proposal"):
+            parts.append(f"【综合提案】\n{str(workspace['proposal'])[:2500]}")
+        if draft:
+            parts.append(f"【监督者调度后的要点草稿】\n{draft[:4000]}")
+        return "\n\n".join(parts)
+
+    async def _compose_answer(self, state: LearningState, user_input: str,
+                              draft: str, workspace: Dict) -> str:
+        """独立流式撰写最终回答。
+
+        与监督者的内部调度推理分离：中间思考（工具调度、选人理由、提示词）不外泄，
+        学生可见的回答由这一步单独生成，并逐 token 推送给前端。
+        撰写失败时回退监督者草稿，功能不退化。
+        """
+        from app.agents.event_sink import get_event_sink
+        from app.agents.text_stream import stream_llm_text
+
+        prompt = _build_answer_prompt(
+            state.get("intent_type", "tutor"),
+            user_input,
+            self._answer_material(state, workspace, draft),
+        )
+        try:
+            answer = await stream_llm_text(
+                self.llm,
+                [SystemMessage(content=_ANSWER_SYSTEM), HumanMessage(content=prompt)],
+                emit=get_event_sink(), channel="answer", label="最终回答", node="supervisor",
+            )
+            answer = (answer or "").strip()
+            if answer:
+                return answer
+            logger.warning("[supervisor] 流式撰写结果为空，回退监督者草稿")
+            return draft
+        except Exception as e:
+            logger.warning(
+                f"[supervisor] 流式撰写最终回答失败，回退监督者草稿: {type(e).__name__}: {e}"
+            )
+            return draft
+
     # ── 主入口 ────────────────────────────────────────────────────────────
     async def run(self, state: LearningState) -> Dict:
         user_input = state["case_text"]
@@ -327,8 +406,10 @@ class TutorSupervisor:
             }
 
         messages = result.get("messages", []) or []
-        answer = self._extract_answer(messages)
+        draft = self._extract_answer(messages)
         trace = self._build_trace(messages)
+        # 最终回答与内部调度推理分离：由独立的流式撰写步骤产出，前端逐 token 打印
+        answer = await self._compose_answer(state, user_input, draft, workspace)
 
         logger.info(
             "[supervisor] 完成: 消息数=%d, 工具调用=%d, 点将=%s, 答案长度=%d",

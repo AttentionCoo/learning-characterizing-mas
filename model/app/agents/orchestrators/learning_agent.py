@@ -216,7 +216,7 @@ class LearningAgent:
         # 否则同一批内容会出现两次。
         live_events = {
             "experts": 0, "expert_speech": 0, "agent_msg": 0, "blackboard": 0,
-            "synthesis": 0, "arbitration": 0, "convergence": 0,
+            "synthesis": 0, "arbitration": 0, "convergence": 0, "answer": 0,
         }
         # 在 try 之前初始化：finally 中的清理必须能在任何失败路径下安全执行
         sink_token = None
@@ -278,16 +278,20 @@ class LearningAgent:
 
                     if evt_type in ("text_start", "text_delta", "text_end"):
                         # 逐 token 文本流式：长文本边生成边打印。
-                        # text_end 时记账，供后续权威事件（proposal/blackboard/debate）
-                        # 去重——同一段文本不能既流式又整块再出现一次。
-                        if evt_type == "text_end":
-                            chan = data.get("channel", "")
-                            if chan in live_events:
-                                live_events[chan] += 1
+                        # text_end 时记账，供后续权威事件（proposal/blackboard/debate）去重——
+                        # 同一段文本不能既流式又整块再出现一次。
+                        chan = data.get("channel", "")
+                        if evt_type == "text_end" and chan in live_events:
+                            live_events[chan] += 1
+                        # 最终回答走回答气泡（token 增量），不进推理轨迹
+                        if chan == "answer":
+                            if evt_type == "text_delta":
+                                yield {"type": "token", "content": data.get("delta", "")}
+                            continue
                         yield {
                             "type": evt_type,
                             "node": data.get("node", "reason"),
-                            "channel": data.get("channel", ""),
+                            "channel": chan,
                             "label": data.get("label", ""),
                             "delta": data.get("delta", ""),
                             "content": data.get("content", ""),
@@ -472,7 +476,11 @@ class LearningAgent:
                                 }
                             report_text = output.get("report", "")
                             if report_text:
-                                if node_name not in streamed_nodes:
+                                if live_events["answer"]:
+                                    # 最终回答已由流式撰写步骤逐 token 送达，
+                                    # 这里再整块下发会让回答出现两遍
+                                    streamed_nodes.add(node_name)
+                                elif node_name not in streamed_nodes:
                                     streamed_nodes.add(node_name)
                                     yield {"type": "token", "content": report_text}
                                 else:
