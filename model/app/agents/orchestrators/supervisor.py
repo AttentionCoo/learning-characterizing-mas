@@ -84,6 +84,49 @@ _ANSWER_SYSTEM = (
 )
 
 
+_TOOL_LABELS = {
+    "evidence_search": "检索循证指南",
+    "consult_experts": "召集专家会诊",
+    "dispatch_agent": "点将专家",
+    "finalize_report": "生成结构化报告",
+    "get_student_profile": "读取学习画像",
+}
+
+
+def _summarize_tool_usage(trace: List[Dict]) -> tuple:
+    """把监督者的工具使用情况转成一句自解释的轨迹说明。
+
+    没有它，"0 次工具调用"在推理轨迹上只剩一句「处理完成」，
+    用户看不出监督者做了什么、也看不出为什么没有专家内容。
+    """
+    tool_names = [name for item in trace for name in (item.get("tools") or [])]
+    if tool_names:
+        labels = "、".join(_TOOL_LABELS.get(n, n) for n in tool_names)
+        return "调度完成", f"本轮调用：{labels}"
+    return "本轮直接作答", "未检索证据、未召集专家——该问题无需额外材料即可回答"
+
+
+def emit_supervisor_progress(title: str, detail: str = "") -> None:
+    """推送监督者的**动作**进度（不是推理文本）。
+
+    监督者的内部思考按设计不外泄，但"正在做什么"属于元信息，可以安全展示。
+    没有它，调度阶段（实测可达 70s+）在推理轨迹上是一片空白——用户只看得到
+    「监督者正在调度工具...」然后直接跳到「处理完成」。
+    """
+    try:
+        from app.agents.event_sink import get_event_sink
+
+        sink = get_event_sink()
+        if sink is None:
+            return
+        sink({
+            "type": "thinking",
+            "thinking": {"step": "supervisor", "title": title, "content": detail or ""},
+        })
+    except Exception as e:  # noqa: BLE001 - 进度推送失败不应影响调度
+        logger.debug(f"[supervisor] 进度事件推送失败: {e}")
+
+
 def _build_answer_prompt(intent_type: str, question: str, material: str) -> str:
     guidance = _INTENT_GUIDANCE.get(intent_type, "")
     return (
@@ -155,6 +198,7 @@ class TutorSupervisor:
         @tool
         async def evidence_search(query: str) -> str:
             """检索脑卒中指南证据。参数 query 为检索查询语句。返回命中的循证材料片段。"""
+            emit_supervisor_progress("正在检索循证指南", f"检索词：{query}")
             try:
                 if not self.retrieve_node:
                     return "证据检索不可用"
@@ -186,6 +230,10 @@ class TutorSupervisor:
                 chosen = [r for r in (roles or []) if r in valid_roles]
                 workspace["last_roles"] = list(chosen)
                 workspace["last_reason"] = (reason or "").strip()
+                emit_supervisor_progress(
+                    "正在召集专家会诊",
+                    "、".join(chosen) if chosen else "按系统规则自动编排",
+                )
                 if roles and len(chosen) != len(roles):
                     logger.info(
                         "[supervisor] 点将名单过滤: 请求=%s, 白名单内=%s", roles, chosen
@@ -241,6 +289,7 @@ class TutorSupervisor:
         @tool
         async def get_student_profile() -> str:
             """获取当前学生的学习画像（专业、年级、知识水平、目标等）。"""
+            emit_supervisor_progress("正在读取学习画像")
             return profile_text or "暂无学习画像信息"
 
         # ── 专家注册表：可寻址的 specialist agents ──
@@ -266,6 +315,7 @@ class TutorSupervisor:
         @tool
         async def dispatch_agent(name: str, task: str) -> str:
             """精确点将某一位专家单独处理子任务。name 从专家白名单选择；task 为要处理的任务。返回该专家发言。"""
+            emit_supervisor_progress(f"正在点将：{name}", task)
             if not registry:
                 return "专家注册表不可用"
             agent = registry.get(name)
@@ -276,6 +326,7 @@ class TutorSupervisor:
         @tool
         async def finalize_report(proposal: str, evidence: str) -> str:
             """基于综合提案与证据生成最终结构化报告（资源/评估/路径等需要结构化产出时必须调用）。"""
+            emit_supervisor_progress("正在生成结构化报告", (proposal or "")[:120])
             if not self.report_node:
                 return "报告生成不可用"
             try:
@@ -353,11 +404,19 @@ class TutorSupervisor:
         from app.agents.event_sink import get_event_sink
         from app.agents.text_stream import stream_llm_text
 
+        # profile_build 的最终结果由 agent_runner 从抽取到的维度**确定性渲染**，
+        # 并以下发 replace 事件覆盖回答。这里若再流式撰写一次，用户会看到回答
+        # 打到一半被整体替换，且白白多花一次调用——直接回退草稿跳过撰写。
+        if state.get("report_mode") == "profile_build":
+            logger.info("[supervisor] profile_build 由确定性渲染产出结果，跳过流式撰写")
+            return draft
+
         prompt = _build_answer_prompt(
             state.get("intent_type", "tutor"),
             user_input,
             self._answer_material(state, workspace, draft),
         )
+        emit_supervisor_progress("正在整合最终回答")
         try:
             answer = await stream_llm_text(
                 self.llm,
@@ -408,6 +467,9 @@ class TutorSupervisor:
         messages = result.get("messages", []) or []
         draft = self._extract_answer(messages)
         trace = self._build_trace(messages)
+        # 让调度结果自我解释：否则"0 次工具调用"在轨迹上只剩一句「处理完成」，
+        # 用户看不出监督者到底做了什么、以及为什么没有专家内容。
+        emit_supervisor_progress(*_summarize_tool_usage(trace))
         # 最终回答与内部调度推理分离：由独立的流式撰写步骤产出，前端逐 token 打印
         answer = await self._compose_answer(state, user_input, draft, workspace)
 

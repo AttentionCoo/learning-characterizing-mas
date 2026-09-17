@@ -201,7 +201,8 @@ const confirmClear = ref(false)
 let clearTimer = null
 
 function requestClearProfile() {
-  if (clearing.value) return
+  // 画像为空时按钮保留但不可用（避免"功能消失"的错觉）
+  if (clearing.value || !hasProfile.value) return
   if (!confirmClear.value) {
     confirmClear.value = true
     clearTimeout(clearTimer)
@@ -618,11 +619,10 @@ function isDICOMDataUrl(dataUrl) {
             <span>{{ copied ? '已复制' : '复制画像' }}</span>
           </button>
           <button
-            v-if="hasProfile"
             class="profile-clear-btn"
             :class="{ confirming: confirmClear }"
-            :disabled="clearing"
-            :title="confirmClear ? '再次点击确认清空画像' : '清空学习画像'"
+            :disabled="clearing || !hasProfile"
+            :title="!hasProfile ? '当前没有画像可清空' : confirmClear ? '再次点击确认清空画像' : '清空学习画像'"
             @click="requestClearProfile"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

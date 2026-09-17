@@ -14,6 +14,8 @@ from app.agents.orchestrators.supervisor import (
     TutorSupervisor,
     _ANSWER_SYSTEM,
     _build_answer_prompt,
+    _summarize_tool_usage,
+    emit_supervisor_progress,
 )
 
 
@@ -73,11 +75,15 @@ def test_compose_answer_streams_over_answer_channel():
     ))
 
     assert answer == "同学们好，这是回答"
-    assert [e["type"] for e in events] == [
-        "text_start", "text_delta", "text_delta", "text_delta", "text_end",
-    ]
-    assert all(e["channel"] == "answer" for e in events)
-    assert events[-1]["content"] == "同学们好，这是回答"
+    types = [e["type"] for e in events]
+    # 先播报动作进度（"正在整合最终回答"），再进入逐 token 文本流
+    assert types[0] == "thinking"
+    assert events[0]["thinking"]["title"] == "正在整合最终回答"
+    text_types = [t for t in types if t.startswith("text_")]
+    assert text_types == ["text_start", "text_delta", "text_delta", "text_delta", "text_end"]
+    stream_events = [e for e in events if e["type"].startswith("text_")]
+    assert all(e["channel"] == "answer" for e in stream_events)
+    assert stream_events[-1]["content"] == "同学们好，这是回答"
 
 
 def test_compose_answer_prompt_carries_question_guidance_and_material():
@@ -171,3 +177,83 @@ def test_answer_material_truncates_and_skips_empty_sections():
     assert "【专家意见】" not in material
     assert "【综合提案】" not in material
     assert len(material) < 5000, "循证材料应被截断"
+
+
+# ── 监督者动作进度（内部思考不外泄，但"在做什么"要可见）──
+
+def test_compose_answer_skips_streaming_for_profile_build():
+    """profile_build 的结果由确定性渲染 + replace 覆盖产出，
+    这里再流式撰写一次会让回答被打到一半就被替换，且白花一次调用。"""
+    llm = _StreamingLLM(["不该被生成"])
+
+    def _run():
+        sup = _supervisor(llm)
+        return sup._compose_answer(
+            _state(report_mode="profile_build"), "q", "监督者草稿", {},
+        )
+
+    answer, events = _collect_answer_stream(_run)
+
+    assert answer == "监督者草稿", "应直接回退草稿"
+    assert events == [], "不应产生任何流式事件"
+    assert llm.prompts == [], "不应发起 LLM 调用"
+
+
+# ── 调度结果自解释：让"0 次工具调用"不再是空白 ──
+
+def test_summarize_tool_usage_lists_called_tools_in_chinese():
+    trace = [
+        {"role": "assistant", "tools": ["get_student_profile"], "results": ""},
+        {"role": "assistant", "tools": ["evidence_search", "consult_experts"], "results": ""},
+    ]
+    title, detail = _summarize_tool_usage(trace)
+    assert title == "调度完成"
+    assert "读取学习画像" in detail
+    assert "检索循证指南" in detail
+    assert "召集专家会诊" in detail
+
+
+def test_summarize_tool_usage_explains_direct_answer():
+    """未调用任何工具时必须说明原因，否则轨迹上只剩一句「处理完成」。"""
+    title, detail = _summarize_tool_usage([])
+    assert title == "本轮直接作答"
+    assert "未检索证据" in detail
+    assert "未召集专家" in detail
+
+
+def test_summarize_tool_usage_falls_back_to_raw_tool_name():
+    trace = [{"role": "assistant", "tools": ["brand_new_tool"], "results": ""}]
+    _, detail = _summarize_tool_usage(trace)
+    assert "brand_new_tool" in detail, "未知工具名应原样透出而不是丢失"
+
+
+def test_emit_supervisor_progress_pushes_thinking_step():
+    events = []
+    token = set_event_sink(events.append)
+    try:
+        emit_supervisor_progress("正在检索循证指南", "检索词：MCA 供血区")
+    finally:
+        reset_event_sink(token)
+
+    assert len(events) == 1
+    evt = events[0]
+    assert evt["type"] == "thinking"
+    assert evt["thinking"]["step"] == "supervisor"
+    assert evt["thinking"]["title"] == "正在检索循证指南"
+    assert "MCA 供血区" in evt["thinking"]["content"]
+
+
+def test_emit_supervisor_progress_without_sink_is_silent():
+    """无请求级 sink（非流式/单测场景）时必须静默，不能抛错影响调度。"""
+    emit_supervisor_progress("正在召集专家会诊")  # 不应抛异常
+
+
+def test_emit_supervisor_progress_survives_broken_sink():
+    def _broken(_payload):
+        raise RuntimeError("sink 已关闭")
+
+    token = set_event_sink(_broken)
+    try:
+        emit_supervisor_progress("正在整合最终回答")  # 不应抛异常
+    finally:
+        reset_event_sink(token)
