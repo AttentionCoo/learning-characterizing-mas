@@ -48,8 +48,19 @@ function onTraceWheel(e) {
   wheelTimer = setTimeout(() => { wheelActive = false }, 250)
 }
 
+/* 内容签名：逐 token 流式只改条目内部文本长度，entries.length 不变——
+   自动跟随若只监听条目数，内容超过窗高后新 token 会滚出可视区。 */
+const contentSignature = computed(() => props.entries.map((e) => {
+  let n = (e.content || '').length + (e.verdictText || '').length
+  if (e.experts?.advices) n += e.experts.advices.reduce((s, a) => s + ((a && a.content) || '').length, 0)
+  if (e.debate?.history) n += e.debate.history.reduce((s, h) => s + ((h && h.content) || '').length, 0)
+  if (e.messages) n += e.messages.reduce((s, m) => s + ((m && m.content) || '').length, 0)
+  if (e.blackboard?.entries) n += e.blackboard.entries.reduce((s, b) => s + ((b && b.content) || '').length, 0)
+  return n
+}).join(':'))
+
 watch(
-  () => props.entries.length,
+  contentSignature,
   async () => {
     if (!props.running || !followTrace.value || wheelActive) return
     await nextTick()
@@ -167,9 +178,6 @@ const VERDICT_META = {
 function verdictMeta(kind) {
   return VERDICT_META[kind] || { label: '结论', icon: 'info', blk: '' }
 }
-function blockIcon(kind) {
-  return { evidence: 'evidence', experts: 'users', dialogue: 'chat', blackboard: 'board', debate: 'scale' }[kind] || 'list'
-}
 </script>
 
 <template>
@@ -255,9 +263,12 @@ function blockIcon(kind) {
                   <span class="said-avatar" :style="{ background: roleColor(advice.role) }">{{ roleAvatar(advice.role) }}</span>
                   <span class="said-role">{{ advice.role }}</span>
                 </div>
-                <p class="said-text" :class="{ clamped: needsClamp(advice.content) && !isOpen(`${entry.key}-ad-${index}`) }">{{ advice.content }}</p>
+                <!-- 流式期间不裁剪、不弹展开按钮：这是最主要的流式通道，边生成边全文可见 -->
+                <p class="said-text" :class="{ clamped: needsClamp(advice.content) && !advice.streaming && !isOpen(`${entry.key}-ad-${index}`) }">
+                  {{ advice.content }}<span v-if="advice.streaming && running" class="stream-caret" aria-hidden="true"></span>
+                </p>
                 <button
-                  v-if="needsClamp(advice.content)"
+                  v-if="needsClamp(advice.content) && !advice.streaming"
                   type="button"
                   class="more"
                   @click="toggle(`${entry.key}-ad-${index}`)"
@@ -345,7 +356,8 @@ function blockIcon(kind) {
                 <span class="blk-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path v-for="(d, i) in ICONS.scale" :key="i" :d="d" /></svg></span>
                 <span class="blk-label">多专家辩论</span>
                 <span class="blk-count">{{ entry.debate.rounds }} 条发言</span>
-                <span v-if="entry.streaming" class="blk-tag">生成中</span>
+                <!-- running 兜底：SSE 异常/断连时 streaming 可能残留，生成结束即隐藏 -->
+                <span v-if="entry.streaming && running" class="blk-tag">生成中</span>
               </div>
               <div class="stream">
                 <div
@@ -359,7 +371,7 @@ function blockIcon(kind) {
                       <span class="msg-from">{{ item.role }}</span>
                       <span v-if="item.round" class="msg-round">R{{ item.round }}</span>
                     </div>
-                    <p class="msg-text">{{ item.content }}<span v-if="item.streaming" class="stream-caret" aria-hidden="true"></span></p>
+                    <p class="msg-text">{{ item.content }}<span v-if="item.streaming && running" class="stream-caret" aria-hidden="true"></span></p>
                   </div>
                 </div>
               </div>
@@ -384,12 +396,12 @@ function blockIcon(kind) {
               <div class="blk-head">
                 <span class="blk-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path v-for="(d, i) in ICONS[verdictMeta(entry.verdictKind).icon]" :key="i" :d="d" /></svg></span>
                 <span class="blk-label">{{ entry.verdictLabel || verdictMeta(entry.verdictKind).label }}</span>
-                <span v-if="entry.streaming" class="blk-tag">生成中</span>
+                <span v-if="entry.streaming && running" class="blk-tag">生成中</span>
               </div>
               <div class="verdict" :class="entry.verdictKind === 'arbitration' ? 'verdict-arbitrate' : 'verdict-converge'">
                 <span class="verdict-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path v-for="(d, i) in ICONS[verdictMeta(entry.verdictKind).icon]" :key="i" :d="d" /></svg></span>
                 <div class="verdict-body">
-                  <p class="verdict-text">{{ entry.verdictText }}<span v-if="entry.streaming" class="stream-caret" aria-hidden="true"></span></p>
+                  <p class="verdict-text">{{ entry.verdictText }}<span v-if="entry.streaming && running" class="stream-caret" aria-hidden="true"></span></p>
                 </div>
               </div>
             </div>

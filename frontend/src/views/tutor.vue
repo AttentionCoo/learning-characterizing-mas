@@ -22,7 +22,7 @@ const talkId = ref(null)
 const chatContainerRef = ref(null)
 const inputRef = ref(null)
 const { showBackToLatest, unread, onScroll, scrollToLatest, notifyNewContent } = useAutoScroll(chatContainerRef)
-const { appendReasoningEvent } = useReasoningTrace()
+const { appendReasoningEvent, settleReasoningTrace } = useReasoningTrace()
 
 const uploadedImages = ref([])
 const showImageUploader = ref(false)
@@ -54,7 +54,8 @@ async function handleSend() {
   }
   chatMessages.value.push(userMsg)
   // 每条 AI 回复自带 reasoning 数组，推理轨迹随消息留存，可回看历史回答的推理
-  chatMessages.value.push({ role: 'assistant', content: '', reasoning: [] })
+  const aiMsg = { role: 'assistant', content: '', reasoning: [] }
+  chatMessages.value.push(aiMsg)
   const aiIndex = chatMessages.value.length - 1
 
   isStreaming.value = true
@@ -114,6 +115,8 @@ async function handleSend() {
     isStreaming.value = false
     isThinking.value = false
     thinkingHint.value = ''
+    // SSE 异常/断连时轨迹里可能残留 streaming: true，这里统一收口
+    settleReasoningTrace(aiMsg.reasoning)
   }
 
   await nextTick()

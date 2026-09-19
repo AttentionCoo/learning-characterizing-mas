@@ -28,7 +28,7 @@ const isThinking = ref(false)
 const thinkingHint = ref('')
 const currentStage = ref('')
 const generatedContent = ref('')
-const { reasoningEntries, resetReasoningTrace, appendReasoningEvent } = useReasoningTrace()
+const { reasoningEntries, resetReasoningTrace, settleReasoningTrace, appendReasoningEvent } = useReasoningTrace()
 
 const resources = ref([])
 const resourceTotal = ref(0)
@@ -178,6 +178,8 @@ async function handleGenerate() {
   isThinking.value = false
   thinkingHint.value = ''
   currentStage.value = ''
+  // SSE 异常/断连时轨迹里可能残留 streaming: true，这里统一收口
+  settleReasoningTrace()
 
   nextTick(() => scrollToLatest({ smooth: false }))
 

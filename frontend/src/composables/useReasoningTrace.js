@@ -34,6 +34,11 @@ export function useReasoningTrace() {
         }
         list.push(entry)
       }
+      // 权威事件缺省字段兜底：experts 可能为 null（普通事件推入的 phase='experts' 条目），
+      // 直接读 .advices 会 TypeError
+      if (!entry.experts || typeof entry.experts !== 'object') {
+        entry.experts = { active: [], advices: [], debateRounds: 0, arbitration: '', selectionReason: '' }
+      }
       if (!Array.isArray(entry.experts.advices)) entry.experts.advices = []
       let advice = entry.experts.advices.find((a) => a.role === role)
       if (!advice) {
@@ -71,6 +76,11 @@ export function useReasoningTrace() {
           debate: { rounds: round, history: [], arbitration: '', skipped: false, skipReason: '' },
         }
         list.push(entry)
+      }
+      // 权威事件缺省字段兜底：debate 可能为 null（普通事件推入的 phase='debate' 条目），
+      // 直接读 .history 会 TypeError
+      if (!entry.debate || typeof entry.debate !== 'object') {
+        entry.debate = { rounds: round, history: [], arbitration: '', skipped: false, skipReason: '' }
       }
       if (!Array.isArray(entry.debate.history)) entry.debate.history = []
       let item = entry.debate.history.find((h) => h.round === round && h.role === role)
@@ -121,6 +131,25 @@ export function useReasoningTrace() {
     eventSequence = 0
   }
 
+  /** 生成结束后收口：清掉所有 streaming 标记。
+   *
+   * 正常完成路径已由各 finish() 清除；这里兜底 SSE 超时/断连/用户离页 abort
+   * 时遗留的「生成中」状态——否则轨迹里会永久挂着"生成中"标签和闪烁光标。
+   * target 传入消息自身的 reasoning 数组（聊天页），缺省用共享列表。
+   */
+  function settleReasoningTrace(target = null) {
+    const list = target || reasoningEntries.value
+    list.forEach((entry) => {
+      entry.streaming = false
+      if (entry.experts?.advices) {
+        entry.experts.advices.forEach((a) => { a.streaming = false })
+      }
+      if (entry.debate?.history) {
+        entry.debate.history.forEach((h) => { h.streaming = false })
+      }
+    })
+  }
+
   function appendReasoningEvent(event, scope = '', target = null) {
     if (!event) return
 
@@ -155,7 +184,6 @@ export function useReasoningTrace() {
     }
 
     const step = event.step || 'progress'
-    const lastEntry = list.length ? list[list.length - 1] : null
 
     // 逐 token 文本流式（text_start / text_delta / text_end）：按 channel 落到对应区块，
     // 让长文本（专家发言、综合、收敛、仲裁）边生成边打印。
@@ -272,6 +300,7 @@ export function useReasoningTrace() {
   return {
     reasoningEntries,
     resetReasoningTrace,
+    settleReasoningTrace,
     appendReasoningEvent,
   }
 }

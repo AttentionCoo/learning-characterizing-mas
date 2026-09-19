@@ -24,7 +24,7 @@ const isThinking = ref(false)
 const thinkingHint = ref('')
 const generatedContent = ref('')
 const talkId = ref(null)
-const { reasoningEntries, resetReasoningTrace, appendReasoningEvent } = useReasoningTrace()
+const { reasoningEntries, resetReasoningTrace, settleReasoningTrace, appendReasoningEvent } = useReasoningTrace()
 
 const assessmentType = ref('comprehensive')
 const courseName = ref('')
@@ -192,6 +192,8 @@ async function handleGenerate() {
     isGenerating.value = false
     isThinking.value = false
     thinkingHint.value = ''
+    // SSE 异常/断连时轨迹里可能残留 streaming: true，这里统一收口
+    settleReasoningTrace()
   }
 }
 

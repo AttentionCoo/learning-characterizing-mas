@@ -15,7 +15,7 @@ const thinkingHint = ref('')
 const generatedContent = ref('')
 const talkId = ref(null)
 const expandedSteps = ref(new Set([0]))
-const { reasoningEntries, resetReasoningTrace, appendReasoningEvent } = useReasoningTrace()
+const { reasoningEntries, resetReasoningTrace, settleReasoningTrace, appendReasoningEvent } = useReasoningTrace()
 
 const courseName = ref('')
 const customGoal = ref('')
@@ -185,6 +185,8 @@ async function handleGenerate() {
     isGenerating.value = false
     isThinking.value = false
     thinkingHint.value = ''
+    // SSE 异常/断连时轨迹里可能残留 streaming: true，这里统一收口
+    settleReasoningTrace()
   }
 }
 

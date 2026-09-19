@@ -34,7 +34,7 @@ const assistError = ref('')
 const resultPaneRef = ref(null)
 const { showBackToLatest, unread, onScroll, scrollToLatest, notifyNewContent, reset } = useAutoScroll(resultPaneRef)
 const inlineError = ref('')
-const { reasoningEntries, resetReasoningTrace, appendReasoningEvent } = useReasoningTrace()
+const { reasoningEntries, resetReasoningTrace, settleReasoningTrace, appendReasoningEvent } = useReasoningTrace()
 
 let assistSafetyTimer = null
 let assistAbortController = null
@@ -224,6 +224,8 @@ async function requestAssist() {
     isAssisting.value = false
     isThinking.value = false
     assistAbortController = null
+    // SSE 异常/断连时轨迹里可能残留 streaming: true，这里统一收口
+    settleReasoningTrace()
   }
 }
 </script>
