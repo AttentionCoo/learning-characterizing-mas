@@ -27,7 +27,8 @@ const isGenerating = ref(false)
 const isThinking = ref(false)
 const thinkingHint = ref('')
 const currentStage = ref('')
-const generatedContent = ref('')
+// 生成结果按资源类型分块：块头标注类型与序号，多选逐个生成时清晰区分每种资源
+const generatedBlocks = ref([])
 const { reasoningEntries, resetReasoningTrace, settleReasoningTrace, appendReasoningEvent } = useReasoningTrace()
 
 const resources = ref([])
@@ -73,50 +74,49 @@ async function handleGenerate() {
   // 固定本次选择，确保生成过程中不会扩大资源范围。
   const typesToGenerate = [...selectedTypes.value]
   resetReasoningTrace()
+  generatedBlocks.value = []
 
   isGenerating.value = true
   isThinking.value = true
   thinkingHint.value = '正在分析学习需求...'
   currentStage.value = '正在分析学习需求...'
-  generatedContent.value = ''
   showGenerator.value = false
   reset()
-
-  let allContent = ''
-  const charBuffer = []
-  let timerId = null
-
-  function startTypewriter() {
-    if (timerId !== null) return
-    function tick() {
-      if (charBuffer.length === 0) { timerId = null; return }
-      const pending = charBuffer.length
-      const delay = pending > 200 ? 2 : pending > 50 ? 8 : 25
-      const chars = charBuffer.splice(0, 2)
-      allContent += chars.join('')
-      generatedContent.value = allContent
-      nextTick(() => notifyNewContent())
-      timerId = setTimeout(tick, delay)
-    }
-    timerId = setTimeout(tick, 0)
-  }
 
   const points = knowledgePoints.value.split(/[,，、\n]/).map(s => s.trim()).filter(Boolean)
 
   for (let i = 0; i < typesToGenerate.length; i++) {
     const type = typesToGenerate[i]
     const endpoint = typeEndpointMap[type]
-    const typeLabel = resourceTypes.find(t => t.value === type)?.label || type
+    const typeInfo = resourceTypes.find(t => t.value === type) || { label: type, icon: '📌', color: '#64748b' }
+    const typeLabel = typeInfo.label
 
-    if (i > 0) {
-      allContent += '\n\n---\n\n'
-      generatedContent.value = allContent
+    // 每个资源类型一个结果块：块头标注类型与序号（第 i/N 个资源），
+    // 多选逐个生成时用户能清楚看到每种资源各自的内容，不误读为"重复生成"。
+    const block = { key: `gen-${i}`, type, label: typeLabel, icon: typeInfo.icon, content: '' }
+    generatedBlocks.value.push(block)
+    let blockContent = ''
+    const charBuffer = []
+    let timerId = null
+
+    function startTypewriter() {
+      if (timerId !== null) return
+      function tick() {
+        if (charBuffer.length === 0) { timerId = null; return }
+        const pending = charBuffer.length
+        const delay = pending > 200 ? 2 : pending > 50 ? 8 : 25
+        const chars = charBuffer.splice(0, 2)
+        blockContent += chars.join('')
+        block.content = blockContent
+        nextTick(() => notifyNewContent())
+        timerId = setTimeout(tick, delay)
+      }
+      timerId = setTimeout(tick, 0)
     }
 
     thinkingHint.value = `正在生成 ${typeLabel} (${i + 1}/${typesToGenerate.length})...`
     currentStage.value = `正在生成 ${typeLabel} (${i + 1}/${typesToGenerate.length})...`
     isThinking.value = true
-    const resourceContentStart = allContent.length
 
     try {
       const result = await resourceStreamAPI(
@@ -137,8 +137,8 @@ async function handleGenerate() {
           if (event.replace) {
             if (timerId !== null) { clearTimeout(timerId); timerId = null }
             charBuffer.length = 0
-            allContent = allContent.slice(0, resourceContentStart) + chunk
-            generatedContent.value = allContent
+            blockContent = chunk
+            block.content = blockContent
             return
           }
           charBuffer.push(...Array.from(chunk))
@@ -155,10 +155,11 @@ async function handleGenerate() {
 
       if (timerId !== null) { clearTimeout(timerId); timerId = null }
       charBuffer.length = 0
+      // 后端 fullAnswer 每次请求独立，只含当前类型的完整内容，直接覆盖本块
       if (result.data?.content != null) {
-        allContent = allContent.slice(0, resourceContentStart) + result.data.content
+        blockContent = result.data.content
+        block.content = blockContent
       }
-      generatedContent.value = allContent
       isThinking.value = false
       thinkingHint.value = ''
       currentStage.value = ''
@@ -166,8 +167,8 @@ async function handleGenerate() {
       if (timerId !== null) { clearTimeout(timerId); timerId = null }
       charBuffer.length = 0
       console.error(`${typeLabel}生成失败`, error)
-      allContent += `\n\n❌ ${typeLabel}生成失败，请稍后重试。\n`
-      generatedContent.value = allContent
+      blockContent += `\n\n❌ ${typeLabel}生成失败，请稍后重试。\n`
+      block.content = blockContent
       isThinking.value = false
       thinkingHint.value = ''
       currentStage.value = ''
@@ -208,7 +209,16 @@ async function handleSelectResource(id) {
   try {
     const res = await getResourceDetailAPI(id)
     resourceDetail.value = res.data
-    generatedContent.value = res.data?.content || ''
+    // 已保存的资源按单个块展示（类型取自记录本身）
+    const type = res.data?.type || 'document'
+    const typeInfo = getTypeInfo(type)
+    generatedBlocks.value = [{
+      key: 'saved',
+      type,
+      label: typeInfo.label,
+      icon: typeInfo.icon,
+      content: res.data?.content || '',
+    }]
     nextTick(() => scrollToLatest({ smooth: false }))
   } catch {
     // ignore
@@ -219,7 +229,7 @@ async function handleSelectResource(id) {
 
 function backToGenerator() {
   showGenerator.value = true
-  generatedContent.value = ''
+  generatedBlocks.value = []
   resourceDetail.value = null
   selectedResource.value = null
 }
@@ -325,22 +335,36 @@ onMounted(() => {
             <span class="result-title">{{ resourceDetail?.title || '生成结果' }}</span>
           </div>
 
-          <div v-if="isThinking && !generatedContent" class="thinking-bar">
+          <div v-if="isThinking && !generatedBlocks.length" class="thinking-bar">
             <ThinkingIndicator :hint="thinkingHint" />
           </div>
 
-          <div v-else-if="isGenerating && currentStage && !generatedContent" class="stage-bar">
+          <div v-else-if="isGenerating && currentStage && !generatedBlocks.length" class="stage-bar">
             <div class="stage-pulse"></div>
             <span>{{ currentStage }}</span>
           </div>
 
           <ReasoningTrace :entries="reasoningEntries" :running="isGenerating" />
 
-          <div ref="resultContentRef" class="result-content markdown-body" @scroll="onScroll" v-html="renderMarkdown(generatedContent)"></div>
+          <div ref="resultContentRef" class="result-content" @scroll="onScroll">
+            <div
+              v-for="(block, index) in generatedBlocks"
+              :key="block.key"
+              class="resource-block"
+              :style="{ '--block-color': getTypeInfo(block.type).color }"
+            >
+              <div class="block-head">
+                <span class="block-icon">{{ block.icon }}</span>
+                <span class="block-title">{{ block.label }}</span>
+                <span class="block-index">第 {{ index + 1 }}/{{ generatedBlocks.length }} 个资源</span>
+              </div>
+              <div class="markdown-body" v-html="renderMarkdown(block.content)"></div>
+            </div>
+          </div>
 
           <BackToLatest :unread="unread" @click="scrollToLatest({ smooth: true })" />
 
-          <div v-if="isGenerating && !generatedContent" class="generating-overlay">
+          <div v-if="isGenerating && !generatedBlocks.length" class="generating-overlay">
             <div class="gen-spinner"></div>
             <div class="gen-text">多智能体协同生成中...</div>
             <div class="gen-sub">{{ currentStage || thinkingHint || '请稍候' }}</div>
@@ -717,6 +741,51 @@ onMounted(() => {
   flex: 1;
   overflow-y: auto;
   padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* 资源结果分块：每个资源类型一块，块头标注类型与序号（多选逐个生成时清晰区分） */
+.resource-block {
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-light);
+  overflow: hidden;
+
+  .block-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--color-border-light);
+    background: color-mix(in srgb, var(--block-color, #11967f) 6%, transparent);
+  }
+
+  .block-icon {
+    font-size: 16px;
+  }
+
+  .block-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--color-text-strong);
+  }
+
+  .block-index {
+    margin-left: auto;
+    padding: 2px 10px;
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--block-color, #11967f) 12%, transparent);
+    color: var(--block-color, var(--color-primary-dark));
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .markdown-body {
+    padding: 16px 20px;
+  }
 }
 
 .generating-overlay {
