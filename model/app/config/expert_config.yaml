@@ -147,10 +147,13 @@ debate:
   # 仅当专家意见存在【实质分歧】时才值得启动；但 always_debate_intents 例外——
   # profile 的争议"原则上不可消解"（关于学生的事实没有外部真理源），
   # 仲裁是证据纪律的唯一执行者，一旦跳过，Claim/Evidence 校验与画像写边界即整体失效。
+  # resource 同样无条件会诊：资源生成的多智能体协作过程（专家对话+黑板+仲裁）
+  # 是前端轨迹的完整展示需求，分歧门控跳过会让会诊块整体缺失。
   # 检测异常一律 fail-open（照常辩论），绝不因检测故障静默跳过审计。
   conflict_gate_enabled: true
   always_debate_intents:
     - "profile"
+    - "resource"
   conflict_prompt_template: |
     以下是多位专家针对同一问题的独立意见。请判断它们之间是否存在【实质性分歧】。
 

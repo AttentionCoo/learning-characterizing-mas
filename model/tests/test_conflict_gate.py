@@ -213,6 +213,9 @@ def test_real_config_declares_profile_as_always_debate():
     manager = get_expert_manager()
     assert manager.is_conflict_gate_enabled() is True
     assert "profile" in manager.get_always_debate_intents()
+    # resource 同样无条件会诊：资源生成的多智能体协作过程是前端轨迹的
+    # 完整展示需求，被门控跳过会让会诊块整体缺失
+    assert "resource" in manager.get_always_debate_intents()
     assert "{expert_opinions}" in manager.get_conflict_prompt_template()
 
 
