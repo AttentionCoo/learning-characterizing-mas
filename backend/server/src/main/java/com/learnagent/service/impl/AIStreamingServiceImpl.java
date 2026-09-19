@@ -733,6 +733,35 @@ public class AIStreamingServiceImpl implements AIStreamingService {
                 return Flux.just(objectMapper.writeValueAsString(tokenResp));
             }
 
+            // expert_speech 事件：单个专家发言完成即到达，透传前端逐条聚合进「参与专家」区块
+            if ("expert_speech".equalsIgnoreCase(type)) {
+                Map<String, Object> speechResp = baseResponse(talkId, generatedTitle[0], "expert_speech");
+                speechResp.put("node", json.path("node").asText(""));
+                speechResp.put("role", json.path("role").asText(""));
+                speechResp.put("content", json.path("content").asText(""));
+                if (json.hasNonNull("index")) {
+                    speechResp.put("index", json.path("index").asInt());
+                }
+                if (json.hasNonNull("total")) {
+                    speechResp.put("total", json.path("total").asInt());
+                }
+                return Flux.just(objectMapper.writeValueAsString(speechResp));
+            }
+
+            // text_start / text_delta / text_end 事件：逐 token 文本流式
+            // （expert:<角色> 专家发言、synthesis/convergence/arbitration 结论区块），
+            // 透传 channel/label/delta/content，前端按 channel 落到对应区块边生成边打印
+            if ("text_start".equalsIgnoreCase(type) || "text_delta".equalsIgnoreCase(type)
+                    || "text_end".equalsIgnoreCase(type)) {
+                Map<String, Object> textResp = baseResponse(talkId, generatedTitle[0], type);
+                textResp.put("node", json.path("node").asText(""));
+                textResp.put("channel", json.path("channel").asText(""));
+                textResp.put("label", json.path("label").asText(""));
+                textResp.put("delta", json.path("delta").asText(""));
+                textResp.put("content", json.path("content").asText(""));
+                return Flux.just(objectMapper.writeValueAsString(textResp));
+            }
+
             // node_start 事件：LangGraph 节点开始执行（替代旧版 thinking），透传为 thinking 事件
             if ("node_start".equalsIgnoreCase(type)) {
                 String node = json.path("node").asText("");
