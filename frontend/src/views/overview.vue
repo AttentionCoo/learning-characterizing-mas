@@ -1,23 +1,50 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import request from '@/utils/request'
 
 const overview = ref(null)
 const loading = ref(true)
 
-async function fetchOverview() {
-  loading.value = true
+// 定时刷新：仪表盘数据会随其他模块（画像/评估/路径）的进展变化，
+// 页面停留期间每 30 秒静默拉一次；页面不可见时跳过，重新可见时立即补一次。
+const REFRESH_INTERVAL = 30_000
+let refreshTimer = null
+
+async function fetchOverview(silent = false) {
+  // silent：定时/切回刷新不显示全屏 loading；失败时保留已有数据不清空
+  if (!silent) loading.value = true
   try {
     const res = await request.get('/user/overview')
     overview.value = res.data || {}
   } catch {
-    overview.value = null
+    if (!silent) overview.value = null
   } finally {
     loading.value = false
   }
 }
 
-onMounted(fetchOverview)
+function scheduleRefresh() {
+  clearInterval(refreshTimer)
+  refreshTimer = setInterval(() => {
+    if (document.visibilityState === 'visible') fetchOverview(true)
+  }, REFRESH_INTERVAL)
+}
+
+function onVisibilityChange() {
+  // 从其他页面/标签切回时立即刷新，保证看到的是最新数据
+  if (document.visibilityState === 'visible') fetchOverview(true)
+}
+
+onMounted(() => {
+  fetchOverview()
+  scheduleRefresh()
+  document.addEventListener('visibilitychange', onVisibilityChange)
+})
+
+onUnmounted(() => {
+  clearInterval(refreshTimer)
+  document.removeEventListener('visibilitychange', onVisibilityChange)
+})
 
 // 闭环四步：画像 → 资源/路径 → 评估 → 反馈
 const STEPS = [
@@ -64,7 +91,7 @@ function scoreColor(score) {
 
     <div v-else-if="!overview" class="overview-empty">
       <p>暂时无法获取学习数据，请稍后刷新。</p>
-      <button class="retry-btn" @click="fetchOverview">重新加载</button>
+      <button class="retry-btn" @click="fetchOverview()">重新加载</button>
     </div>
 
     <div v-else class="overview-body">
