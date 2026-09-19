@@ -25,6 +25,25 @@ function sanitize(dirty) {
   return dirty
 }
 
+// 「**答案：X**」行（含中文冒号、前后空格、空内容变体）：课程文档练习题/问答类
+// 回答里答案常混在正文中不醒目，转成带标签的提示块（.answer-line）独立呈现。
+// 空内容（**答案：** 单独一行、正文另起一行）也匹配，输出标签块。
+const ANSWER_LINE_PATTERN = /^\s*\*\*答案[:：]\s*(.*?)\*\*\s*$/
+
+function enhanceAnswerLines(text) {
+  const out = []
+  for (const line of String(text).split('\n')) {
+    const m = line.match(ANSWER_LINE_PATTERN)
+    if (m) {
+      out.push(`<p class="answer-line"><span class="answer-tag">答案</span>${m[1]}</p>`)
+      out.push('') // 块级 HTML 前后补空行，避免与相邻正文粘连成一段
+    } else {
+      out.push(line)
+    }
+  }
+  return out.join('\n')
+}
+
 /**
  * AI 文本 → 安全 HTML：
  * 1. normalizeAiMarkdown 规范化流式输出中的中文序号等格式问题
@@ -39,7 +58,7 @@ export function renderMarkdown(text) {
 
   let html
   try {
-    html = sanitize(marked.parse(normalizeAiMarkdown(text)))
+    html = sanitize(marked.parse(enhanceAnswerLines(normalizeAiMarkdown(text))))
   } catch (e) {
     console.error('[markdown] 渲染失败，回退为纯文本:', e)
     html = `<pre style="white-space:pre-wrap;word-break:break-word">${escapeHtml(text)}</pre>`

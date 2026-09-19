@@ -476,6 +476,9 @@ input.auth-input:-webkit-autofill:focus {
 
   h1 {
     font-size: 1.6em;
+    color: var(--color-primary-dark);
+    border-bottom: 2px solid var(--color-primary);
+    padding-bottom: 0.4em;
   }
 
   h2 {
@@ -572,25 +575,68 @@ input.auth-input:-webkit-autofill:focus {
 
   table {
     width: 100%;
-    border-collapse: collapse;
+    border-collapse: separate;
+    border-spacing: 0;
     margin: 0.8em 0;
     font-size: 13px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(15, 65, 79, 0.05);
 
     th,
     td {
       padding: 8px 12px;
-      border: 1px solid var(--color-border);
+      border: none;
+      border-bottom: 1px solid var(--color-border-light);
+      border-right: 1px solid var(--color-border-light);
       text-align: left;
     }
 
     th {
       background: var(--color-bg-light);
       font-weight: 700;
+      color: var(--color-primary-dark);
+    }
+
+    td:last-child,
+    th:last-child {
+      border-right: none;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
     }
 
     tr:nth-child(even) td {
       background: var(--color-bg-light);
     }
+  }
+
+  // 「**答案：X**」增强块：课程文档练习题/问答类回答的答案独立呈现
+  .answer-line {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 0.6em 0;
+    padding: 8px 14px;
+    border-radius: var(--radius-md);
+    background: var(--color-active-bg);
+    border: 1px solid var(--color-active-border);
+    border-left-width: 4px;
+    font-weight: 600;
+    color: var(--color-text-strong);
+  }
+
+  .answer-tag {
+    flex: none;
+    padding: 1px 8px;
+    border-radius: var(--radius-pill);
+    background: var(--color-primary);
+    color: #fff;
+    font-size: 0.75em;
+    font-weight: 700;
+    line-height: 1.7;
   }
 
   a {
