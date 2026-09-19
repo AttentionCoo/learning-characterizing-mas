@@ -8,7 +8,7 @@ import asyncio
 
 import pytest
 
-from app.agents.event_sink import get_event_sink, reset_event_sink, set_event_sink
+from app.agents.event_sink import emit_event, get_event_sink, reset_event_sink, set_event_sink
 from app.agents.orchestrators.learning_agent import _GRAPH_END, _GRAPH_ERROR, _drain_events
 
 
@@ -79,13 +79,91 @@ def test_drain_reraises_graph_error():
         asyncio.run(main())
 
 
-def test_reason_node_emit_prefers_request_sink():
-    """reason_node._emit 必须优先走请求级 sink（监督者路径下 writer 不可用）。"""
-    import inspect
+def test_emit_event_prefers_request_sink():
+    """emit_event：sink 优先，事件当场入队，绝不落到 writer 转发通道。"""
+    collected = []
+    token = set_event_sink(collected.append)
+    try:
+        assert emit_event({"type": "x"}) is True
+        assert collected == [{"type": "x"}]
+    finally:
+        reset_event_sink(token)
 
-    from app.agents.orchestrators.nodes.reason_node import ReasonNode
 
-    src = inspect.getsource(ReasonNode.run)
-    assert "get_event_sink()" in src, "reason_node.run 未使用请求级 sink"
-    # sink 在 writer 之前被尝试
-    assert src.index("get_event_sink()") < src.index("writer(payload)")
+def test_emit_event_without_sink_outside_graph_is_noop():
+    """无 sink 且不在图节点上下文（writer 不可得）时：静默返回 False，不抛异常。"""
+    assert get_event_sink() is None
+    assert emit_event({"type": "x"}) is False
+
+
+def test_node_start_precedes_content_in_sink_mode():
+    """乱序回归（Model #2）：sink 模式下 node_start 必须先于节点内容入队。
+
+    旧实现 node_start 走 writer（LangGraph 内部流稍后转发），节点内容走 sink
+    （当场入队）→ 步骤卡稳定排到内容之后。
+    """
+    from langgraph.graph import END, StateGraph
+    from typing import TypedDict
+
+    from app.agents.orchestrators.clinical_graph import LearningGraphBuilder
+
+    class _MiniState(TypedDict):
+        x: str
+
+    async def _body(state, **kwargs):
+        get_event_sink()({"type": "content", "text": "node body"})
+        return {"x": "done"}
+
+    async def main():
+        q: asyncio.Queue = asyncio.Queue()
+
+        def sink(payload):
+            q.put_nowait(("custom", payload))
+
+        token = set_event_sink(sink)
+        try:
+            graph = StateGraph(_MiniState)
+            graph.add_node("n", LearningGraphBuilder._with_node_events("n", _body))
+            graph.set_entry_point("n")
+            graph.add_edge("n", END)
+            await graph.compile().ainvoke({"x": ""})
+        finally:
+            reset_event_sink(token)
+        return [q.get_nowait() for _ in range(q.qsize())]
+
+    events = asyncio.run(main())
+    assert [e[1]["type"] for e in events] == ["node_start", "content"]
+
+
+def test_executor_step_progress_precedes_step_content():
+    """乱序回归（Model #2）：执行步骤卡必须先于该步骤产出的内容入队。"""
+
+    class _DummyNode:
+        async def run(self, state):
+            get_event_sink()({"type": "content", "text": "step body"})
+            return {"learning_questions": ["q1"]}
+
+    from app.agents.orchestrators.nodes.executor_node import ExecutorNode
+
+    node = ExecutorNode(retrieve_node=_DummyNode(), analysis_node=_DummyNode(), reason_node=_DummyNode())
+    state = {
+        "plan": {
+            "steps": [
+                {"step_type": "analyze", "title": "拆解需求"},
+                {"step_type": "finalize", "title": "收尾"},
+            ]
+        }
+    }
+
+    async def main():
+        collected = []
+        token = set_event_sink(collected.append)
+        try:
+            await node.run(state)
+        finally:
+            reset_event_sink(token)
+        return collected
+
+    events = asyncio.run(main())
+    assert [e["type"] for e in events] == ["thinking", "content", "thinking"]
+    assert events[0]["thinking"]["title"] == "执行步骤 1/2：拆解需求"

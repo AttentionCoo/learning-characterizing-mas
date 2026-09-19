@@ -217,6 +217,10 @@ class LearningAgent:
         live_events = {
             "experts": 0, "expert_speech": 0, "agent_msg": 0, "blackboard": 0,
             "synthesis": 0, "arbitration": 0, "convergence": 0, "answer": 0,
+            # answer 通道的增量计数：text_end 才记入 answer。
+            # 流式中途失败时增量已送达但 text_end 不会到，answer==0 而 answer_delta>0，
+            # 监督者补发的草稿必须用 replace 覆盖半截内容而不是追加。
+            "answer_delta": 0,
         }
         # 在 try 之前初始化：finally 中的清理必须能在任何失败路径下安全执行
         sink_token = None
@@ -283,10 +287,17 @@ class LearningAgent:
                         chan = data.get("channel", "")
                         if evt_type == "text_end" and chan in live_events:
                             live_events[chan] += 1
-                        # 最终回答走回答气泡（token 增量），不进推理轨迹
+                        # 最终回答走回答气泡（token 增量），不进推理轨迹。
+                        # text_end 用 replace 整体覆盖：流式中断回退时已送达的
+                        # 半截 token 会被最终全文替换，而不是拼成"半截+全文"。
                         if chan == "answer":
                             if evt_type == "text_delta":
+                                live_events["answer_delta"] += 1
                                 yield {"type": "token", "content": data.get("delta", "")}
+                            elif evt_type == "text_end":
+                                full = data.get("content", "")
+                                if full:
+                                    yield {"type": "replace", "content": full}
                             continue
                         yield {
                             "type": evt_type,
@@ -480,6 +491,11 @@ class LearningAgent:
                                     # 最终回答已由流式撰写步骤逐 token 送达，
                                     # 这里再整块下发会让回答出现两遍
                                     streamed_nodes.add(node_name)
+                                elif live_events["answer_delta"]:
+                                    # 流式撰写中途失败：半截 token 已送达，
+                                    # 草稿必须用 replace 整体覆盖，追加会拼出"半截+草稿"
+                                    streamed_nodes.add(node_name)
+                                    yield {"type": "replace", "content": report_text}
                                 elif node_name not in streamed_nodes:
                                     streamed_nodes.add(node_name)
                                     yield {"type": "token", "content": report_text}
@@ -524,10 +540,18 @@ class LearningAgent:
             logger.error(f"学习推理管线异常 | {format_error_log(e)}")
             yield build_error_event(e, talk_id=None)
         finally:
-            # 恢复请求级 sink 并收掉图驱动任务，避免 ContextVar 泄漏到同一上下文的后续请求
+            # 先收掉图驱动任务再恢复 sink：取消后必须 await 让它真正结束，
+            # 否则任务会继续往无人消费的无界队列投递，且其上下文里的 sink 副本
+            # 在 reset 之后仍然存活（子任务持有 ContextVar 的独立副本）。
+            if graph_task is not None:
+                if not graph_task.done():
+                    graph_task.cancel()
+                try:
+                    await asyncio.gather(graph_task, return_exceptions=True)
+                except Exception:  # noqa: BLE001 - 收尾阶段的任务清理不应抛给调用方
+                    logger.debug("[stream] 图驱动任务收尾异常（已忽略）")
+            # 恢复请求级 sink，避免 ContextVar 泄漏到同一上下文的后续请求
             reset_event_sink(sink_token)
-            if graph_task is not None and not graph_task.done():
-                graph_task.cancel()
 
     def _build_node_done_event(self, name: str, output: dict) -> Dict:
         summary = self._node_summary(name, output)

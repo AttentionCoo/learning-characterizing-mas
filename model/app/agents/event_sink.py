@@ -49,3 +49,29 @@ def reset_event_sink(token) -> None:
 def get_event_sink() -> Optional[EventSink]:
     """取当前请求的事件 sink；未设置时返回 None。"""
     return _event_sink.get()
+
+
+def emit_event(payload: dict) -> bool:
+    """统一的实时事件出口：请求级 sink 优先、LangGraph stream_writer 兜底。
+
+    所有节点/编排器的实时事件都应经这里发出，而不是各自调 writer：
+    writer 事件要等 LangGraph 内部流由外层运行器转发（晚到），而 sink 是
+    当场入队（即到）。若节点内容走 sink、node_start/步骤卡走 writer，
+    就会稳定出现「步骤卡排在内容之后」的乱序——违背"轨迹实时且顺序正确"。
+    返回是否真正发出了事件。
+    """
+    sink = get_event_sink()
+    if sink is not None:
+        try:
+            sink(payload)
+            return True
+        except Exception as e:  # noqa: BLE001 - sink 失败时兜底 writer，保证事件不丢
+            logger.debug(f"[event_sink] sink 推送失败，回退 stream_writer: {e}")
+    try:
+        from langgraph.config import get_stream_writer
+        writer = get_stream_writer()
+        writer(payload)
+        return True
+    except Exception as e:  # noqa: BLE001 - 非图节点上下文无 writer，事件只能丢弃
+        logger.debug(f"[event_sink] 推送实时事件失败: {e}")
+        return False

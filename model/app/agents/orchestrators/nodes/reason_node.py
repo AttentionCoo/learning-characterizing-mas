@@ -2,7 +2,7 @@ import logging
 import asyncio
 from typing import Dict, List, Tuple
 from app.agents.core.schema import LearningState
-from app.agents.event_sink import get_event_sink
+from app.agents.event_sink import emit_event
 from app.agents.text_stream import stream_llm_text, stream_react_agent_text
 from app.agents.orchestrators.nodes.base import BaseNode
 from app.agents.orchestrators.nodes.reason_debate import DebateOrchestrator
@@ -139,38 +139,27 @@ class ReasonNode(BaseNode):
 
         logger.info(f"[reason] 开启多专家并行推理 (Reflection Count: {state['reflection_count']})")
 
-        try:
-            from langgraph.config import get_stream_writer
-            writer = get_stream_writer()
-        except Exception:
-            writer = None
-
         def _emit(payload: dict):
-            # 优先走请求级 sink：监督者路径下 ReasonNode 是被 consult_experts 工具手工调用的，
-            # 此时 LangGraph 的 stream writer 不可用（custom 事件不冒泡），只有经 sink 才能
-            # 在专家发言/会诊对话/黑板/仲裁产生的当下实时外传，而不是等工具返回后一次性补发。
-            sink = get_event_sink()
-            if sink is not None:
-                try:
-                    sink(payload)
-                    return
-                except Exception as e:
-                    logger.debug(f"[reason] 实时事件外传失败，回退 stream writer: {e}")
-            if writer is None:
-                return
-            try:
-                writer(payload)
-            except Exception as e:
-                logger.debug(f"[reason] 推送推理链事件失败: {e}")
+            # 统一走 emit_event（sink 优先、writer 兜底）：
+            # - 监督者路径下 ReasonNode 是被 consult_experts 工具手工调用的，
+            #   LangGraph 的 stream writer 不可用（custom 事件不冒泡），只有经 sink
+            #   才能让专家发言/会诊对话/黑板/仲裁边产生边送达；
+            # - 其余路径经 writer 兜底，事件照常冒泡。
+            emit_event(payload)
 
-        # 点将/编排完成后立即告知前端本轮专家名单
+        # 点将/编排完成后立即告知前端本轮专家名单。
+        # 选人理由优先用监督者经 mini_state 传入的原话（LLM 点将依据），
+        # 缺省回落到规则编排的说明文字。
         _emit({
             "type": "experts_selected",
             "node": "reason",
             "active_experts": list(active_experts),
             "reason": (
-                "监督者显式点将" if state.get("active_experts_override")
-                else f"意图+难度规则编排（难度 {state.get('difficulty_score', 0.5):.2f}）"
+                (state.get("supervisor_selection_reason") or "").strip()
+                or (
+                    "监督者显式点将" if state.get("active_experts_override")
+                    else f"意图+难度规则编排（难度 {state.get('difficulty_score', 0.5):.2f}）"
+                )
             ),
         })
 

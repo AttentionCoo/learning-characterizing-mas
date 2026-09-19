@@ -6,15 +6,14 @@
 - expert_reason → ReasonNode（多专家并行 + 辩论仲裁 + 统筹汇总）
 - finalize      → 结束标记，最终报告由 generate_report 节点生成
 
-执行过程通过 LangGraph stream_writer 逐步骤推送 thinking 事件，
+执行过程经 emit_event（sink 优先、writer 兜底）逐步骤推送 thinking 事件，
 前端可在推理轨迹中实时看到「执行步骤 i/n」。
 """
 import logging
 from typing import Dict, List
 
-from langgraph.config import get_stream_writer
-
 from app.agents.core.schema import LearningState
+from app.agents.event_sink import emit_event
 from app.agents.orchestrators.nodes.base import BaseNode
 
 logger = logging.getLogger(__name__)
@@ -34,14 +33,6 @@ class ExecutorNode(BaseNode):
             logger.warning("[executor] 状态中无执行计划，跳过执行")
             return {"plan_results": []}
 
-        try:
-            writer = get_stream_writer()
-            # 注：langgraph 1.x 的 astream_events 不透传 custom 事件（仅 astream(stream_mode="custom") 支持）。
-            # 当前保留 writer 调用：一旦外层迁移到 custom 流模式，逐步骤事件即可实时到达前端；
-            # 现阶段步骤进度通过 execute_plan 的 node_done 摘要展示。
-        except Exception:
-            writer = None
-
         # working_state 在节点内部逐步合并子节点输出（节点内循环需要手工合并）
         working: dict = dict(state)
         merged: dict = {}
@@ -53,14 +44,10 @@ class ExecutorNode(BaseNode):
             progress = f"执行步骤 {i + 1}/{len(steps)}：{title}"
             logger.info(f"[executor] {progress} (type={step_type})")
 
-            if writer is not None:
-                try:
-                    writer({
-                        "type": "thinking",
-                        "thinking": {"step": "execute_plan", "title": progress},
-                    })
-                except Exception as e:
-                    logger.debug(f"[executor] 推送步骤进度失败: {e}")
+            emit_event({
+                "type": "thinking",
+                "thinking": {"step": "execute_plan", "title": progress},
+            })
 
             if step_type == "finalize":
                 plan_results.append(self._result(i, step, "finalize", "交给报告节点汇总生成"))

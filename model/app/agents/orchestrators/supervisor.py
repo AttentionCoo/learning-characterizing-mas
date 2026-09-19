@@ -246,6 +246,10 @@ class TutorSupervisor:
                 mini_state["reflection_count"] = 0
                 if chosen:
                     mini_state["active_experts_override"] = chosen
+                # 监督者的点将理由交由 ReasonNode 随 experts_selected 实时携带，
+                # 否则前端「参与专家」区块的选人理由恒为空（learning_agent 的
+                # 兜底补发被 live_events["experts"] 门控挡住，永不执行）。
+                mini_state["supervisor_selection_reason"] = (reason or "").strip()
 
                 updates = await self.reason_node.run(mini_state) or {}
 

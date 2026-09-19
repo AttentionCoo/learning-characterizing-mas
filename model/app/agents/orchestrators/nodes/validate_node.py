@@ -1,6 +1,7 @@
 import logging
 from typing import Dict
 from app.agents.core.schema import LearningState
+from app.agents.event_sink import emit_event
 from app.agents.orchestrators.nodes.base import BaseNode
 from langchain_core.messages import HumanMessage, SystemMessage
 from app.config.config_loader import get_validation_manager
@@ -31,19 +32,10 @@ class ValidateNode(BaseNode):
     async def run(self, state: LearningState) -> Dict:
         logger.info(f"[validate] 开始后层结果校验，当前已反思次数: {state['reflection_count']}")
 
-        try:
-            from langgraph.config import get_stream_writer
-            writer = get_stream_writer()
-        except Exception:
-            writer = None
-
+        # 统一走 emit_event（sink 优先、writer 兜底）：与节点内容的实时通道一致，
+        # 避免校验事件经 writer 转发晚到、排到内容之后。
         def _emit(payload: dict):
-            if writer is None:
-                return
-            try:
-                writer(payload)
-            except Exception as e:
-                logger.debug(f"[validate] 推送校验事件失败: {e}")
+            emit_event(payload)
 
         result = None
         if self.enable_rule_engine:

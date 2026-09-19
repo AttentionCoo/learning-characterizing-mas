@@ -213,6 +213,9 @@ def test_consult_experts_filters_roles_to_whitelist_and_returns_speeches(monkeyp
     }))
 
     assert fake_reason.last_state["active_experts_override"] == ["需求分析智能体"]
+    # 点将理由必须随 mini_state 传给 ReasonNode——由 experts_selected 实时携带，
+    # 否则前端「参与专家」区块的选人理由恒为空（learning_agent 兜底补发被门控挡住）
+    assert fake_reason.last_state["supervisor_selection_reason"] == "该问题需要解剖图谱与认知负荷管理，故选需求分析智能体。"
     assert "【需求分析智能体】" in result
     assert "综合提案" in result
     assert "不存在的专家" not in result
@@ -236,4 +239,6 @@ def test_consult_experts_empty_roles_falls_back_to_rule_selection(monkeypatch):
     result = asyncio.run(consult.ainvoke({"question": "问题", "reason": "未指定名单，走规则兜底。", "roles": []}))
 
     assert "active_experts_override" not in fake_reason.last_state
+    # 规则兜底路径同样要把点将理由传给 ReasonNode
+    assert fake_reason.last_state["supervisor_selection_reason"] == "未指定名单，走规则兜底。"
     assert "综合提案" in result

@@ -3,6 +3,7 @@ from langgraph.graph import StateGraph, END
 from langchain_core.messages import SystemMessage, HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
 from app.agents.core.schema import LearningState
+from app.agents.event_sink import emit_event
 from app.agents.orchestrators.nodes.intent_node import IntentNode
 from app.agents.orchestrators.nodes.analysis_node import AnalysisNode
 from app.agents.orchestrators.nodes.retrieve_node import RetrieveNode
@@ -55,19 +56,15 @@ class LearningGraphBuilder:
 
     @staticmethod
     def _with_node_events(name: str, fn):
-        """给图节点包一层：进入节点时经 stream_writer 发 node_start 自定义事件。
+        """给图节点包一层：进入节点时发 node_start 自定义事件。
 
-        外层运行器以 stream_mode=["custom", ...] 消费，保证 astream_events 迁移后
-        前端仍然能收到节点开始标签（由 LearningAgent 的 _NODE_LABELS 翻译）。
+        统一走 emit_event（sink 优先、writer 兜底），与节点内容的实时通道一致——
+        若 node_start 走 writer，事件要等 LangGraph 内部流由外层运行器转发，
+        会稳定排到 sink 当场入队的节点内容之后，造成轨迹乱序。
         """
 
         async def wrapper(state, **kwargs):
-            try:
-                from langgraph.config import get_stream_writer
-                writer = get_stream_writer()
-                writer({"type": "node_start", "node": name})
-            except Exception:
-                pass
+            emit_event({"type": "node_start", "node": name})
             return await fn(state, **kwargs)
 
         wrapper.__name__ = f"{name}_with_events"

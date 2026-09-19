@@ -35,11 +35,13 @@ def _state(**overrides):
 
 
 class _StreamingLLM:
-    """astream 逐段产出，记录收到的 prompt。"""
+    """astream 逐段产出，记录收到的 prompt。
+    fail_after=N 时吐完前 N 片后抛错，模拟流式中途断开。"""
 
-    def __init__(self, chunks, stream_should_fail=False):
+    def __init__(self, chunks, stream_should_fail=False, fail_after=None):
         self.chunks = list(chunks)
         self.stream_should_fail = stream_should_fail
+        self.fail_after = fail_after
         self.prompts = []
         self.ainvoke_calls = 0
 
@@ -47,8 +49,10 @@ class _StreamingLLM:
         self.prompts.append("\n".join(getattr(m, "content", "") for m in messages))
         if self.stream_should_fail:
             raise RuntimeError("不支持流式")
-        for c in self.chunks:
+        for i, c in enumerate(self.chunks):
             yield SimpleNamespace(content=c)
+            if self.fail_after is not None and i + 1 >= self.fail_after:
+                raise RuntimeError("流式中途断开")
 
     async def ainvoke(self, messages):
         self.ainvoke_calls += 1
@@ -126,6 +130,23 @@ def test_compose_answer_falls_back_to_draft_on_stream_failure():
     # 回退路径：stream_llm_text 内部改用 ainvoke，仍产出内容
     assert answer == "x"
     assert llm.ainvoke_calls == 1
+
+
+def test_compose_answer_midstream_failure_does_not_reemit_delta():
+    """流式中途失败：半截增量已送达，回退只能补 text_end 全文，
+    重发 delta 会让 answer 通道（追加语义）拼出"半截 + 全文"。"""
+    llm = _StreamingLLM(["同学", "们好", "这是回答"], fail_after=2)
+    sup = _supervisor(llm)
+
+    answer, events = _collect_answer_stream(lambda: sup._compose_answer(
+        _state(), "q", "草稿要点", {},
+    ))
+
+    assert answer == "同学们好这是回答"
+    assert llm.ainvoke_calls == 1
+    text_types = [e["type"] for e in events if e["type"].startswith("text_")]
+    assert text_types == ["text_start", "text_delta", "text_delta", "text_end"]
+    assert events[-1]["content"] == "同学们好这是回答"
 
 
 def test_compose_answer_returns_draft_when_llm_raises():
