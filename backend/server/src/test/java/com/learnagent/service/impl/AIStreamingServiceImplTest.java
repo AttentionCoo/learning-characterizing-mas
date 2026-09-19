@@ -95,6 +95,24 @@ class AIStreamingServiceImplTest {
         assertEquals(3, speech.path("total").asInt());
     }
 
+    @Test
+    void agentMsgEventPassesThroughWithEvidence() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        AIStreamingServiceImpl service = newService(objectMapper);
+
+        JsonNode msg = objectMapper.readTree(parse(
+                service,
+                "{\"type\":\"agent_msg\",\"node\":\"reason\",\"from\":\"需求分析智能体\",\"to\":\"题目生成智能体\",\"round\":1,\"kind\":\"question\",\"content\":\"难度怎么定？\",\"evidence\":\"学生画像显示知识基础偏弱\"}",
+                new String[]{null}, new String[]{""}, new StringBuilder()
+        ).blockFirst());
+        assertEquals("agent_msg", msg.path("type").asText());
+        assertEquals("需求分析智能体", msg.path("from").asText());
+        assertEquals("题目生成智能体", msg.path("to").asText());
+        assertEquals("question", msg.path("kind").asText());
+        // 依据必须透传：会诊消息的可审计证据，丢失则前端「依据」行恒空
+        assertEquals("学生画像显示知识基础偏弱", msg.path("evidence").asText());
+    }
+
     private AIStreamingServiceImpl newService(ObjectMapper objectMapper) {
         return new AIStreamingServiceImpl(
                 mock(WebClient.class),

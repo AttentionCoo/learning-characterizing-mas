@@ -191,6 +191,7 @@ export function sseStreamRequest(url, params, { onChunk, onThinking, timeout = 3
               round: data.round || 0,
               kind: data.kind || '',
               content: data.content || '',
+              evidence: data.evidence || '',
             }],
           }
           console.info('[AI 专家对话]', `${data.from} → ${data.to} [${data.kind}]`)

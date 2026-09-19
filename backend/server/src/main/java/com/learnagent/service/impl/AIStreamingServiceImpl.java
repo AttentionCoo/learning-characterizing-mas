@@ -830,6 +830,8 @@ public class AIStreamingServiceImpl implements AIStreamingService {
                 msgResp.put("round", json.path("round").asInt(0));
                 msgResp.put("kind", json.path("kind").asText(""));
                 msgResp.put("content", json.path("content").asText(""));
+                // 依据（证据三段式）：会诊消息的可审计依据，透传前端「依据」行展示
+                msgResp.put("evidence", json.path("evidence").asText(""));
                 return Flux.just(objectMapper.writeValueAsString(msgResp));
             }
 

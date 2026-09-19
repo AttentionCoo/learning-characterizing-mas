@@ -252,6 +252,8 @@ class ReasonNode(BaseNode):
                 f"仲裁长度 {len(arbitration_result or '')}"
             )
             # 对话消息 + 黑板逐条实时推送（对话级流式审计）
+            # evidence 一并携带：专家对话的"依据"三段式是会诊可审计性的关键，
+            # 丢了它前端「依据」行永远为空
             for msg in agent_messages:
                 _emit({
                     "type": "agent_msg",
@@ -261,6 +263,7 @@ class ReasonNode(BaseNode):
                     "round": msg.get("round", 0),
                     "kind": msg.get("kind", ""),
                     "content": msg.get("content", ""),
+                    "evidence": msg.get("evidence", ""),
                 })
             _emit({
                 "type": "blackboard",
